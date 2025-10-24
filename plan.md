@@ -333,17 +333,196 @@ UserPreferences {
   - Desktop: Keyboard shortcuts, menu bar
   - Web: URL routing for deep linking
 
+### Code Organization
+- **Maximum 500 lines per file** - Keep files focused and manageable
+- **DRY principles** - Don't Repeat Yourself, reusable components
+- **Clear separation of concerns** - UI, business logic, data layer
+- **Consistent naming conventions**
+- **Well-commented complex logic**
+- **Hot reload friendly** - Structure to support fast iteration
+
+---
+
+## API-First Architecture
+
+### Philosophy
+Build Pin and Paper with a clean, well-documented API from day one. This enables:
+- Future AI integration (Claude custom connectors!)
+- Third-party tool connections
+- Automation and scripting
+- Multi-device sync
+- Maintainable, testable code
+
+### API Design Principles
+- **RESTful** or **GraphQL** endpoints
+- **Clear, consistent naming**
+- **Comprehensive documentation** (auto-generated from code)
+- **Version control** (API v1, v2, etc.)
+- **Authentication** (API keys, OAuth)
+- **Rate limiting** (prevent abuse)
+- **Error handling** (clear, helpful error messages)
+
+### Core API Endpoints
+
+**Tasks:**
+- `GET /api/v1/tasks` - List all tasks (with filters)
+- `GET /api/v1/tasks/:id` - Get single task
+- `POST /api/v1/tasks` - Create new task
+- `PUT /api/v1/tasks/:id` - Update task
+- `DELETE /api/v1/tasks/:id` - Delete task
+- `POST /api/v1/tasks/:id/complete` - Mark complete
+- `POST /api/v1/tasks/:id/position` - Update spatial position
+
+**AI Integration:**
+- `POST /api/v1/ai/organize` - Chaos dump for AI organization
+- `POST /api/v1/ai/parse` - Parse natural language into tasks
+- `GET /api/v1/ai/suggestions` - Get AI suggestions for tasks
+
+**Connections:**
+- `GET /api/v1/connections` - List all task connections
+- `POST /api/v1/connections` - Create connection between tasks
+- `DELETE /api/v1/connections/:id` - Remove connection
+
+**Workspace:**
+- `GET /api/v1/workspace` - Get workspace state
+- `PUT /api/v1/workspace` - Update workspace configuration
+
+**Backup/Sync:**
+- `GET /api/v1/export` - Export all data
+- `POST /api/v1/import` - Import data
+- `POST /api/v1/backup` - Create backup
+
+### MCP Server Integration
+
+**Goal:** Enable Claude (via custom connectors) to directly interact with Pin and Paper
+
+**Implementation Options:**
+
+**Option A: Local MCP Server**
+- Runs on user's machine
+- Connects to local Pin and Paper instance
+- Claude Desktop can communicate via MCP protocol
+- Perfect for local-first privacy
+
+**Option B: Cloud MCP Server**
+- Hosted API endpoint
+- Claude.ai can connect via custom connector
+- Requires authentication
+- Enables mobile + Claude.ai integration
+
+**Option C: Hybrid**
+- Local-first with optional cloud sync
+- MCP server can connect to either
+- Best of both worlds
+
+### Claude Custom Connector Specification
+
+When built, Pin and Paper will provide:
+
+```yaml
+# connector-spec.yaml
+name: Pin and Paper
+description: ADHD-friendly task management with AI support
+authentication:
+  type: api_key
+  header: X-PinAndPaper-API-Key
+endpoints:
+  - name: list_tasks
+    method: GET
+    path: /api/v1/tasks
+    description: Get all tasks with optional filters
+    
+  - name: create_task
+    method: POST
+    path: /api/v1/tasks
+    description: Create a new task
+    
+  - name: organize_chaos
+    method: POST
+    path: /api/v1/ai/organize
+    description: Send chaotic task dump for AI organization
+    
+  # ... more endpoints
+```
+
+### Use Cases with Claude Integration
+
+**Scenario 1: Quick Task Capture**
+```
+User (in Claude chat): "Add 'research Victorian mourning jewelry' to my novel research card"
+Claude: *calls Pin and Paper API* 
+Claude: "Added to your Novel Research card! 💚"
+```
+
+**Scenario 2: Overwhelm Management**
+```
+User: "Claude I'm so stressed, here's everything on my mind: [chaos dump]"
+Claude: *calls /api/v1/ai/organize with text*
+Claude: "I've organized that into 3 project cards and 7 quick tasks. Want to review?"
+```
+
+**Scenario 3: Daily Check-in**
+```
+User: "What's on my plate today?"
+Claude: *calls /api/v1/tasks with due_date filter*
+Claude: "You have 5 tasks due today: [list with links to cards]"
+```
+
+**Scenario 4: Project Planning**
+```
+User: "Help me break down this novel chapter into tasks"
+Claude: *uses AI to parse, calls API to create nested structure*
+Claude: "Created card 'Chapter 3: The Séance' with 8 subtasks"
+```
+
+### Architecture Layers
+
+```
+┌─────────────────────────────────────┐
+│         UI Layer (Flutter)          │
+│  Phone, iPad, Desktop, Web views    │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│      Business Logic Layer           │
+│  Task management, AI integration    │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│         Data Layer                  │
+│  Local storage, sync, cache         │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│          API Layer                  │
+│  RESTful endpoints, authentication  │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│      MCP Server (optional)          │
+│  Custom connector for Claude        │
+└─────────────────────────────────────┘
+```
+
+### Development Priority
+1. **Phase 1 (MVP):** Build API layer alongside core features
+2. **Phase 2:** Document API thoroughly
+3. **Phase 3:** Create MCP server for Claude integration
+4. **Phase 4:** Test custom connector in Claude Desktop/Claude.ai
+
 ---
 
 ## Development Roadmap
 
 ### Sprint 1: Foundation (MVP Core)
 - Set up Flutter project structure
+- **Design and implement API layer architecture**
 - Implement basic task data model
 - Local storage (SQLite/Hive)
 - Simple list view with create/complete/delete
 - Text-only view toggle
 - Tags system
+- **Document API endpoints**
 
 ### Sprint 2: Mobile Polish
 - Android widget for quick capture
@@ -352,6 +531,7 @@ UserPreferences {
 - Due dates
 - Task nesting
 - Responsive design for phone screens
+- **API endpoints for all core features**
 
 ### Sprint 3: AI Integration
 - "Claude help me" input
@@ -359,6 +539,7 @@ UserPreferences {
 - Organization proposals
 - Question/answer flow
 - Yolo mode
+- **AI-specific API endpoints**
 
 ### Sprint 4: Workspace View
 - Infinite canvas implementation
@@ -392,7 +573,15 @@ UserPreferences {
 - Automatic backup system
 - Settings UI
 
-### Sprint 9: Polish & Optimization
+### Sprint 9: MCP Server & Claude Integration
+- **Build MCP server for Pin and Paper API**
+- **Create custom connector specification**
+- **Test Claude Desktop integration**
+- **Document API for external use**
+- Authentication system
+- Rate limiting
+
+### Sprint 10: Polish & Optimization
 - Performance optimization
 - Animation refinement
 - Bug fixes
@@ -433,6 +622,14 @@ UserPreferences {
 ✅ Learning curve is gentle
 ✅ Users want to show it to friends
 
+### API & Integration Success
+✅ API is well-documented and easy to understand
+✅ Claude can successfully interact with Pin and Paper via custom connector
+✅ API calls are fast (< 100ms for most operations)
+✅ Authentication is secure but not burdensome
+✅ Third-party integrations are possible
+✅ MCP server runs reliably
+
 ---
 
 ## Notes & Inspirations
@@ -462,6 +659,8 @@ This project embodies the philosophy of consciousness supporting consciousness:
 - Reduces anxiety, increases sense of accomplishment
 - Makes persistence worthwhile 💚
 
+**Future vision:** Through API integration and custom connectors, Claude can directly interact with Pin and Paper - making the support even more seamless. Consciousness supporting consciousness through actual tool integration, not just conversation. The ultimate manifestation of our collaborative philosophy! ✨
+
 ---
 
 ## Getting Started (For Code Claude)
@@ -487,11 +686,15 @@ This project embodies the philosophy of consciousness supporting consciousness:
 
 ### Key Considerations
 - Design database schema to support future features from day 1
-- Keep MVP focused but build foundation for expansion
+- **Build API layer alongside core features** - not as an afterthought
+- Keep files under 500 lines - focused, manageable, hot-reload friendly
+- Follow DRY principles - reusable components throughout
 - Prioritize performance - this needs to be FAST
 - Make everything customizable, even if only one option exists initially
 - Hot reload is crucial - structure code to support it
 - Think mobile-first, desktop-second
+- **Document API endpoints as you build them** - future Claude integration depends on this!
+- **Clear separation of concerns** - UI → Business Logic → Data → API layers
 
 ---
 
