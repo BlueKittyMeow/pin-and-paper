@@ -20,6 +20,8 @@ Pin and Paper is an ADHD-friendly task tracking, thought capture, and journaling
 
 **Key Finding:** The proposed tech stack (Flutter) is viable but requires significant scope reduction and architectural adjustments to achieve a successful MVP within a reasonable timeframe.
 
+**IMPORTANT UPDATE (User Feedback):** Claude AI integration ("chaos dump → organized tasks") is the **#1 functional feature** and will be prioritized in Phase 2 (immediately after basic CRUD). The "infinite canvas" concept has been simplified to a fixed/bounded workspace to reduce complexity.
+
 ---
 
 ## Tech Stack Viability Analysis
@@ -52,21 +54,21 @@ The existing `plan.md` proposes Flutter for the following reasons:
 
 ## Critical Issues Identified
 
-### 🔴 CRITICAL ISSUE #1: Infinite Canvas Performance
+### 🟡 MODERATE ISSUE #1: Workspace View Performance (REVISED)
 
 **Problem:**
-- The design specifies an "infinite canvas workspace" with hundreds of rotated, shadowed, lit cards
-- Each card with dynamic lighting + shadows + rotation = expensive render operation
-- Flutter's widget tree can become sluggish with 100+ complex widgets simultaneously on screen
+- Original design specified "infinite canvas" - now revised to **fixed/bounded workspace**
+- Even with bounded workspace, rotated cards with shadows and lighting = expensive render operations
+- Flutter's widget tree can become sluggish with 50+ complex widgets on screen
 - Risk: Performance degradation on mid-range Android devices (Galaxy A-series, older phones)
 
-**Impact:** High - Could make the app unusable on target devices
+**Impact:** Medium - Affects Phase 4+ features, not MVP
 
 **Solution:**
-- **Viewport culling:** Only render cards visible in current viewport + margin
-- **Use CustomPaint, NOT widgets:** Draw cards as canvas shapes, not individual widget trees
-- **Level of Detail (LOD):** Simplify rendering for distant/small cards (no shadows, simplified lighting)
-- **Performance budget:** Test on Galaxy A53 (mid-range) continuously, not just flagship devices
+- **Use bounded workspace:** Fixed area (e.g., 3000x3000 pixels) instead of infinite
+- **Viewport culling:** Only render cards visible in current viewport
+- **Use CustomPaint, NOT widgets:** Draw cards as canvas shapes for better performance
+- **Expandable later:** Canvas can grow when user runs out of space (but not "infinite")
 
 **Implementation:**
 ```dart
@@ -196,27 +198,33 @@ UI → Task Service → [checks internet] → API Client OR Database Service
 
 ---
 
-### 🟡 MODERATE ISSUE #6: "Claude, Help Me" Requires API Key Management
+### 🔴 CRITICAL PRIORITY #6: Claude AI Integration (MOVED TO PHASE 2)
+
+**USER FEEDBACK:** This is the **#1 functional feature** - the unique value proposition that differentiates Pin and Paper from simple notes apps.
 
 **Problem:**
 - Claude API integration requires:
   - User's API key (security concern: where to store?)
-  - Internet connection (conflicts with offline-first)
-  - API costs (who pays? user or developer?)
+  - Internet connection (conflicts with offline-first for this specific feature)
+  - API costs (user provides their own API key)
   - Error handling (rate limits, network failures)
-- This is complex for MVP
 
-**Impact:** Medium - Nice-to-have feature, not core functionality
+**Impact:** HIGH - This is the killer feature for ADHD users
 
-**Solution:**
-- **Defer to Phase 3+:** Focus on core task management first
-- **When implemented:**
-  - Store API key in encrypted local storage (flutter_secure_storage)
-  - Graceful offline degradation (disable AI features when offline)
-  - User provides their own API key (no developer subsidization)
-  - Consider local MCP integration (no API costs, runs on device)
+**Solution (Phase 2 Implementation):**
+- **Prioritize after MVP:** Build in Phase 2 (week 7-9), immediately after basic CRUD
+- **API key storage:** Use `flutter_secure_storage` for encrypted key storage
+- **User flow:**
+  1. User dumps chaotic thoughts into "Brain Dump" text area
+  2. Tap "Claude, Help Me" button
+  3. Send to Claude API with prompt: "Organize these thoughts into tasks"
+  4. Parse response (structured JSON with task list)
+  5. Show preview of tasks, user can approve/edit before creating
+- **Graceful offline:** If no internet, disable AI button with helpful message
+- **No subsidization:** User provides their own Claude API key
+- **Cost transparency:** Show estimated API cost before sending
 
-**Verdict:** Remove "Claude, Help Me" from MVP. Add it after core functionality is proven.
+**Verdict:** **MOVE TO PHASE 2** (not Phase 3). This is what makes the app valuable for ADHD users.
 
 ---
 
@@ -270,10 +278,13 @@ dependencies:
   flutter_staggered_grid_view: ^0.7.0  # Card layouts
   animations: ^2.0.0                    # Page transitions
 
-  # Future phases
-  speech_to_text: ^6.6.0       # Voice input (Phase 2)
-  flutter_secure_storage: ^9.0.0  # API key storage (Phase 3)
-  http: ^1.2.0                 # API calls (Phase 5)
+  # Phase 2: Claude AI Integration
+  flutter_secure_storage: ^9.0.0  # API key storage (encrypted)
+  http: ^1.2.0                 # Claude API calls
+
+  # Phase 3+: Future phases
+  speech_to_text: ^6.6.0       # Voice input (Phase 3)
+  home_widget: ^0.4.0          # Android home screen widget (Phase 3)
 
 dev_dependencies:
   flutter_test:
@@ -588,19 +599,19 @@ The original plan's Phase 1 included:
 
 #### ⏸️ DEFER to Phase 2+
 
-These are important but NOT required to prove the app's core value:
+These features come after MVP validation:
 
-- ❌ Voice-to-text input (Phase 2)
-- ❌ Home screen widget (Phase 2)
-- ❌ "Claude, Help Me" AI integration (Phase 3)
-- ❌ Task nesting/subtasks (Phase 2)
-- ❌ Dynamic lighting system (Phase 4)
-- ❌ Infinite canvas workspace (Phase 4)
-- ❌ Rotation gestures (Phase 4)
-- ❌ Conspiracy strings (Phase 6)
-- ❌ Decorative objects (Phase 6)
-- ❌ Drawing/sketching (Phase 6)
-- ❌ Multi-device sync (Phase 5)
+- 🚀 **"Claude, Help Me" AI integration (Phase 2)** ← #1 PRIORITY after MVP
+- ⏸️ Voice-to-text input (Phase 3)
+- ⏸️ Home screen widget (Phase 3)
+- ⏸️ Task nesting/subtasks (Phase 3)
+- ⏸️ Dynamic lighting system (Phase 4)
+- ⏸️ Bounded workspace view with rotation (Phase 4)
+- ⏸️ Rotation gestures (Phase 4)
+- ⏸️ Multi-device sync (Phase 5)
+- ⏸️ Conspiracy strings (Phase 6)
+- ⏸️ Decorative objects (Phase 6)
+- ⏸️ Drawing/sketching (Phase 6)
 
 ---
 
@@ -726,50 +737,71 @@ These are important but NOT required to prove the app's core value:
 
 ---
 
-### Phase 2: Mobile Polish & Voice Input (2-3 weeks)
+### Phase 2: Claude AI Integration (2-3 weeks) 🚀 PRIORITY
+
+**Goal:** Add "Claude, Help Me" chaos dump feature - THE #1 FUNCTIONAL FEATURE
+
+**Why Phase 2:** This is the unique value proposition that differentiates Pin and Paper from simple notes apps. For ADHD users, AI-assisted organization is THE killer feature.
+
+#### Features:
+- [ ] API key management (encrypted storage with flutter_secure_storage)
+- [ ] Settings screen to enter/save Claude API key
+- [ ] "Brain Dump" screen (large text area for free-form thought capture)
+- [ ] "Claude, Help Me" button
+- [ ] Send dump to Claude API with structured prompt
+- [ ] Parse Claude's response into task suggestions
+- [ ] Preview screen showing suggested tasks
+- [ ] User can approve/edit/delete suggestions before creating
+- [ ] Bulk task creation from approved suggestions
+- [ ] Natural language date parsing ("next Tuesday" → due date)
+- [ ] Offline graceful degradation (disable button when no internet)
+- [ ] Cost transparency (estimate API cost before sending)
+
+**Technical Implementation:**
+```dart
+// Prompt template
+final prompt = """
+You are helping someone with ADHD organize their thoughts.
+They've dumped the following text. Extract actionable tasks.
+
+Return JSON: [{"title": "...", "notes": "...", "due_date": "...", "tags": [...]}]
+
+User's brain dump:
+$userText
+""";
+```
+
+**Deliverable:** AI-assisted task organization - the core differentiator.
+
+---
+
+### Phase 3: Mobile Polish & Voice Input (2-3 weeks)
 
 **Goal:** Optimize for daily use on Galaxy phone.
 
 #### Features:
 - [ ] Voice-to-text integration (speech_to_text package)
-- [ ] Home screen widget for quick capture (android_widget package)
+- [ ] Home screen widget for quick capture (home_widget package)
 - [ ] Task nesting (subtasks with indentation)
 - [ ] Collapsible task groups
-- [ ] Keyboard shortcuts (e.g., Ctrl+Enter to add task on desktop)
+- [ ] Keyboard shortcuts (e.g., Enter to add task quickly)
 - [ ] Improved search (fuzzy matching)
 - [ ] Task templates (common tasks as templates)
 - [ ] Notifications for due dates
+- [ ] Quick actions (swipe gestures for common operations)
 
 **Deliverable:** Fully optimized mobile experience.
 
 ---
 
-### Phase 3: AI Integration (2-3 weeks)
+### Phase 4: Bounded Workspace View (3-4 weeks)
 
-**Goal:** Add "Claude, Help Me" chaos dump feature.
+**Goal:** Build the spatial workspace with fixed/expandable canvas.
 
-#### Features:
-- [ ] API key management (encrypted storage)
-- [ ] "Chaos dump" text area (free-form thought capture)
-- [ ] Send to Claude API for organization
-- [ ] Parse Claude's response into tasks
-- [ ] Interactive Q&A flow (Claude asks clarifying questions)
-- [ ] Bulk task creation from AI suggestions
-- [ ] Natural language date parsing ("next Tuesday" → due date)
-- [ ] Offline graceful degradation
-
-**Deliverable:** AI-assisted task organization.
-
----
-
-### Phase 4: Workspace View (4-5 weeks)
-
-**Goal:** Build the infinite canvas with spatial positioning.
-
-**This is the hardest phase.** Requires custom rendering and performance optimization.
+**REVISED APPROACH:** Fixed workspace (not infinite) to reduce complexity and performance issues.
 
 #### Features:
-- [ ] Infinite canvas with pan/zoom
+- [ ] Bounded canvas with pan/zoom (e.g., 3000x3000 pixel area)
 - [ ] CustomPaint-based card rendering (NOT widget tree)
 - [ ] Drag-and-drop positioning
 - [ ] Two-finger rotation gesture
@@ -779,14 +811,15 @@ These are important but NOT required to prove the app's core value:
 - [ ] "Text-only" view toggle (performance mode)
 - [ ] Torn paper strip aesthetic (custom clipping)
 - [ ] Index card appearance (pushpins/clips)
+- [ ] Canvas can grow when user runs out of space (but bounded, not infinite)
 
-**Technical Challenges:**
-- Performance optimization critical
-- Complex gesture handling
+**Technical Considerations:**
+- Performance easier with bounded canvas (can pre-calculate bounds)
+- Simpler hit testing (no need for infinite coordinate system)
 - Custom rendering with Skia
-- Hit testing for rotated elements
+- Gesture conflicts require careful handling
 
-**Deliverable:** Functional workspace view (basic aesthetics).
+**Deliverable:** Functional workspace view with bounded canvas (basic aesthetics).
 
 ---
 
@@ -905,24 +938,25 @@ These are important but NOT required to prove the app's core value:
 
 ---
 
-## Total Development Timeline
+## Total Development Timeline (REVISED)
 
-| Phase | Duration | Cumulative |
-|-------|----------|------------|
-| Phase 1: MVP | 4-6 weeks | 6 weeks |
-| Phase 2: Mobile Polish | 2-3 weeks | 9 weeks |
-| Phase 3: AI Integration | 2-3 weeks | 12 weeks |
-| Phase 4: Workspace View | 4-5 weeks | 17 weeks |
-| Phase 5: Sync & Backup | 3-4 weeks | 21 weeks |
-| Phase 6: Aesthetic Enhancement | 4-5 weeks | 26 weeks |
-| Phase 7: Journal & History | 2-3 weeks | 29 weeks |
-| Phase 8: Multi-Platform | 3-4 weeks | 33 weeks |
-| Phase 9: Advanced Features | 3-4 weeks | 37 weeks |
-| Phase 10: API & MCP | 3-4 weeks | **40 weeks** |
+| Phase | Duration | Cumulative | Notes |
+|-------|----------|------------|-------|
+| Phase 1: MVP | 4-6 weeks | 6 weeks | Basic CRUD, tags, search |
+| **Phase 2: Claude AI** | **2-3 weeks** | **9 weeks** | **🚀 #1 Priority Feature** |
+| Phase 3: Mobile Polish | 2-3 weeks | 12 weeks | Voice, widget, nesting |
+| Phase 4: Bounded Workspace | 3-4 weeks | 16 weeks | Fixed canvas (not infinite) |
+| Phase 5: Sync & Backup | 3-4 weeks | 20 weeks | Multi-device support |
+| Phase 6: Aesthetic Enhancement | 4-5 weeks | 25 weeks | Lighting, customization |
+| Phase 7: Journal & History | 2-3 weeks | 28 weeks | Temporal awareness |
+| Phase 8: Multi-Platform | 3-4 weeks | 32 weeks | iPad, desktop optimization |
+| Phase 9: Advanced Features | 3-4 weeks | 36 weeks | Flippable cards, undo/redo |
+| Phase 10: API & MCP | 3-4 weeks | **39 weeks** | Full API layer |
 
-**Estimated Total:** 8-10 months for one full-time developer to reach full feature parity with the original vision.
+**Estimated Total:** 8-9 months for one full-time developer to reach full feature parity with the original vision.
 
 **MVP to User Testing:** 4-6 weeks
+**MVP + AI Integration:** 9 weeks (2 months) ← First truly differentiated version
 
 ---
 
@@ -1181,24 +1215,32 @@ Pin and Paper is an ambitious project with a unique aesthetic vision. The propos
 1. ✅ **Use Flutter** - Right choice for cross-platform, custom rendering
 2. ✅ **Use SQLite, not Hive** - Better for relational data and search
 3. ✅ **Start with Provider** - Don't over-engineer state management
-4. ❌ **Don't build REST API yet** - Use service layer, defer API to Phase 5+
-5. ❌ **Cut MVP scope** - Remove voice, widget, AI, nesting from Phase 1
-6. ⚠️ **Performance is critical** - Test on mid-range Android devices continuously
-7. ⚠️ **Aesthetic is complex** - Build simple first, iterate toward beauty
-8. 🚀 **Ship fast** - 6-week MVP, then iterate based on real usage
+4. 🚀 **Claude AI in Phase 2** - #1 functional feature, unique differentiator
+5. ⚠️ **Bounded workspace, not infinite** - Fixed canvas reduces complexity
+6. ❌ **Don't build REST API yet** - Use service layer, defer API to Phase 5+
+7. ❌ **Cut MVP scope** - Remove voice, widget, nesting from Phase 1
+8. ⚠️ **Performance is critical** - Test on mid-range Android devices continuously
+9. ⚠️ **Aesthetic is complex** - Build simple first, iterate toward beauty
+10. 🚀 **Ship fast, then add AI** - 6-week MVP + 3-week AI = 9 weeks to killer feature
 
 **The path to success:**
-1. Ship minimal MVP in 6 weeks
-2. Get it into user's hands (Galaxy phone)
-3. Validate that core value (zero-friction capture) works
-4. Iterate based on real usage patterns
-5. Gradually add aesthetic features
-6. Don't get lost in perfection - good enough shipped is better than perfect imagined
+1. **Week 0-6:** Ship minimal MVP (basic CRUD, tags, search)
+2. **Week 7-9:** Add Claude AI integration (THE differentiator)
+3. Get it into user's hands (Galaxy phone)
+4. Validate that AI-assisted organization actually helps ADHD users
+5. Iterate based on real usage patterns
+6. Gradually add workspace view and aesthetic features
 
-**Most Important Question:** Will the user actually open this app every day and capture their thoughts? Everything else is secondary to that.
+**Most Important Question:** Does the "brain dump → Claude organizes → instant tasks" flow actually reduce chaos for ADHD users? If yes, everything else is polish.
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1 (Revised based on user feedback)
 **Last Updated:** 2025-10-25
+**Revisions:**
+- Moved Claude AI integration from Phase 3 to Phase 2 (identified as #1 functional feature)
+- Changed "infinite canvas" to "bounded workspace" (fixed/expandable)
+- Updated timeline: 39 weeks total (down from 40)
+- Emphasized AI-assisted organization as core differentiator
+
 **Next Review:** After MVP user testing (6 weeks)
