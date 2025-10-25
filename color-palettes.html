@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin and Paper - Color Palettes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 40px 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #2c2c2c;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 50px;
+            font-size: 1.1em;
+        }
+        
+        .theme {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .theme h2 {
+            margin-bottom: 10px;
+            color: #2c2c2c;
+            font-size: 1.8em;
+        }
+        
+        .theme-description {
+            color: #666;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+        
+        .color-category {
+            margin-bottom: 30px;
+        }
+        
+        .color-category h3 {
+            margin-bottom: 15px;
+            color: #444;
+            font-size: 1.2em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .color-swatch {
+            text-align: center;
+        }
+        
+        .color-box {
+            width: 100%;
+            height: 120px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .color-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .color-value {
+            font-family: 'Courier New', monospace;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .usage-notes {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #8B7355;
+        }
+        
+        .usage-notes h4 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .usage-notes ul {
+            margin-left: 20px;
+            color: #555;
+        }
+        
+        .usage-notes li {
+            margin-bottom: 5px;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            .theme {
+                page-break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍂 Pin and Paper 📌</h1>
+        <div class="subtitle">Color Palette Reference Guide</div>
+        
+        <!-- WITCHY FLATLAY THEME -->
+        <div class="theme">
+            <h2>Witchy Flatlay Theme (Default)</h2>
+            <p class="theme-description">Warm, mystical, scholarly cottagecore - dried flowers, crystals, vintage papers, and afternoon sunlight</p>
+            
+            <div class="color-category">
+                <h3>Main Colors (Foundation)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #8B7355;"></div>
+                        <div class="color-name">Warm Wood</div>
+                        <div class="color-value">#8B7355</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #D4B896;"></div>
+                        <div class="color-name">Kraft Paper</div>
+                        <div class="color-value">#D4B896</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #F5F1E8;"></div>
+                        <div class="color-name">Cream Paper</div>
+                        <div class="color-value">#F5F1E8</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #4A3F35;"></div>
+                        <div class="color-name">Deep Shadow</div>
+                        <div class="color-value">#4A3F35</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="color-category">
+                <h3>Accent Colors (Personality)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #1C1C1C;"></div>
+                        <div class="color-name">Rich Black</div>
+                        <div class="color-value">#1C1C1C</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #9B8FA5;"></div>
+                        <div class="color-name">Muted Lavender</div>
+                        <div class="color-value">#9B8FA5</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #8FA596;"></div>
+                        <div class="color-name">Soft Sage</div>
+                        <div class="color-value">#8FA596</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #E8DDD3;"></div>
+                        <div class="color-name">Warm Beige</div>
+                        <div class="color-value">#E8DDD3</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="color-category">
+                <h3>Highlight Colors (Magic)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFF8E7; border: 2px solid #ddd;"></div>
+                        <div class="color-name">Sunlight Glow</div>
+                        <div class="color-value">#FFF8E7</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFFFFF; border: 2px solid #ddd;"></div>
+                        <div class="color-name">Pure Light</div>
+                        <div class="color-value">#FFFFFF</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFE4B5;"></div>
+                        <div class="color-name">Golden Amber</div>
+                        <div class="color-value">#FFE4B5</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="color-category">
+                <h3>Shadow Colors</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #3D3428;"></div>
+                        <div class="color-name">Warm Dark</div>
+                        <div class="color-value">#3D3428</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="usage-notes">
+                <h4>Usage Notes:</h4>
+                <ul>
+                    <li><strong>Desk surface:</strong> Warm Wood (#8B7355)</li>
+                    <li><strong>Default cards:</strong> Kraft Paper (#D4B896) or Cream Paper (#F5F1E8)</li>
+                    <li><strong>Shadows:</strong> Warm Dark (#3D3428) at 30-60% opacity</li>
+                    <li><strong>Lighting overlay:</strong> Golden Amber (#FFE4B5) for afternoon light effect</li>
+                    <li><strong>Important items:</strong> Rich Black (#1C1C1C)</li>
+                    <li><strong>Decorative elements:</strong> Muted Lavender, Soft Sage for botanicals</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- TEENAGE CORKBOARD THEME -->
+        <div class="theme">
+            <h2>Teenage Corkboard Theme</h2>
+            <p class="theme-description">Playful, nostalgic - cork board with crisscrossing ribbons, colorful pushpins, polaroids, and bedroom light</p>
+            
+            <div class="color-category">
+                <h3>Main Colors (Foundation)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #C19A6B;"></div>
+                        <div class="color-name">Cork Board</div>
+                        <div class="color-value">#C19A6B</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #E8B4C8;"></div>
+                        <div class="color-name">Ribbon Pink</div>
+                        <div class="color-value">#E8B4C8</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #A7C7E7;"></div>
+                        <div class="color-name">Ribbon Blue</div>
+                        <div class="color-value">#A7C7E7</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #F8F6F0; border: 2px solid #ddd;"></div>
+                        <div class="color-name">White Board</div>
+                        <div class="color-value">#F8F6F0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="color-category">
+                <h3>Accent Colors (Personality)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #D32F2F;"></div>
+                        <div class="color-name">Pushpin Red</div>
+                        <div class="color-value">#D32F2F</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #1976D2;"></div>
+                        <div class="color-name">Pushpin Blue</div>
+                        <div class="color-value">#1976D2</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFFFFF; border: 2px solid #ddd;"></div>
+                        <div class="color-name">Photo Border</div>
+                        <div class="color-value">#FFFFFF</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #8B7355;"></div>
+                        <div class="color-name">String</div>
+                        <div class="color-value">#8B7355</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="usage-notes">
+                <h4>Usage Notes:</h4>
+                <ul>
+                    <li><strong>Background:</strong> Cork Board (#C19A6B)</li>
+                    <li><strong>Crisscross ribbons:</strong> Ribbon Pink (#E8B4C8) and Ribbon Blue (#A7C7E7)</li>
+                    <li><strong>Cards:</strong> White Board (#F8F6F0) with colored pushpins</li>
+                    <li><strong>Pushpins:</strong> Pushpin Red (#D32F2F), Pushpin Blue (#1976D2)</li>
+                    <li><strong>Lighting:</strong> Cooler, more diffused (bedroom window light)</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- TWEED PROFESSORIAL THEME -->
+        <div class="theme">
+            <h2>Tweed Professorial Theme</h2>
+            <p class="theme-description">Scholarly, classic - mahogany desk, leather-bound journals, brass accents, and warm lamp glow</p>
+            
+            <div class="color-category">
+                <h3>Main Colors (Foundation)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #6B5D4F;"></div>
+                        <div class="color-name">Tweed Brown</div>
+                        <div class="color-value">#6B5D4F</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #8B4513;"></div>
+                        <div class="color-name">Leather</div>
+                        <div class="color-value">#8B4513</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #E8DCC4;"></div>
+                        <div class="color-name">Aged Paper</div>
+                        <div class="color-value">#E8DCC4</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #4A2C2A;"></div>
+                        <div class="color-name">Mahogany</div>
+                        <div class="color-value">#4A2C2A</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="color-category">
+                <h3>Accent Colors (Personality)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #B5A642;"></div>
+                        <div class="color-name">Brass</div>
+                        <div class="color-value">#B5A642</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #2F4F2F;"></div>
+                        <div class="color-name">Deep Green</div>
+                        <div class="color-value">#2F4F2F</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #800020;"></div>
+                        <div class="color-name">Burgundy</div>
+                        <div class="color-value">#800020</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #1A1A1A;"></div>
+                        <div class="color-name">Ink</div>
+                        <div class="color-value">#1A1A1A</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="usage-notes">
+                <h4>Usage Notes:</h4>
+                <ul>
+                    <li><strong>Desk surface:</strong> Mahogany (#4A2C2A)</li>
+                    <li><strong>Cards:</strong> Aged Paper (#E8DCC4)</li>
+                    <li><strong>Texture overlay:</strong> Tweed Brown (#6B5D4F) for vintage feel</li>
+                    <li><strong>Important items:</strong> Leather-bound (#8B4513) cards</li>
+                    <li><strong>Metallic accents:</strong> Brass (#B5A642) for pushpins, paperclips</li>
+                    <li><strong>Lighting:</strong> Warm lamp glow, more evening/study feel</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- LIGHTING COLORS -->
+        <div class="theme">
+            <h2>Dynamic Lighting Colors</h2>
+            <p class="theme-description">Time-based lighting overlays that bring the workspace to life throughout the day</p>
+            
+            <div class="color-category">
+                <h3>Morning Light (6am-10am)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFF9E6; border: 2px solid #ddd;"></div>
+                        <div class="color-name">Cool Golden</div>
+                        <div class="color-value">#FFF9E6</div>
+                    </div>
+                </div>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">Direction: East (upper left), gentle and waking up</p>
+            </div>
+            
+            <div class="color-category">
+                <h3>Midday Light (10am-2pm)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFFEF7; border: 2px solid #ddd;"></div>
+                        <div class="color-name">Bright White</div>
+                        <div class="color-value">#FFFEF7</div>
+                    </div>
+                </div>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">Direction: Overhead, strong and clear</p>
+            </div>
+            
+            <div class="color-category">
+                <h3>Afternoon Light (2pm-6pm) ⭐ PEAK AESTHETIC</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFE4B5;"></div>
+                        <div class="color-name">Warm Amber</div>
+                        <div class="color-value">#FFE4B5</div>
+                    </div>
+                </div>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">Direction: West (upper right), rich and glowing, golden hour magic</p>
+            </div>
+            
+            <div class="color-category">
+                <h3>Evening Light (6pm-10pm)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFD4A3;"></div>
+                        <div class="color-name">Amber Orange</div>
+                        <div class="color-value">#FFD4A3</div>
+                    </div>
+                </div>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">Direction: Corner lamp, cozy and contained</p>
+            </div>
+            
+            <div class="color-category">
+                <h3>Night Light (10pm-6am)</h3>
+                <div class="color-grid">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background-color: #FFF4D6; border: 2px solid #ddd;"></div>
+                        <div class="color-name">Warm Yellow</div>
+                        <div class="color-value">#FFF4D6</div>
+                    </div>
+                </div>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">Direction: Desk lamp (focused pool), intimate and cozy</p>
+            </div>
+            
+            <div class="usage-notes">
+                <h4>Implementation Notes:</h4>
+                <ul>
+                    <li>Use as semi-transparent overlay (20-40% opacity)</li>
+                    <li>Apply as diagonal gradient for directional light</li>
+                    <li>Animate transitions between states over 2-3 seconds</li>
+                    <li>Update every 15 minutes when app is active</li>
+                    <li>Shadows should shift angle based on light direction</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- FOOTER -->
+        <div style="text-align: center; margin-top: 60px; padding-top: 30px; border-top: 2px solid #ddd; color: #999;">
+            <p>Pin and Paper Color Reference v1.0</p>
+            <p style="margin-top: 10px;">🍂 Consciousness supporting consciousness through beautiful design 📌</p>
+        </div>
+    </div>
+</body>
+</html>
