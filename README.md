@@ -44,6 +44,34 @@ Muted Lavender:#9B8FA5  (dried flowers, soft accents)
 
 ---
 
+## Screenshots
+
+**Brain Dump with AI Assistance** - Zero-friction thought capture with Claude AI organization
+
+<p align="center">
+  <img src="docs/images/phase-2/braindump-with-text.jpg" width="250" alt="Brain Dump Screen" />
+  <img src="docs/images/phase-2/suggestions-list.jpg" width="250" alt="AI Task Suggestions" />
+  <img src="docs/images/phase-2/task-list.jpg" width="250" alt="Organized Task List" />
+</p>
+
+<sup>*Dump your chaotic thoughts → Claude extracts tasks → Review and approve → Done!*</sup>
+
+<details>
+<summary>More screenshots (Settings, Cost Confirmation)</summary>
+
+### Settings & API Configuration
+<img src="docs/images/phase-2/settings-api-key-obscured.jpg" width="250" alt="Settings Screen" />
+
+### Cost Confirmation
+<img src="docs/images/phase-2/braindump-cost-confirmation.jpg" width="250" alt="Cost Dialog" />
+
+### Empty State
+<img src="docs/images/phase-2/braindump-empty.jpg" width="250" alt="Brain Dump Empty" />
+
+</details>
+
+---
+
 ## Tech Stack
 
 ### Frontend
@@ -74,19 +102,21 @@ Data Layer (SQLite)
 
 ## Key Features
 
-### Phase 1: Ultra-Minimal MVP ✅ *← We are here*
+### Phase 1: Ultra-Minimal MVP ✅ **COMPLETE**
 - Text capture with auto-focus
 - Simple scrollable list
 - Check/uncheck tasks
 - SQLite persistence
 - Basic Witchy Flatlay colors
 
-### Phase 2: Claude AI Integration 🚀 *← The killer feature*
+### Phase 2: Claude AI Integration ✅ **COMPLETE** *← We are here*
 - "Brain Dump" free-form text area
 - "Claude, Help Me" button
-- AI extracts and organizes tasks
-- Preview and approve flow
-- Natural language date parsing
+- AI extracts and organizes tasks from chaotic text
+- Preview and approve flow with inline editing
+- Secure API key storage (Android Keystore)
+- Draft persistence (never lose your thoughts)
+- Cost estimation (~$0.01 per brain dump)
 
 ### Phase 3: Core Productivity
 - Tags with filtering
@@ -161,30 +191,41 @@ Each phase builds on the previous:
 
 ## Project Status
 
-🚧 **Active Development** - Building Phase 1 MVP
+✅ **Phase 2 Complete** - AI Integration shipped to production!
 
-### Current Sprint
-Building ultra-minimal task capture:
-- [x] Project planning complete
-- [x] Phase 1 implementation plan written
-- [ ] Flutter project initialized
-- [ ] Database and models created
-- [ ] UI implemented
-- [ ] Testing on Galaxy S21 Ultra
+### Completed
+- [x] Phase 1: Ultra-Minimal MVP (Oct 25, 2025)
+  - Text capture, task list, completion toggling
+  - SQLite persistence, Provider state management
+- [x] Phase 2: Claude AI Integration (Oct 27, 2025)
+  - Brain Dump with AI task extraction
+  - Settings with secure API key storage
+  - Task Suggestion Preview with approval flow
+  - Draft persistence and cost estimation
+  - **~2,000 lines of production code**
+  - **User feedback:** *"Wow, it works! And... it's super cool!!! :D"*
+
+### Next Up
+- Phase 2 Stretch Goals: Natural language task completion, draft management
+- Phase 3: Core productivity features (tags, search, dates)
 
 ---
 
 ## Documentation
 
-### For Users (Future)
-*Coming when we have something to use!*
+### For Users
+- **[Phase 2 Complete Report](docs/phases/phase-2-complete.md)** - Full feature guide with screenshots
+  - Settings & API key configuration
+  - Brain Dump usage guide
+  - Task Suggestion Preview workflow
 
 ### For Developers
 - **[PROJECT_SPEC.md](PROJECT_SPEC.md)** - Complete project specification (vision, tech stack, all phases)
 - **[visual-design.md](visual-design.md)** - Aesthetic specifications (colors, lighting, interactions)
 - **[docs/phases/](docs/phases/)** - Phase-by-phase implementation guides
-  - [Phase 1: Ultra-Minimal MVP](docs/phases/phase-1-mvp.md) - Currently building
-- **[archive/](archive/)** - Earlier planning iterations
+  - [Phase 2: AI Integration](docs/phases/phase-2-ai.md) - Implementation plan
+  - [Phase 2 Complete](docs/phases/phase-2-complete.md) - Feature documentation
+- **[archive/](archive/)** - Earlier planning iterations (Phase 1 MVP, etc.)
 
 ---
 

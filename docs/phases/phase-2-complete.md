@@ -38,10 +38,15 @@ Phase 2 successfully integrated Claude AI for natural language task extraction f
 - API key validation: simple non-empty check (10+ chars)
 - Never logs API keys in errors or debug output
 
-**Screenshots:** *(User to add)*
-- [ ] Settings screen with obscured API key
-- [ ] Test Connection success (green checkmark)
-- [ ] Test Connection failure (red X with error)
+**Screenshots:**
+
+<details>
+<summary>📸 View Settings Screen Screenshots</summary>
+
+![Settings Screen with Obscured API Key](../images/phase-2/settings-api-key-obscured.jpg)
+*Settings screen showing API key field with obscured text, visibility toggle, and action buttons (Save, Test Connection, Delete). Help text and cost tip displayed at bottom.*
+
+</details>
 
 ---
 
@@ -79,13 +84,21 @@ Phase 2 successfully integrated Claude AI for natural language task extraction f
 - Draft deletion on successful processing
 - Cost estimation before API call
 
-**Screenshots:** *(User to add)*
-- [ ] Empty brain dump screen
-- [ ] Text entered with character count
-- [ ] Cost confirmation dialog
-- [ ] Processing state (loading spinner)
-- [ ] Error state (red banner)
-- [ ] Exit confirmation dialog
+**Screenshots:**
+
+<details>
+<summary>📸 View Brain Dump Screenshots</summary>
+
+![Empty Brain Dump Screen](../images/phase-2/braindump-empty.jpg)
+*Empty Brain Dump screen with placeholder text and character counter showing 0/10000. "Claude, Help Me" button is disabled (grayed out) when field is empty.*
+
+![Brain Dump with Text](../images/phase-2/braindump-with-text.jpg)
+*Brain Dump screen with user's chaotic thoughts entered. Character counter shows 340/10000. "Claude, Help Me" button is now enabled and ready to process.*
+
+![Cost Confirmation Dialog](../images/phase-2/braindump-cost-confirmation.jpg)
+*Cost confirmation dialog showing estimated cost ($0.008) before sending text to Claude AI. User can cancel or confirm to proceed with processing.*
+
+</details>
 
 ---
 
@@ -120,11 +133,18 @@ Phase 2 successfully integrated Claude AI for natural language task extraction f
 - Single `notifyListeners()` call (smooth UX)
 - Success toast: "X tasks added!"
 
-**Screenshots:** *(User to add)*
-- [ ] Suggestion list with checkboxes
-- [ ] Inline editing in action
-- [ ] Notes preview display
-- [ ] "Add X Tasks" button with count
+**Screenshots:**
+
+<details>
+<summary>📸 View Task Suggestion & Result Screenshots</summary>
+
+![Task Suggestion Preview](../images/phase-2/suggestions-list.jpg)
+*Task Suggestion Preview showing 5 tasks extracted from brain dump. Each task has a checkbox (all approved by default), editable title, optional notes from Claude, and delete button. "Add 5 Tasks" button at bottom shows live count of approved tasks.*
+
+![Home Screen with Added Tasks](../images/phase-2/task-list.jpg)
+*Home screen showing the complete workflow result. All 5 tasks from the brain dump have been added to the task list. The screen also shows previously completed tasks (with strikethrough) demonstrating the app's task management capabilities.*
+
+</details>
 
 ---
 
