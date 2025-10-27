@@ -141,7 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              '💡 Tip: Claude API costs ~$0.01 per brain dump',
+              r'💡 Tip: Claude API costs ~$0.01 per brain dump',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
