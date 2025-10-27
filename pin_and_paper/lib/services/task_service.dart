@@ -1,10 +1,12 @@
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import '../models/task.dart';
 import '../utils/constants.dart';
 import 'database_service.dart';
 
 class TaskService {
   final DatabaseService _dbService = DatabaseService.instance;
+  final Uuid _uuid = const Uuid();
 
   // Create a new task
   Future<Task> createTask(String title) async {
@@ -22,7 +24,8 @@ class TaskService {
     await db.insert(
       AppConstants.tasksTable,
       task.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      // Removed ConflictAlgorithm.replace to prevent silent data loss
+      // Default is ConflictAlgorithm.abort which throws on duplicate IDs
     );
 
     return task;
@@ -75,8 +78,9 @@ class TaskService {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  // Helper: Generate unique ID
+  // Helper: Generate unique ID using UUID v4
+  // This prevents ID collisions during rapid/bulk task creation
   String _generateId() {
-    return DateTime.now().millisecondsSinceEpoch.toString();
+    return _uuid.v4();
   }
 }

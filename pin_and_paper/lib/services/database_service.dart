@@ -57,7 +57,12 @@ class DatabaseService {
   }
 
   Future<void> close() async {
-    final db = await database;
-    await db.close();
+    // Don't call the getter - it might reopen a closed connection
+    // Instead, close the cached instance and null it out
+    final db = _database;
+    if (db != null) {
+      await db.close();
+      _database = null; // Reset so next access creates fresh connection
+    }
   }
 }
