@@ -28,7 +28,9 @@ make check    # doctor + analyze + test
 
 ## Directory Overview
 
-This directory contains the planning and design documents for **Pin and Paper**, a cross-platform task management and journaling application. The project is currently in the pre-development phase.
+This directory contains the planning and design documents for **Pin and Paper**, a cross-platform task management and journaling application.
+
+**Current Status:** ✅ **Phase 2 Complete** (AI Integration shipped to production)
 
 The directory serves as a comprehensive blueprint for the app, detailing everything from the core philosophy and feature set to the technical architecture and visual design.
 
@@ -110,3 +112,65 @@ The project plan outlines a clear set of development conventions:
 *   `color-palettes.html`: A supplemental file for the visual design, likely containing HTML/CSS representations of the color schemes.
 *   `README.md`: A brief, high-level summary of the project.
 *   `archive/`: Contains earlier planning iterations (plan.md, project-plan.md, issues.md) - now superseded by PROJECT_SPEC.md.
+
+## Development Status
+
+### ✅ Phase 1: MVP (Complete)
+**Status:** Shipped to production
+**Date:** October 25, 2025
+**Features:**
+- Task creation and management
+- Task completion toggling
+- SQLite database (version 1)
+- Provider state management
+- Basic UI with theme
+
+**Documentation:** `archive/phase-1-mvp.md`
+
+### ✅ Phase 2: AI Integration (Complete)
+**Status:** Shipped to production
+**Date:** October 27, 2025
+**Version:** 0.2.0
+**Features:**
+- Claude AI integration for task extraction
+- Settings screen with API key management
+- Brain Dump screen for thought capture
+- Task Suggestion Preview with approval/editing
+- Secure API key storage (Android Keystore)
+- Draft persistence (never lose text)
+- Database migration (v1 → v2)
+- Bulk task creation (performance optimized)
+
+**Key Stats:**
+- ~2,000 lines of production code
+- 4 commits (backend → UI → fixes)
+- 9 new files, 6 modified files
+- 100% AI team review issues resolved
+- Cost: ~$0.01 per brain dump
+- Test Connection: 10 tokens (~$0.0003)
+
+**Documentation:**
+- Implementation: `docs/phases/phase-2-ai.md`
+- Issues/Review: `docs/phases/issues-phase-2.md`
+- Completion Report: `docs/phases/phase-2-complete.md`
+
+**User Feedback:**
+> "Wow, it works! And... it's super cool!!! :D I'm kind of shocked at how well it works haha." — BlueKitty
+
+### 🔜 Phase 2 Stretch Goals (Planned)
+**Branch:** `phase-2-stretch`
+**Status:** Planning
+**Planned Features:**
+- Task completion via natural language ("I finished calling dentist")
+- Draft management UI (load saved drafts)
+- Cost tracking dashboard
+- Improved loading states & animations
+- Better error handling UX
+
+### 📅 Future Phases
+**Phase 3:** Natural language date parsing ("next Tuesday")
+**Phase 4+:** Workspace view with spatial organization
+**Phase 5+:** Sync & multi-device
+**Phase 6+:** Aesthetic enhancements (dynamic lighting, textures)
+
+See `docs/phases/future.md` for detailed future planning.
