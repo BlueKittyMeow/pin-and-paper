@@ -23,6 +23,7 @@ class DatabaseService {
       path,
       version: AppConstants.databaseVersion,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB, // Phase 2: Handle database migrations
       onConfigure: _onConfigure,
     );
   }
@@ -54,6 +55,47 @@ class DatabaseService {
       CREATE INDEX idx_tasks_completed
       ON ${AppConstants.tasksTable}(completed, completed_at)
     ''');
+
+    // Phase 2: Brain dump drafts table (for draft persistence)
+    await db.execute('''
+      CREATE TABLE ${AppConstants.brainDumpDraftsTable} (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_modified INTEGER NOT NULL,
+        failed_reason TEXT
+      )
+    ''');
+
+    // Index for draft retrieval (most recent first)
+    await db.execute('''
+      CREATE INDEX idx_drafts_modified
+      ON ${AppConstants.brainDumpDraftsTable}(last_modified DESC)
+    ''');
+  }
+
+  // Phase 2: Database migration handler
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    // Migrate from version 1 to 2: Add brain_dump_drafts table
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE ${AppConstants.brainDumpDraftsTable} (
+          id TEXT PRIMARY KEY,
+          content TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          last_modified INTEGER NOT NULL,
+          failed_reason TEXT
+        )
+      ''');
+
+      await db.execute('''
+        CREATE INDEX idx_drafts_modified
+        ON ${AppConstants.brainDumpDraftsTable}(last_modified DESC)
+      ''');
+    }
+
+    // Future migrations will be added here
+    // if (oldVersion < 3) { ... }
   }
 
   Future<void> close() async {

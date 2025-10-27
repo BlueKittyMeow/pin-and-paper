@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import '../models/task.dart';
+import '../models/task_suggestion.dart'; // Phase 2
 import '../utils/constants.dart';
 import 'database_service.dart';
 
@@ -29,6 +30,39 @@ class TaskService {
     );
 
     return task;
+  }
+
+  // Phase 2: Create multiple tasks in a single transaction (for bulk imports)
+  // This is CRITICAL for performance - prevents UI stuttering when adding 10+ tasks
+  Future<List<Task>> createMultipleTasks(List<TaskSuggestion> suggestions) async {
+    if (suggestions.isEmpty) return [];
+
+    final db = await _dbService.database;
+    final List<Task> createdTasks = [];
+
+    // Use a transaction for atomicity and performance
+    // All tasks are created in one database operation instead of N operations
+    await db.transaction((txn) async {
+      for (final suggestion in suggestions) {
+        // Only create approved tasks
+        if (!suggestion.approved) continue;
+
+        final task = Task(
+          id: suggestion.id, // Reuse suggestion ID (already UUID from ClaudeService)
+          title: suggestion.title,
+          createdAt: DateTime.now(),
+        );
+
+        await txn.insert(
+          AppConstants.tasksTable,
+          task.toMap(),
+        );
+
+        createdTasks.add(task);
+      }
+    });
+
+    return createdTasks;
   }
 
   // Get all tasks (ordered by creation date, newest first)
