@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../providers/task_provider.dart';
 import '../widgets/task_input.dart';
 import '../widgets/task_item.dart';
+import 'brain_dump_screen.dart'; // Phase 2
+import 'settings_screen.dart'; // Phase 2
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +31,30 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
+        actions: [
+          // Phase 2: Brain Dump button
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            tooltip: 'Brain Dump',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BrainDumpScreen()),
+              );
+            },
+          ),
+          // Phase 2: Settings button
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [

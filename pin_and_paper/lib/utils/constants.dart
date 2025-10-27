@@ -9,9 +9,13 @@ class AppConstants {
 
   // App metadata
   static const String appName = 'Pin and Paper';
-  static const String appVersion = '0.1.0';
+  static const String appVersion = '0.2.0'; // Phase 2: AI Integration
 
   // Performance targets
   static const int maxTasksInMemory = 500;
   static const Duration autoSaveDelay = Duration(milliseconds: 500);
+
+  // Phase 2: Claude AI
+  static const int maxBrainDumpLength = 10000; // Characters
+  static const double typicalCostPerDump = 0.01; // USD
 }
