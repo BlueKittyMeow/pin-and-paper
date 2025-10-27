@@ -5,7 +5,7 @@ import '../models/task_suggestion.dart';
 
 class ClaudeService {
   final String _baseUrl = 'https://api.anthropic.com/v1';
-  final String _model = 'claude-3-5-sonnet-20241022';  // Latest Sonnet
+  final String _model = 'claude-sonnet-4-5';  // Latest Sonnet
   final Uuid _uuid = const Uuid();
 
   // Estimate API cost before sending

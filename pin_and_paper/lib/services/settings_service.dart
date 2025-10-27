@@ -23,7 +23,7 @@ class SettingsService {
           'anthropic-version': '2023-06-01',
         },
         body: jsonEncode({
-          'model': 'claude-3-5-sonnet-20241022',
+          'model': 'claude-sonnet-4-5',
           'max_tokens': 10, // Minimal tokens to save cost
           'messages': [
             {
