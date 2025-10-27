@@ -1,9 +1,13 @@
 import 'package:flutter/foundation.dart';
 import '../models/task.dart';
+import '../models/task_suggestion.dart'; // Phase 2
 import '../services/task_service.dart';
 
 class TaskProvider extends ChangeNotifier {
-  final TaskService _taskService = TaskService();
+  final TaskService _taskService;
+
+  TaskProvider({TaskService? taskService})
+      : _taskService = taskService ?? TaskService();
 
   List<Task> _tasks = [];
   bool _isLoading = false;
@@ -52,6 +56,26 @@ class TaskProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _errorMessage = 'Failed to create task: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+    }
+  }
+
+  // Phase 2: Create multiple tasks from suggestions (bulk operation)
+  // CRITICAL for performance - single transaction + single UI update
+  Future<void> createMultipleTasks(List<TaskSuggestion> suggestions) async {
+    if (suggestions.isEmpty) return;
+
+    _errorMessage = null;
+
+    try {
+      final newTasks = await _taskService.createMultipleTasks(suggestions);
+      // Add all new tasks to the beginning of the list
+      _tasks.insertAll(0, newTasks);
+      // Single notify! Much better than N notifies for N tasks
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to create tasks: $e';
       debugPrint(_errorMessage);
       notifyListeners();
     }

@@ -1,8 +1,36 @@
-# GEMINI.md: Pin and Paper
+# Pin and Paper
+
+## Team Members
+
+- Claude
+- Codex
+- Gemini
+- BlueKitty (the human dev who is project manager)
+
+When you make notes and suggestions in documentation, please sign your individual suggestions/notes with "- 'your name'"
+
+## Flutter app location & commands
+
+This repo’s Flutter app lives in `pin_and_paper/` (underscore).  
+Run all Flutter/Dart commands **from that directory** (it contains `pubspec.yaml`).
+
+### Quick start
+
+```bash
+cd pin_and_paper
+make doctor   # flutter doctor -v
+make analyze  # analyze lib/ and test/
+make fix      # apply safe Dart fixes
+make format   # format sources
+make test     # run tests with expanded output
+make check    # doctor + analyze + test
+```
 
 ## Directory Overview
 
-This directory contains the planning and design documents for **Pin and Paper**, a cross-platform task management and journaling application. The project is currently in the pre-development phase.
+This directory contains the planning and design documents for **Pin and Paper**, a cross-platform task management and journaling application.
+
+**Current Status:** ✅ **Phase 2 Complete** (AI Integration shipped to production)
 
 The directory serves as a comprehensive blueprint for the app, detailing everything from the core philosophy and feature set to the technical architecture and visual design.
 
@@ -18,6 +46,42 @@ The core concept is to provide a digital workspace that feels like a physical de
 *   **Database:** SQLite (for local, offline-first storage)
 *   **State Management:** Provider (initially), migrating to Riverpod later.
 *   **AI Integration:** Claude API for natural language task processing.
+
+### Stack & Component Versions
+
+**Core:**
+*   **Flutter:** 3.35.7 (stable channel)
+*   **Dart:** 3.9.2
+*   **SDK Constraint:** `>=3.5.0 <4.0.0` (supports Flutter 3.24+ through current stable)
+*   **Database Version:** 2 (Phase 2)
+
+**Phase 1 Dependencies:**
+*   **sqflite:** ^2.3.0 (SQLite database)
+*   **path_provider:** ^2.1.0 (File system paths)
+*   **provider:** ^6.1.0 (State management)
+*   **uuid:** ^4.0.0 (Unique ID generation)
+*   **intl:** ^0.19.0 (Date formatting)
+*   **path:** ^1.9.1 (Path manipulation)
+
+**Phase 2 Additional Dependencies:**
+*   **http:** ^1.2.0 (HTTP requests to Claude API)
+*   **flutter_secure_storage:** ^9.0.0 (Secure API key storage)
+*   **connectivity_plus:** ^6.0.0 (Internet connectivity checking - uses List API)
+
+**Dev Dependencies:**
+*   **flutter_test:** (from Flutter SDK)
+*   **flutter_lints:** ^5.0.0 (Dart linting)
+*   **mockito:** ^5.4.0 (Testing mocks)
+
+**Target Device:**
+*   **Primary:** Samsung Galaxy S21 Ultra (Android)
+*   **Display:** 120Hz, 1440x3088 pixels
+*   **Performance Target:** 120fps native, 60fps minimum
+
+**Important Version Notes:**
+*   All dependencies use `^` (caret) syntax to allow compatible minor/patch updates
+*   connectivity_plus ^6.0.0 uses List-based API (not single ConnectivityResult)
+*   PopScope used instead of deprecated WillPopScope (Flutter 3.12+)
 
 ### Architecture
 The application will be built using a service-oriented architecture, with a clear separation between the UI, business logic, and data layers. An API-first approach is planned for the long-term to support multi-device sync and external integrations, but the initial MVP will focus on a local service layer to ensure rapid development.
@@ -48,3 +112,65 @@ The project plan outlines a clear set of development conventions:
 *   `color-palettes.html`: A supplemental file for the visual design, likely containing HTML/CSS representations of the color schemes.
 *   `README.md`: A brief, high-level summary of the project.
 *   `archive/`: Contains earlier planning iterations (plan.md, project-plan.md, issues.md) - now superseded by PROJECT_SPEC.md.
+
+## Development Status
+
+### ✅ Phase 1: MVP (Complete)
+**Status:** Shipped to production
+**Date:** October 25, 2025
+**Features:**
+- Task creation and management
+- Task completion toggling
+- SQLite database (version 1)
+- Provider state management
+- Basic UI with theme
+
+**Documentation:** `archive/phase-1-mvp.md`
+
+### ✅ Phase 2: AI Integration (Complete)
+**Status:** Shipped to production
+**Date:** October 27, 2025
+**Version:** 0.2.0
+**Features:**
+- Claude AI integration for task extraction
+- Settings screen with API key management
+- Brain Dump screen for thought capture
+- Task Suggestion Preview with approval/editing
+- Secure API key storage (Android Keystore)
+- Draft persistence (never lose text)
+- Database migration (v1 → v2)
+- Bulk task creation (performance optimized)
+
+**Key Stats:**
+- ~2,000 lines of production code
+- 4 commits (backend → UI → fixes)
+- 9 new files, 6 modified files
+- 100% AI team review issues resolved
+- Cost: ~$0.01 per brain dump
+- Test Connection: 10 tokens (~$0.0003)
+
+**Documentation:**
+- Implementation: `docs/phases/phase-2-ai.md`
+- Issues/Review: `docs/phases/issues-phase-2.md`
+- Completion Report: `docs/phases/phase-2-complete.md`
+
+**User Feedback:**
+> "Wow, it works! And... it's super cool!!! :D I'm kind of shocked at how well it works haha." — BlueKitty
+
+### 🔜 Phase 2 Stretch Goals (Planned)
+**Branch:** `phase-2-stretch`
+**Status:** Planning
+**Planned Features:**
+- Task completion via natural language ("I finished calling dentist")
+- Draft management UI (load saved drafts)
+- Cost tracking dashboard
+- Improved loading states & animations
+- Better error handling UX
+
+### 📅 Future Phases
+**Phase 3:** Natural language date parsing ("next Tuesday")
+**Phase 4+:** Workspace view with spatial organization
+**Phase 5+:** Sync & multi-device
+**Phase 6+:** Aesthetic enhancements (dynamic lighting, textures)
+
+See `docs/phases/future.md` for detailed future planning.

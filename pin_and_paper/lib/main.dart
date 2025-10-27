@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/task_provider.dart';
+import 'providers/settings_provider.dart'; // Phase 2
+import 'providers/brain_dump_provider.dart'; // Phase 2
 import 'screens/home_screen.dart';
 import 'utils/theme.dart';
 
@@ -13,8 +15,20 @@ class PinAndPaperApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => TaskProvider(),
+    // Phase 2: MultiProvider for multiple state management
+    // Order matters: SettingsProvider must be created before BrainDumpProvider
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()..initialize()),
+        ChangeNotifierProxyProvider<SettingsProvider, BrainDumpProvider>(
+          create: (context) => BrainDumpProvider(
+            Provider.of<SettingsProvider>(context, listen: false),
+          ),
+          update: (context, settings, previous) =>
+              previous ?? BrainDumpProvider(settings),
+        ),
+      ],
       child: MaterialApp(
         title: 'Pin and Paper',
         theme: AppTheme.lightTheme,
