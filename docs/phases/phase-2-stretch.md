@@ -1,8 +1,26 @@
-# Phase 2 Stretch Goals - Planning Document
+# Phase 2 Stretch Goals - Planning Document (CORRECTED)
 
 **Branch:** `phase-2-stretch`
-**Status:** Planning
+**Status:** Planning (Reviewed & Corrected by Codex, Gemini, Claude)
 **Target:** Q4 2025 (after Phase 2 completion)
+**Database Version:** 3 (unified migration for all stretch goals)
+
+---
+
+## ⚠️ Corrections Applied
+
+This document has been reviewed and corrected based on feedback from Codex and Gemini. Major fixes:
+
+1. **✅ FIXED:** Removed duplicate `completed_at` column migration (already exists from Phase 1)
+2. **✅ FIXED:** BrainDumpProvider architecture - provider returns text, widget owns controller
+3. **✅ FIXED:** Added proper database migration for `api_usage_log` table (version 2→3)
+4. **✅ FIXED:** Unified all database schema changes under single version bump (v3)
+5. **✅ FIXED:** Corrected Task model references (`completed` not `isCompleted`, `DateTime` not `int`)
+6. **✅ FIXED:** Efficient task categorization (calculate once, not per build)
+7. **✅ FIXED:** String similarity API usage (StringSimilarity.compareTwoStrings, not .similarityTo())
+8. **✅ FIXED:** toStringAsFixed(0) compile error on int
+9. **✅ ADDED:** Unique draft separator (`--- DRAFT SEPARATOR ---`)
+10. **✅ ADDED:** Reset Usage Data button in Cost Tracking UI
 
 ---
 
@@ -99,36 +117,24 @@ Active Tasks
 
 ### Technical Implementation
 
-#### 1.1 Database Schema Update
+#### 1.1 Database Schema - No Changes Needed! ✅
 
-**IMPORTANT:** Need to add `completed_at` timestamp to tasks table!
+**IMPORTANT:** The `completed_at` column ALREADY EXISTS in the tasks table from Phase 1!
 
-```sql
--- Migration from current schema
-ALTER TABLE tasks ADD COLUMN completed_at INTEGER;  -- NULL if not completed
-
--- completed_at stores milliseconds since epoch when task was marked complete
--- Gets set to NULL if task is uncompleted (timer reset)
-```
-
-Updated Task model:
-
+**Current Task Model (Phase 2):**
 ```dart
 // lib/models/task.dart
 class Task {
   final String id;
   final String title;
-  final String? notes;
-  final bool isCompleted;
-  final int createdAt;           // Already exists
-  final int? completedAt;        // NEW: When task was completed
+  final bool completed;          // Note: "completed" not "isCompleted"
+  final DateTime createdAt;      // Note: DateTime not int
+  final DateTime? completedAt;   // ✅ ALREADY EXISTS - ready to use!
 
   // Helper: How long has this task been completed?
   Duration? get timeSinceCompletion {
     if (completedAt == null) return null;
-    return DateTime.now().difference(
-      DateTime.fromMillisecondsSinceEpoch(completedAt!)
-    );
+    return DateTime.now().difference(completedAt!);
   }
 }
 ```
@@ -171,68 +177,73 @@ class TaskProvider extends ChangeNotifier {
   bool _hideOldCompleted = true;
   int _hideThresholdHours = 24;
 
-  // Three categories of tasks
-  List<Task> get activeTasks {
-    return _tasks.where((t) => !t.isCompleted).toList();
+  // Pre-categorized lists (calculated once per load, not on every build)
+  List<Task> _activeTasks = [];
+  List<Task> _recentlyCompletedTasks = [];
+  List<Task> _oldCompletedTasks = [];
+
+  // Public getters for categorized lists
+  List<Task> get activeTasks => _activeTasks;
+  List<Task> get recentlyCompletedTasks => _recentlyCompletedTasks;
+  List<Task> get oldCompletedTasks => _oldCompletedTasks;
+
+  // For rendering: active + recently completed (old are hidden)
+  List<Task> get visibleTasks {
+    if (_hideOldCompleted) {
+      return [..._activeTasks, ..._recentlyCompletedTasks];
+    }
+    return _tasks;  // Show all
   }
 
-  List<Task> get recentlyCompletedTasks {
-    return _tasks.where((t) {
-      if (!t.isCompleted) return false;
+  // Categorize tasks after loading (called once per load, not per build)
+  void _categorizeTasks() {
+    final now = DateTime.now();
+
+    _activeTasks = _tasks.where((t) => !t.completed).toList();
+
+    _recentlyCompletedTasks = _tasks.where((t) {
+      if (!t.completed) return false;
       if (t.completedAt == null) return false;
 
       final hoursSinceCompletion =
-        DateTime.now().difference(
-          DateTime.fromMillisecondsSinceEpoch(t.completedAt!)
-        ).inHours;
+        now.difference(t.completedAt!).inHours;
 
       return hoursSinceCompletion < _hideThresholdHours;
     }).toList();
-  }
 
-  List<Task> get oldCompletedTasks {
-    if (!_hideOldCompleted) {
-      // Show all completed if setting is off
-      return _tasks.where((t) => t.isCompleted).toList();
-    }
-
-    return _tasks.where((t) {
-      if (!t.isCompleted) return false;
+    _oldCompletedTasks = _tasks.where((t) {
+      if (!t.completed) return false;
       if (t.completedAt == null) return true;  // Show if no timestamp
 
       final hoursSinceCompletion =
-        DateTime.now().difference(
-          DateTime.fromMillisecondsSinceEpoch(t.completedAt!)
-        ).inHours;
+        now.difference(t.completedAt!).inHours;
 
       return hoursSinceCompletion >= _hideThresholdHours;
     }).toList();
   }
 
-  // For rendering: active + recently completed (old are hidden)
-  List<Task> get visibleTasks {
-    if (_hideOldCompleted) {
-      return [...activeTasks, ...recentlyCompletedTasks];
-    }
-    return _tasks;  // Show all
+  Future<void> loadTasks() async {
+    _tasks = await _taskService.getAllTasks();
+    _categorizeTasks();  // Categorize once after load
+    notifyListeners();
   }
 
   Future<void> toggleTaskCompletion(String taskId) async {
     final task = _tasks.firstWhere((t) => t.id == taskId);
-    final newCompletionState = !task.isCompleted;
+    final newCompletionState = !task.completed;
 
     // Set or clear completed_at timestamp
     final completedAt = newCompletionState
-      ? DateTime.now().millisecondsSinceEpoch
+      ? DateTime.now()
       : null;
 
     await _taskService.updateTask(
       taskId,
-      isCompleted: newCompletionState,
+      completed: newCompletionState,
       completedAt: completedAt,
     );
 
-    await loadTasks();
+    await loadTasks();  // Reload and re-categorize
   }
 
   Future<void> loadPreferences() async {
@@ -298,7 +309,7 @@ class TaskItem extends StatelessWidget {
       opacity: isFaint ? 0.5 : 1.0,
       child: ListTile(
         leading: Checkbox(
-          value: task.isCompleted,
+          value: task.completed,
           onChanged: (value) {
             context.read<TaskProvider>().toggleTaskCompletion(task.id);
           },
@@ -306,12 +317,12 @@ class TaskItem extends StatelessWidget {
         title: Text(
           task.title,
           style: TextStyle(
-            decoration: task.isCompleted
+            decoration: task.completed
               ? TextDecoration.lineThrough
               : null,
           ),
         ),
-        subtitle: task.notes != null ? Text(task.notes!) : null,
+        // Note: Task model has no notes field currently
       ),
     );
   }
@@ -322,7 +333,7 @@ class TaskItem extends StatelessWidget {
 - `shared_preferences: ^2.2.0` (already used in Flutter ecosystem, lightweight)
 
 ### Testing Checklist
-- [ ] Database migration adds `completed_at` column
+- [ ] ✅ Verified `completed_at` column exists in database (no migration needed)
 - [ ] Timestamp set correctly when task completed
 - [ ] Timestamp cleared when task uncompleted
 - [ ] Active tasks show at top
@@ -333,10 +344,11 @@ class TaskItem extends StatelessWidget {
 - [ ] Preference persists across restarts
 - [ ] Edge case: Task completed exactly at threshold
 - [ ] Works for future daybook/planner (timestamps ready!)
+- [ ] Performance: Task categorization runs once per load, not per build
 
 ### Estimated Time
-- **Database migration:** 1 hour
-- **Implementation:** 4-5 hours (more complex than simple toggle)
+- **No database migration needed** (column already exists)
+- **Implementation:** 4-5 hours (efficient categorization pattern)
 - **Testing:** 1 hour
 
 ---
@@ -413,11 +425,15 @@ class TaskMatchingService {
   // Find best matching tasks
   List<TaskMatch> findMatches(String input, List<Task> tasks) {
     final action = extractAction(input);
-    final incompleteTasks = tasks.where((t) => !t.isCompleted).toList();
+    final incompleteTasks = tasks.where((t) => !t.completed).toList();
 
     return incompleteTasks
       .map((task) {
-        final similarity = action.similarityTo(task.title.toLowerCase());
+        // Use StringSimilarity.compareTwoStrings (NOT .similarityTo())
+        final similarity = StringSimilarity.compareTwoStrings(
+          action,
+          task.title.toLowerCase(),
+        );
         return TaskMatch(task: task, similarity: similarity);
       })
       .where((match) => match.similarity >= POSSIBLE_THRESHOLD)
@@ -718,21 +734,19 @@ class BrainDumpProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadSelectedDrafts() async {
-    if (_selectedDraftIds.isEmpty) return;
-    if (isOverLimit) return;  // Don't load if over limit
-
-    // Combine drafts with line breaks
+  // Return combined text for widget to set in its controller
+  // Provider should NOT own UI controllers (architectural violation)
+  String getCombinedDraftsText() {
     final selectedDrafts = _drafts
       .where((draft) => _selectedDraftIds.contains(draft.id))
       .toList();
 
-    final combined = selectedDrafts
+    return selectedDrafts
       .map((draft) => draft.content)
-      .join('\n\n---\n\n');  // Separator between drafts
+      .join('\n\n--- DRAFT SEPARATOR ---\n\n');  // Unique separator
+  }
 
-    _textController.text = combined;
-
+  Future<void> deleteSelectedDrafts() async {
     // Delete loaded drafts (they're now in the editor)
     for (final draftId in _selectedDraftIds) {
       await DatabaseService.instance.deleteBrainDumpDraft(draftId);
@@ -803,7 +817,7 @@ class DraftsListScreen extends StatelessWidget {
                     children: [
                       Text(
                         provider.isOverLimit
-                          ? '⚠️ Selected: ${provider.selectedCount} drafts (${provider.selectedTotalChars.toStringAsFixed(0)} characters)'
+                          ? '⚠️ Selected: ${provider.selectedCount} drafts (${provider.selectedTotalChars} characters)'
                           : 'Selected: ${provider.selectedCount} drafts (${provider.selectedTotalChars} characters)',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -822,8 +836,12 @@ class DraftsListScreen extends StatelessWidget {
                         onPressed: provider.isOverLimit
                           ? null
                           : () async {
-                              await provider.loadSelectedDrafts();
-                              Navigator.pop(context);
+                              // Get combined text from provider
+                              final combinedText = provider.getCombinedDraftsText();
+
+                              // Widget sets its own controller (not provider)
+                              // This must be done in the parent screen that owns the controller
+                              Navigator.pop(context, combinedText);
                             },
                         child: Text(
                           provider.isOverLimit
@@ -908,11 +926,20 @@ AppBar(
           child: IconButton(
             icon: Icon(Icons.article_outlined),
             tooltip: 'Saved Drafts',
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              // Navigate to drafts screen, await result
+              final combinedText = await Navigator.push<String>(
                 context,
                 MaterialPageRoute(builder: (context) => DraftsListScreen()),
               );
+
+              // Widget owns the controller - provider returns text
+              if (combinedText != null) {
+                _textController.text = combinedText;
+
+                // Delete drafts after loading
+                await context.read<BrainDumpProvider>().deleteSelectedDrafts();
+              }
             },
           ),
         );
@@ -1304,21 +1331,65 @@ Track API usage and display in Settings screen.
 
 ### Technical Implementation
 
-#### 4.1 Database Schema
+#### 5.1 Database Schema & Migration
 
-```sql
-CREATE TABLE api_usage_log (
-  id TEXT PRIMARY KEY,
-  timestamp INTEGER NOT NULL,
-  operation_type TEXT NOT NULL,  -- 'brain_dump' or 'test_connection'
-  input_tokens INTEGER NOT NULL,
-  output_tokens INTEGER NOT NULL,
-  estimated_cost_usd REAL NOT NULL,
-  model TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
+**Database Version Bump:** 2 → 3 (Phase 2 Stretch Goals)
 
-CREATE INDEX idx_api_usage_timestamp ON api_usage_log(timestamp DESC);
+```dart
+// lib/utils/constants.dart
+static const int databaseVersion = 3; // Phase 2 Stretch: api_usage_log table
+```
+
+```dart
+// lib/services/database_service.dart - _upgradeDB
+Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+  // Migrate from version 1 to 2: Add brain_dump_drafts table
+  if (oldVersion < 2) {
+    await db.execute('''
+      CREATE TABLE ${AppConstants.brainDumpDraftsTable} (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_modified INTEGER NOT NULL,
+        failed_reason TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_drafts_modified
+      ON ${AppConstants.brainDumpDraftsTable}(last_modified DESC)
+    ''');
+  }
+
+  // Migrate from version 2 to 3: Add api_usage_log table (Phase 2 Stretch)
+  if (oldVersion < 3) {
+    await db.execute('''
+      CREATE TABLE ${AppConstants.apiUsageLogTable} (
+        id TEXT PRIMARY KEY,
+        timestamp INTEGER NOT NULL,
+        operation_type TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        estimated_cost_usd REAL NOT NULL,
+        model TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_api_usage_timestamp
+      ON ${AppConstants.apiUsageLogTable}(timestamp DESC)
+    ''');
+  }
+
+  // Future migrations will be added here
+  // if (oldVersion < 4) { ... }
+}
+```
+
+```dart
+// lib/utils/constants.dart - Add constant
+static const String apiUsageLogTable = 'api_usage_log';
 ```
 
 #### 4.2 Service Layer
@@ -1459,16 +1530,31 @@ Consumer<UsageStats>(
               '\$${stats.averageCostPerCall.toStringAsFixed(3)}/dump'),
 
             SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => DetailedUsageScreen(),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DetailedUsageScreen(),
+                        ),
+                      );
+                    },
+                    child: Text('View Detailed Usage'),
                   ),
-                );
-              },
-              child: Text('View Detailed Usage'),
+                ),
+                SizedBox(width: 8),
+                OutlinedButton.icon(
+                  icon: Icon(Icons.delete_outline),
+                  label: Text('Reset'),
+                  onPressed: () => _confirmResetUsageData(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1478,18 +1564,64 @@ Consumer<UsageStats>(
 )
 ```
 
+### Reset Usage Data Implementation
+
+```dart
+Future<void> _confirmResetUsageData(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Reset Usage Data?'),
+      content: Text(
+        'This will permanently delete all API usage history and cost tracking data. '
+        'This cannot be undone.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: Text('Reset'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed == true) {
+    await DatabaseService.instance.database.then((db) =>
+      db.delete(AppConstants.apiUsageLogTable)
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Usage data reset')),
+    );
+
+    // Refresh stats
+    setState(() {});
+  }
+}
+```
+
 ### Privacy Note
 - All data stored locally
 - No telemetry sent to external services
 - User owns their usage data
+- User can reset/delete data at any time
 
 ### Testing Checklist
+- [ ] ✅ Database migration v2→v3 runs successfully
+- [ ] ✅ Constant added to AppConstants.apiUsageLogTable
 - [ ] Usage logged after each API call
 - [ ] Stats calculate correctly
 - [ ] Monthly stats reset properly
 - [ ] Detailed usage screen shows history
 - [ ] Costs match actual API pricing
 - [ ] Test connection calls tracked separately
+- [ ] Reset usage data confirmation works
+- [ ] Reset actually deletes all usage records
 
 ### Estimated Time
 - **Implementation:** 4-5 hours
