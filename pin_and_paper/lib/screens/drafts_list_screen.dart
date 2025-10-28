@@ -3,8 +3,30 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/brain_dump_provider.dart';
 
-class DraftsListScreen extends StatelessWidget {
+class DraftsListScreen extends StatefulWidget {
   const DraftsListScreen({super.key});
+
+  @override
+  State<DraftsListScreen> createState() => _DraftsListScreenState();
+}
+
+class _DraftsListScreenState extends State<DraftsListScreen> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDrafts();
+  }
+
+  Future<void> _loadDrafts() async {
+    await context.read<BrainDumpProvider>().loadDrafts();
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,13 +34,15 @@ class DraftsListScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Saved Drafts'),
       ),
-      body: Consumer<BrainDumpProvider>(
-        builder: (context, provider, child) {
-          if (provider.drafts.isEmpty) {
-            return const Center(
-              child: Text('No saved drafts'),
-            );
-          }
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Consumer<BrainDumpProvider>(
+              builder: (context, provider, child) {
+                if (provider.drafts.isEmpty) {
+                  return const Center(
+                    child: Text('No saved drafts'),
+                  );
+                }
 
           return Column(
             children: [

@@ -126,7 +126,6 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
             // Input field
             TextField(
               controller: _controller,
-              autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'What did you finish?',
                 hintText: 'e.g., "finished calling dentist"',

@@ -16,34 +16,61 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Review Tasks'),
-        actions: [
-          Consumer<BrainDumpProvider>(
-            builder: (context, provider, child) {
-              if (provider.originalDumpText != null) {
-                return IconButton(
-                  icon: Icon(_showOriginalText ? Icons.visibility_off : Icons.visibility),
-                  tooltip: _showOriginalText ? 'Hide original text' : 'View original text',
-                  onPressed: () {
-                    setState(() {
-                      _showOriginalText = !_showOriginalText;
-                    });
-                    _showOriginalBottomSheet();
-                  },
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-      body: Consumer<BrainDumpProvider>(
+    return GestureDetector(
+      onTap: () {
+        // Unfocus any text fields when tapping outside
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Review Tasks'),
+          actions: [
+            Consumer<BrainDumpProvider>(
+              builder: (context, provider, child) {
+                if (provider.originalDumpText != null) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.visibility,
+                            color: _showOriginalText ? Colors.green : Colors.grey,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () {
+                            setState(() {
+                              _showOriginalText = !_showOriginalText;
+                            });
+                            _showOriginalBottomSheet();
+                          },
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Original',
+                          style: TextStyle(
+                            fontSize: 9,
+                            height: 1,
+                            color: _showOriginalText ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+        body: Consumer<BrainDumpProvider>(
         builder: (context, provider, child) {
           final suggestions = provider.suggestions;
 
@@ -103,6 +130,7 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
           );
         },
       ),
+      ),
     );
   }
 
@@ -116,7 +144,12 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
+      isDismissible: true, // Allow tap outside to dismiss
+      enableDrag: true,
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.pop(context), // Tap anywhere to dismiss
+        behavior: HitTestBehavior.opaque,
+        child: DraggableScrollableSheet(
         initialChildSize: 0.5,
         minChildSize: 0.3,
         maxChildSize: 0.9,
@@ -185,6 +218,7 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
             ),
           );
         },
+      ),
       ),
     ).whenComplete(() {
       setState(() {

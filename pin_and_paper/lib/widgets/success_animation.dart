@@ -41,23 +41,10 @@ class _SuccessAnimationState extends State<SuccessAnimation>
   Widget build(BuildContext context) {
     return ScaleTransition(
       scale: _scaleAnimation,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.check_circle,
-            color: Colors.green,
-            size: 64,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Found ${widget.taskCount} tasks!',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
+      child: const Icon(
+        Icons.check_circle,
+        color: Colors.green,
+        size: 64,
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../widgets/brain_dump_loading.dart';
 import '../widgets/success_animation.dart';
 import 'settings_screen.dart';
 import 'task_suggestion_preview_screen.dart';
+import 'drafts_list_screen.dart';
 
 class BrainDumpScreen extends StatefulWidget {
   const BrainDumpScreen({super.key});
@@ -77,6 +78,26 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Brain Dump'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.article_outlined),
+              tooltip: 'View Drafts',
+              onPressed: () async {
+                final result = await Navigator.push<String>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DraftsListScreen()),
+                );
+
+                // If user loaded draft(s), populate the text field
+                if (result != null && mounted) {
+                  setState(() {
+                    _textController.text = result;
+                  });
+                  context.read<BrainDumpProvider>().updateDumpText(result);
+                }
+              },
+            ),
+          ],
         ),
         body: Consumer<BrainDumpProvider>(
           builder: (context, provider, child) {
@@ -108,7 +129,6 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
                         border: InputBorder.none,
                       ),
                       style: const TextStyle(fontSize: 16, height: 1.5),
-                      autofocus: true,
                       enabled: !provider.isProcessing,
                     ),
                   ),

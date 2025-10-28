@@ -150,6 +150,8 @@ class TaskProvider extends ChangeNotifier {
       final newTasks = await _taskService.createMultipleTasks(suggestions);
       // Add all new tasks to the beginning of the list
       _tasks.insertAll(0, newTasks);
+      // CRITICAL: Re-categorize to populate activeTasks, recentlyCompletedTasks, etc.
+      _categorizeTasks();
       // Single notify! Much better than N notifies for N tasks
       notifyListeners();
     } catch (e) {
