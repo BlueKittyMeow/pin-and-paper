@@ -457,11 +457,7 @@ class TaskMatch {
 
   TaskMatch({required this.task, required this.similarity});
 
-  String get confidenceLabel {
-    if (similarity >= 0.90) return 'Exact match';
-    if (similarity >= 0.75) return 'Likely match';
-    return 'Possible match';
-  }
+  // Note: UI-specific labels moved to widget for better separation of concerns
 }
 ```
 
@@ -538,6 +534,13 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
                     itemCount: _matches.length,
                     itemBuilder: (context, index) {
                       final match = _matches[index];
+                      // UI logic for confidence label (not in model)
+                      String getConfidenceLabel(double similarity) {
+                        if (similarity >= 0.90) return 'Exact match';
+                        if (similarity >= 0.75) return 'Likely match';
+                        return 'Possible match';
+                      }
+
                       return ListTile(
                         leading: Icon(
                           Icons.task_alt,
@@ -547,7 +550,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
                         ),
                         title: Text(match.task.title),
                         subtitle: Text(
-                          '${(match.similarity * 100).toStringAsFixed(0)}% match - ${match.confidenceLabel}',
+                          '${(match.similarity * 100).toStringAsFixed(0)}% match - ${getConfidenceLabel(match.similarity)}',
                         ),
                         trailing: Icon(Icons.check_circle_outline),
                         onTap: () => _completeTask(match),
@@ -581,6 +584,10 @@ FloatingActionButton.extended(
 
 ### Dependencies
 - `string_similarity: ^2.0.0` (Levenshtein distance, fuzzy matching)
+  - **Note:** Package hasn't been updated in 2+ years, but is stable and functional
+  - Algorithm is mathematical (Levenshtein distance) - doesn't need frequent updates
+  - Alternative for future: `fuzzy` package (more actively maintained)
+  - Acceptable for Phase 2 Stretch; re-evaluate for Phase 3 if issues arise
 
 ### Future Enhancements (Phase 3+)
 - Voice input for completion
@@ -692,7 +699,52 @@ Selected: 2 drafts (8,240 characters)
 
 ### Technical Implementation
 
-#### 3.1 Provider Updates
+#### 3.1 Brain Dump Draft Model
+
+**IMPORTANT:** Define the model before using it in providers and services.
+
+```dart
+// lib/models/brain_dump_draft.dart
+class BrainDumpDraft {
+  final String id;
+  final String content;
+  final DateTime createdAt;
+  final DateTime lastModified;
+  final String? failedReason;  // Error message if processing failed
+
+  BrainDumpDraft({
+    required this.id,
+    required this.content,
+    required this.createdAt,
+    required this.lastModified,
+    this.failedReason,
+  });
+
+  // Convert to Map for database
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'content': content,
+      'created_at': createdAt.millisecondsSinceEpoch,
+      'last_modified': lastModified.millisecondsSinceEpoch,
+      'failed_reason': failedReason,
+    };
+  }
+
+  // Create from Map (database row)
+  factory BrainDumpDraft.fromMap(Map<String, dynamic> map) {
+    return BrainDumpDraft(
+      id: map['id'] as String,
+      content: map['content'] as String,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+      lastModified: DateTime.fromMillisecondsSinceEpoch(map['last_modified'] as int),
+      failedReason: map['failed_reason'] as String?,
+    );
+  }
+}
+```
+
+#### 3.2 Provider Updates
 
 ```dart
 // lib/providers/brain_dump_provider.dart
@@ -764,14 +816,16 @@ class BrainDumpProvider extends ChangeNotifier {
 }
 ```
 
-#### 3.2 Database Service
+#### 3.3 Database Service
+
+**CRITICAL:** Use the correct constant name from the codebase.
 
 ```dart
 // lib/services/database_service.dart
 Future<List<BrainDumpDraft>> getBrainDumpDrafts() async {
   final db = await database;
   final List<Map<String, dynamic>> maps = await db.query(
-    AppConstants.tableBrainDumpDrafts,
+    AppConstants.brainDumpDraftsTable,  // FIXED: Use correct constant name
     orderBy: 'last_modified DESC',
   );
 
@@ -781,14 +835,14 @@ Future<List<BrainDumpDraft>> getBrainDumpDrafts() async {
 Future<void> deleteBrainDumpDraft(String id) async {
   final db = await database;
   await db.delete(
-    AppConstants.tableBrainDumpDrafts,
+    AppConstants.brainDumpDraftsTable,  // FIXED: Use correct constant name
     where: 'id = ?',
     whereArgs: [id],
   );
 }
 ```
 
-#### 3.3 Drafts List Screen (Multi-Select)
+#### 3.4 Drafts List Screen (Multi-Select)
 
 ```dart
 // lib/screens/drafts_list_screen.dart
@@ -910,7 +964,7 @@ class DraftsListScreen extends StatelessWidget {
 }
 ```
 
-#### 3.4 Add to Brain Dump Screen
+#### 3.5 Add to Brain Dump Screen
 
 ```dart
 // lib/screens/brain_dump_screen.dart - AppBar
@@ -960,7 +1014,7 @@ Future<void> cleanupOldDrafts() async {
   final cutoffDate = DateTime.now().subtract(Duration(days: 30));
 
   await db.delete(
-    AppConstants.tableBrainDumpDrafts,
+    AppConstants.brainDumpDraftsTable,  // FIXED: Use correct constant name
     where: 'last_modified < ?',
     whereArgs: [cutoffDate.millisecondsSinceEpoch],
   );
@@ -1392,7 +1446,21 @@ Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
 static const String apiUsageLogTable = 'api_usage_log';
 ```
 
-#### 4.2 Service Layer
+**Database Helper Method:**
+
+```dart
+// lib/services/database_service.dart
+// Add this method to DatabaseService class
+Future<void> insertApiUsageLog(Map<String, dynamic> logEntry) async {
+  final db = await database;
+  await db.insert(
+    AppConstants.apiUsageLogTable,
+    logEntry,
+  );
+}
+```
+
+#### 5.2 Service Layer
 
 ```dart
 // lib/services/api_usage_service.dart
@@ -1477,7 +1545,7 @@ class UsageStats {
 }
 ```
 
-#### 4.3 Integrate into ClaudeService
+#### 5.3 Integrate into ClaudeService
 
 ```dart
 // lib/services/claude_service.dart
@@ -1502,7 +1570,7 @@ Future<List<TaskSuggestion>> extractTasks(String dump, String apiKey) async {
 }
 ```
 
-#### 4.4 Settings Screen UI
+#### 5.4 Settings Screen UI
 
 ```dart
 // lib/screens/settings_screen.dart
@@ -1805,13 +1873,14 @@ Future<void> _processWithClaude() async {
   setState(() => _isProcessing = true);
 
   try {
-    final suggestions = await _brainDumpProvider.processDump();
+    // processDump returns void - stores suggestions internally in provider
+    await _brainDumpProvider.processDump();
 
-    // Show success animation
+    // Show success animation (get count from provider's suggestions)
     setState(() {
       _isProcessing = false;
       _showSuccess = true;
-      _taskCount = suggestions.length;
+      _taskCount = _brainDumpProvider.suggestions.length;
     });
 
     // Auto-navigate after animation
@@ -1916,9 +1985,11 @@ dependencies:
 
   # Phase 2 Stretch Goals
   shared_preferences: ^2.2.0      # UI preferences (hide completed)
-  string_similarity: ^2.0.0        # Fuzzy matching (task completion)
+  string_similarity: ^2.0.0        # Fuzzy matching (stable, 2+ years old but functional)
   # lottie: ^3.0.0                 # Optional: animations
 ```
+
+**Note on `string_similarity`:** While this package hasn't been updated in 2+ years, it implements mathematical algorithms (Levenshtein distance) that don't require frequent updates. It remains functional and stable. Consider migrating to the more actively maintained `fuzzy` package in Phase 3+ if compatibility issues arise.
 
 ---
 
