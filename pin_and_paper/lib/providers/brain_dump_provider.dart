@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
 import '../models/task_suggestion.dart';
+import '../models/brain_dump_draft.dart';
 import '../services/claude_service.dart';
 import '../services/database_service.dart';
 import '../utils/constants.dart'; // IMPLEMENTATION REMINDER FIX: Use AppConstants
@@ -13,6 +14,8 @@ class BrainDumpProvider extends ChangeNotifier {
   final Connectivity _connectivity = Connectivity(); // Reuse instance
   final Uuid _uuid = const Uuid(); // For generating draft IDs
 
+  static const int MAX_CHAR_LIMIT = 10000;
+
   String _dumpText = '';
   List<TaskSuggestion> _suggestions = [];
   bool _isProcessing = false;
@@ -20,6 +23,9 @@ class BrainDumpProvider extends ChangeNotifier {
   double _estimatedCost = 0.0;
   String? _errorMessage;
   String? _currentDraftId; // Track current draft ID for upsert logic
+  List<BrainDumpDraft> _drafts = [];
+  Set<String> _selectedDraftIds = {};
+  String? _originalDumpText; // For brain dump review bottom sheet
 
   BrainDumpProvider(this._settingsProvider);
 
@@ -29,6 +35,27 @@ class BrainDumpProvider extends ChangeNotifier {
   bool get hasInternet => _hasInternet;
   double get estimatedCost => _estimatedCost;
   String? get errorMessage => _errorMessage;
+  List<BrainDumpDraft> get drafts => _drafts;
+  Set<String> get selectedDraftIds => _selectedDraftIds;
+  int get selectedCount => _selectedDraftIds.length;
+  String? get originalDumpText => _originalDumpText;
+
+  int get selectedTotalChars {
+    int total = 0;
+    for (final draft in _drafts) {
+      if (_selectedDraftIds.contains(draft.id)) {
+        total += draft.content.length;
+      }
+    }
+    return total;
+  }
+
+  bool get isOverLimit => selectedTotalChars > MAX_CHAR_LIMIT;
+
+  int get excessCharacters {
+    final excess = selectedTotalChars - MAX_CHAR_LIMIT;
+    return excess > 0 ? excess : 0;
+  }
 
   // Update brain dump text
   void updateDumpText(String text) {
@@ -71,6 +98,7 @@ class BrainDumpProvider extends ChangeNotifier {
 
     _isProcessing = true;
     _errorMessage = null;
+    _originalDumpText = _dumpText; // Store original text before processing
     notifyListeners();
 
     try {
@@ -181,12 +209,14 @@ class BrainDumpProvider extends ChangeNotifier {
   }
 
   // Load saved drafts
-  Future<List<Map<String, dynamic>>> loadDrafts() async {
+  Future<void> loadDrafts() async {
     final db = await DatabaseService.instance.database;
-    return await db.query(
+    final List<Map<String, dynamic>> maps = await db.query(
       AppConstants.brainDumpDraftsTable, // IMPLEMENTATION REMINDER FIX
       orderBy: 'last_modified DESC',
     );
+    _drafts = maps.map((map) => BrainDumpDraft.fromMap(map)).toList();
+    notifyListeners();
   }
 
   // Delete draft
@@ -197,6 +227,55 @@ class BrainDumpProvider extends ChangeNotifier {
       where: 'id = ?',
       whereArgs: [id],
     );
+    _drafts.removeWhere((draft) => draft.id == id);
+    _selectedDraftIds.remove(id);
+    notifyListeners();
+  }
+
+  // Toggle draft selection
+  void toggleDraftSelection(String draftId) {
+    if (_selectedDraftIds.contains(draftId)) {
+      _selectedDraftIds.remove(draftId);
+    } else {
+      _selectedDraftIds.add(draftId);
+    }
+    notifyListeners();
+  }
+
+  // Get combined text from selected drafts
+  String getCombinedDraftsText() {
+    final selectedDrafts = _drafts
+        .where((draft) => _selectedDraftIds.contains(draft.id))
+        .toList();
+
+    return selectedDrafts
+        .map((draft) => draft.content)
+        .join('\n\n--- DRAFT SEPARATOR ---\n\n');
+  }
+
+  // Delete selected drafts
+  Future<void> deleteSelectedDrafts() async {
+    await loadDrafts(); // Reload to ensure we have fresh data
+    final idsToDelete = _selectedDraftIds.toList();
+    for (final id in idsToDelete) {
+      await deleteDraft(id);
+    }
+    _selectedDraftIds.clear();
+    notifyListeners();
+  }
+
+  // Clear original text
+  void clearOriginalText() {
+    _originalDumpText = null;
+    notifyListeners();
+  }
+
+  // Clear after successful task addition
+  void clearAfterSuccess() {
+    _dumpText = '';
+    _originalDumpText = null;
+    _suggestions = [];
+    notifyListeners();
   }
 
   // Clear all (also resets draft ID for new session)

@@ -27,6 +27,10 @@ dependencies:
   flutter_secure_storage: ^9.0.0  # Secure API key storage (Android Keystore)
   connectivity_plus: ^6.0.0  # Internet connectivity checking (List API)
 
+  # Phase 2 Stretch Goals
+  shared_preferences: ^2.2.0  # UI preferences (hide completed toggle)
+  string_similarity: ^2.0.0  # Fuzzy matching for natural language task completion
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

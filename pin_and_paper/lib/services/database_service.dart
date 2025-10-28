@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/constants.dart';
+import '../models/brain_dump_draft.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._init();
@@ -72,6 +73,26 @@ class DatabaseService {
       CREATE INDEX idx_drafts_modified
       ON ${AppConstants.brainDumpDraftsTable}(last_modified DESC)
     ''');
+
+    // Phase 2 Stretch: API usage log table (for cost tracking)
+    await db.execute('''
+      CREATE TABLE ${AppConstants.apiUsageLogTable} (
+        id TEXT PRIMARY KEY,
+        timestamp INTEGER NOT NULL,
+        operation_type TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        estimated_cost_usd REAL NOT NULL,
+        model TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+
+    // Index for usage retrieval (most recent first)
+    await db.execute('''
+      CREATE INDEX idx_api_usage_timestamp
+      ON ${AppConstants.apiUsageLogTable}(timestamp DESC)
+    ''');
   }
 
   // Phase 2: Database migration handler
@@ -94,8 +115,29 @@ class DatabaseService {
       ''');
     }
 
+    // Migrate from version 2 to 3: Add api_usage_log table (Phase 2 Stretch)
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE ${AppConstants.apiUsageLogTable} (
+          id TEXT PRIMARY KEY,
+          timestamp INTEGER NOT NULL,
+          operation_type TEXT NOT NULL,
+          input_tokens INTEGER NOT NULL,
+          output_tokens INTEGER NOT NULL,
+          estimated_cost_usd REAL NOT NULL,
+          model TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE INDEX idx_api_usage_timestamp
+        ON ${AppConstants.apiUsageLogTable}(timestamp DESC)
+      ''');
+    }
+
     // Future migrations will be added here
-    // if (oldVersion < 3) { ... }
+    // if (oldVersion < 4) { ... }
   }
 
   Future<void> close() async {
@@ -106,5 +148,45 @@ class DatabaseService {
       await db.close();
       _database = null; // Reset so next access creates fresh connection
     }
+  }
+
+  // Phase 2 Stretch: Brain dump draft methods
+  Future<List<BrainDumpDraft>> getBrainDumpDrafts() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      AppConstants.brainDumpDraftsTable,
+      orderBy: 'last_modified DESC',
+    );
+
+    return maps.map((m) => BrainDumpDraft.fromMap(m)).toList();
+  }
+
+  Future<void> deleteBrainDumpDraft(String id) async {
+    final db = await database;
+    await db.delete(
+      AppConstants.brainDumpDraftsTable,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> cleanupOldDrafts() async {
+    final db = await database;
+    final cutoffDate = DateTime.now().subtract(const Duration(days: 30));
+
+    await db.delete(
+      AppConstants.brainDumpDraftsTable,
+      where: 'last_modified < ?',
+      whereArgs: [cutoffDate.millisecondsSinceEpoch],
+    );
+  }
+
+  // Phase 2 Stretch: API usage logging methods
+  Future<void> insertApiUsageLog(Map<String, dynamic> logEntry) async {
+    final db = await database;
+    await db.insert(
+      AppConstants.apiUsageLogTable,
+      logEntry,
+    );
   }
 }

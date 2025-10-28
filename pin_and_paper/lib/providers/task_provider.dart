@@ -2,16 +2,28 @@ import 'package:flutter/foundation.dart';
 import '../models/task.dart';
 import '../models/task_suggestion.dart'; // Phase 2
 import '../services/task_service.dart';
+import '../services/preferences_service.dart'; // Phase 2 Stretch
 
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService;
+  final PreferencesService _preferencesService;
 
-  TaskProvider({TaskService? taskService})
-      : _taskService = taskService ?? TaskService();
+  TaskProvider({TaskService? taskService, PreferencesService? preferencesService})
+      : _taskService = taskService ?? TaskService(),
+        _preferencesService = preferencesService ?? PreferencesService();
 
   List<Task> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Phase 2 Stretch: Hide completed tasks settings
+  bool _hideOldCompleted = true;
+  int _hideThresholdHours = 24;
+
+  // Phase 2 Stretch: Pre-categorized lists (calculated once per load, not on every build)
+  List<Task> _activeTasks = [];
+  List<Task> _recentlyCompletedTasks = [];
+  List<Task> _oldCompletedTasks = [];
 
   // Getters
   List<Task> get tasks => _tasks;
@@ -27,6 +39,49 @@ class TaskProvider extends ChangeNotifier {
   int get incompleteCount => incompleteTasks.length;
   int get completedCount => completedTasks.length;
 
+  // Phase 2 Stretch: Public getters for categorized lists
+  List<Task> get activeTasks => _activeTasks;
+  List<Task> get recentlyCompletedTasks => _recentlyCompletedTasks;
+  List<Task> get oldCompletedTasks => _oldCompletedTasks;
+
+  // For rendering: active + recently completed (old are hidden if setting enabled)
+  List<Task> get visibleTasks {
+    if (_hideOldCompleted) {
+      return [..._activeTasks, ..._recentlyCompletedTasks];
+    }
+    return _tasks;  // Show all
+  }
+
+  bool get hideOldCompleted => _hideOldCompleted;
+  int get hideThresholdHours => _hideThresholdHours;
+
+  // Phase 2 Stretch: Categorize tasks after loading (called once per load, not per build)
+  void _categorizeTasks() {
+    final now = DateTime.now();
+
+    _activeTasks = _tasks.where((t) => !t.completed).toList();
+
+    _recentlyCompletedTasks = _tasks.where((t) {
+      if (!t.completed) return false;
+      if (t.completedAt == null) return false;
+
+      final hoursSinceCompletion =
+        now.difference(t.completedAt!).inHours;
+
+      return hoursSinceCompletion < _hideThresholdHours;
+    }).toList();
+
+    _oldCompletedTasks = _tasks.where((t) {
+      if (!t.completed) return false;
+      if (t.completedAt == null) return true;  // Show if no timestamp
+
+      final hoursSinceCompletion =
+        now.difference(t.completedAt!).inHours;
+
+      return hoursSinceCompletion >= _hideThresholdHours;
+    }).toList();
+  }
+
   // Load all tasks from database
   Future<void> loadTasks() async {
     _isLoading = true;
@@ -35,6 +90,7 @@ class TaskProvider extends ChangeNotifier {
 
     try {
       _tasks = await _taskService.getAllTasks();
+      _categorizeTasks();  // Categorize once after load
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
       debugPrint(_errorMessage);
@@ -42,6 +98,28 @@ class TaskProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  // Phase 2 Stretch: Load preferences (call during initialization)
+  Future<void> loadPreferences() async {
+    _hideOldCompleted = await _preferencesService.getHideOldCompleted();
+    _hideThresholdHours = await _preferencesService.getHideThresholdHours();
+    notifyListeners();
+  }
+
+  // Phase 2 Stretch: Update hide completed setting
+  Future<void> setHideOldCompleted(bool value) async {
+    _hideOldCompleted = value;
+    await _preferencesService.setHideOldCompleted(value);
+    notifyListeners();
+  }
+
+  // Phase 2 Stretch: Update threshold setting
+  Future<void> setHideThresholdHours(int hours) async {
+    _hideThresholdHours = hours;
+    await _preferencesService.setHideThresholdHours(hours);
+    _categorizeTasks();  // Re-categorize with new threshold
+    notifyListeners();
   }
 
   // Create a new task
@@ -92,6 +170,7 @@ class TaskProvider extends ChangeNotifier {
       final index = _tasks.indexWhere((t) => t.id == task.id);
       if (index != -1) {
         _tasks[index] = updatedTask;
+        _categorizeTasks();  // Phase 2 Stretch: Re-categorize after toggle
         notifyListeners();
       }
     } catch (e) {

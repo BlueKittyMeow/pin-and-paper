@@ -4,8 +4,15 @@ import '../providers/brain_dump_provider.dart';
 import '../providers/task_provider.dart';
 import '../widgets/task_suggestion_item.dart';
 
-class TaskSuggestionPreviewScreen extends StatelessWidget {
+class TaskSuggestionPreviewScreen extends StatefulWidget {
   const TaskSuggestionPreviewScreen({super.key});
+
+  @override
+  State<TaskSuggestionPreviewScreen> createState() => _TaskSuggestionPreviewScreenState();
+}
+
+class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScreen> {
+  bool _showOriginalText = false;
 
   @override
   Widget build(BuildContext context) {
@@ -13,6 +20,23 @@ class TaskSuggestionPreviewScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Review Tasks'),
         actions: [
+          Consumer<BrainDumpProvider>(
+            builder: (context, provider, child) {
+              if (provider.originalDumpText != null) {
+                return IconButton(
+                  icon: Icon(_showOriginalText ? Icons.visibility_off : Icons.visibility),
+                  tooltip: _showOriginalText ? 'Hide original text' : 'View original text',
+                  onPressed: () {
+                    setState(() {
+                      _showOriginalText = !_showOriginalText;
+                    });
+                    _showOriginalBottomSheet();
+                  },
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.pop(context),
@@ -22,7 +46,6 @@ class TaskSuggestionPreviewScreen extends StatelessWidget {
       body: Consumer<BrainDumpProvider>(
         builder: (context, provider, child) {
           final suggestions = provider.suggestions;
-          final approvedCount = provider.getApprovedSuggestions().length;
 
           if (suggestions.isEmpty) {
             return const Center(
@@ -83,6 +106,93 @@ class TaskSuggestionPreviewScreen extends StatelessWidget {
     );
   }
 
+  void _showOriginalBottomSheet() {
+    final provider = context.read<BrainDumpProvider>();
+    final originalText = provider.originalDumpText;
+
+    if (originalText == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Drag handle
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Original Text',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                // Scrollable content
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      originalText,
+                      style: const TextStyle(fontSize: 16, height: 1.5),
+                    ),
+                  ),
+                ),
+                // Hint
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Swipe down to close',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() {
+      setState(() {
+        _showOriginalText = false;
+      });
+    });
+  }
+
   Future<void> _addApprovedTasks(BuildContext context) async {
     final brainDumpProvider = context.read<BrainDumpProvider>();
     final taskProvider = context.read<TaskProvider>();
@@ -104,8 +214,8 @@ class TaskSuggestionPreviewScreen extends StatelessWidget {
       // 3. No stuttering/flashing as tasks appear
       await taskProvider.createMultipleTasks(approved);
 
-      // Clear brain dump
-      brainDumpProvider.clear();
+      // Clear brain dump after success (clears original text and suggestions)
+      brainDumpProvider.clearAfterSuccess();
 
       // Navigate back to home
       if (context.mounted) {
