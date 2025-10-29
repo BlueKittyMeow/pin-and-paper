@@ -9,6 +9,8 @@
 
 When you make notes and suggestions in documentation, please sign your individual suggestions/notes with "- 'your name'"
 
+Since we are a team of ai and a coffee powered human, we don't need to worry about unrealistic timelines for implementation, we only need to ensure that the scope of each phase/subphase stays manageable and split into logical groupings. 
+
 ## Flutter app location & commands
 
 This repo’s Flutter app lives in `pin_and_paper/` (underscore).  
@@ -67,6 +69,47 @@ The core concept is to provide a digital workspace that feels like a physical de
 *   **Database:** SQLite (for local, offline-first storage)
 *   **State Management:** Provider (initially), migrating to Riverpod later.
 *   **AI Integration:** Claude API for natural language task processing.
+
+### AI Team Tools - MCP Server Documentation Access
+
+**For Claude:** You have access to a context7 MCP server with up-to-date documentation for all 17 core libraries used in this project. Query these whenever you're uncertain about current best practices, API changes, or implementation patterns.
+
+**For Codex & Gemini:** Note that you may not have access to the MCP server due to sandboxing/config issues. If you need current documentation, ask BlueKitty or coordinate with Claude.
+
+**Available Libraries (17 total):**
+
+*Core Framework:*
+- `websites/main-api_flutter_dev` - Flutter
+- `websites/dart_dev` - Dart
+
+*Database:*
+- `websites/www_sqlite_org-docs.html` - SQLite official docs
+- `tekartik/sqflite` - Flutter SQLite package
+
+*State Management:*
+- `websites/pub_dev_packages_provider` - Current (Phase 1-2)
+- `websites/riverpod_dev` - Planned migration (Phase 3+)
+
+*AI Integration:*
+- `websites/docs_anthropic_com-en-home` - Claude API
+
+*Security:*
+- `websites/pub_dev_packages_flutter_secure_storage` - API key storage
+
+*Networking:*
+- `websites/pub_dev_packages_http` - HTTP requests
+- `websites/pub_dev_packages_connectivity_plus` - Network status
+
+*Utilities:*
+- `websites/pub_dev_packages_intl` - Internationalization/formatting
+- `websites/pub_dev_packages_uuid` - UUID generation
+- `websites/pub_dev_path_provider` - File system access
+
+*Development Tools:*
+- `websites/pub_dev_packages_flutter_lints` - Code quality
+- `mockito/mockito` - Testing framework
+- `websites/pub_dev-packages` - General pub.dev reference
+- `websites/pub_dev-help` - pub.dev help docs
 
 ### Stack & Component Versions
 
