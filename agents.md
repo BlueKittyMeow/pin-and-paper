@@ -30,9 +30,28 @@ make check    # doctor + analyze + test
 
 This directory contains the planning and design documents for **Pin and Paper**, a cross-platform task management and journaling application.
 
-**Current Status:** ✅ **Phase 2 Complete** (AI Integration shipped to production)
+**Current Status:** ✅ **Phase 2 Stretch Goals Complete** (All core AI features + enhancements shipped)
 
 The directory serves as a comprehensive blueprint for the app, detailing everything from the core philosophy and feature set to the technical architecture and visual design.
+
+### Key Documentation Files
+
+**Stable Files (root directory):**
+- `README.md` - Public GitHub page (don't change)
+- `AGENTS.md` - This file - quick reference for AI team
+- `visual-design.md` - Complete aesthetic specification (colors, lighting, interactions)
+- `color-palettes.html` - Visual color reference tool
+
+**Planning & Roadmap:**
+- `docs/PROJECT_SPEC.md` - **THE authoritative planning document** (single source of truth)
+- `docs/future/` - Future phase planning and research
+
+**Completed Work:**
+- `archive/` - Completed phases move here when done (living documents archive when complete)
+  - Phase documentation, issue tracking, historical planning docs
+
+**Important Note on Living Documents:**
+Phase-specific documentation (e.g., `phase-3.md`, `phase-3-issues.md`) lives in `docs/phases/` during active development. When a phase is complete, these documents are consolidated and moved to `archive/` to keep active documentation clean and focused on current/future work.
 
 ## Project Overview
 
@@ -85,6 +104,66 @@ The core concept is to provide a digital workspace that feels like a physical de
 
 ### Architecture
 The application will be built using a service-oriented architecture, with a clear separation between the UI, business logic, and data layers. An API-first approach is planned for the long-term to support multi-device sync and external integrations, but the initial MVP will focus on a local service layer to ensure rapid development.
+
+```
+UI Layer (Flutter Widgets)
+    ↓
+Business Logic (Services)
+    ↓
+Data Layer (SQLite)
+```
+
+### Key Architectural Decisions
+
+**Why Flutter?**
+- Cross-platform (Android, iOS, iPad, Desktop, Web)
+- Skia rendering engine perfect for aesthetic effects (torn paper, shadows, lighting)
+- Hot reload for rapid iteration (1-2 second UI updates)
+- Strong gesture support for spatial interactions
+
+**Why SQLite?**
+- Relational data with complex queries (tags, search, filtering, nesting)
+- Offline-first (no internet required for core functionality)
+- Battle-tested, mature, reliable
+- Better than Hive for our use case (relationships, search performance)
+
+**Why Provider → Riverpod?**
+- Start simple with Provider for MVP (less boilerplate, faster development)
+- Migrate to Riverpod when complexity increases (better testing, compile-time safety)
+- Don't over-engineer early phases
+
+**Why Service Layer (not REST API yet)?**
+- Local-first architecture for MVP (no server needed)
+- Service layer encapsulates business logic cleanly
+- Can add REST API later for sync without major refactoring
+- Faster MVP development (defer API to Phase 5+)
+
+**Why Bounded Workspace (not infinite canvas)?**
+- Performance: Easier viewport culling, pre-calculated bounds
+- UX: Users understand edges better than infinite space
+- Technical: Simpler hit testing and gesture handling
+- Can expand when user runs out of space (but not truly infinite)
+
+### Development Workflow
+
+**Starting Work:**
+1. Read `AGENTS.md` (this file) for current status and quick reference
+2. Check `docs/PROJECT_SPEC.md` for detailed phase planning
+3. Review `visual-design.md` if working on UI/aesthetic features
+4. Check `docs/future/` for future phase details
+
+**During Development:**
+1. Work from `pin_and_paper/` directory (contains `pubspec.yaml`)
+2. Use `make` commands for common tasks (doctor, analyze, test, format)
+3. Keep files under 500 lines (split if larger)
+4. Follow DRY principles (reusable components)
+5. Test on Samsung Galaxy S21 Ultra (primary device)
+
+**When Completing a Phase:**
+1. Consolidate phase documentation into single markdown file
+2. Move completed phase docs to `archive/`
+3. Update this file (AGENTS.md) with new current status
+4. Update `docs/PROJECT_SPEC.md` with phase completion notes
 
 ## Building and Running
 
@@ -157,20 +236,28 @@ The project plan outlines a clear set of development conventions:
 **User Feedback:**
 > "Wow, it works! And... it's super cool!!! :D I'm kind of shocked at how well it works haha." — BlueKitty
 
-### 🔜 Phase 2 Stretch Goals (Planned)
-**Branch:** `phase-2-stretch`
-**Status:** Planning
-**Planned Features:**
-- Task completion via natural language ("I finished calling dentist")
-- Draft management UI (load saved drafts)
-- Cost tracking dashboard
+### ✅ Phase 2 Stretch Goals (Complete)
+**Branch:** `phase-2-stretch` → `main`
+**Status:** Shipped to production
+**Date:** October 28, 2025
+**Features:**
+- Hide completed tasks (time-based with customizable threshold)
+- Natural language task completion (local fuzzy matching)
+- Draft management UI (multi-select, combine drafts)
+- Brain dump review bottom sheet (view original text)
+- Cost tracking dashboard (API usage monitoring)
 - Improved loading states & animations
-- Better error handling UX
+
+**Documentation:** `archive/phase-2.md` (consolidated with core Phase 2)
 
 ### 📅 Future Phases
-**Phase 3:** Natural language date parsing ("next Tuesday")
-**Phase 4+:** Workspace view with spatial organization
-**Phase 5+:** Sync & multi-device
-**Phase 6+:** Aesthetic enhancements (dynamic lighting, textures)
+**Phase 3:** Mobile Polish & Voice Input
+**Phase 4:** Bounded Workspace View (spatial organization)
+**Phase 5:** Sync & Backup (multi-device support)
+**Phase 6:** Aesthetic Enhancement (dynamic lighting, textures, customization)
+**Phase 7:** Journal & History (temporal awareness, productivity tracking)
+**Phase 8:** iPad & Desktop Optimization (Apple Pencil, keyboard shortcuts)
+**Phase 9:** Advanced Features (manila folders, flippable cards, themes)
+**Phase 10:** MCP Server & API Layer (Claude integration, external APIs)
 
-See `docs/phases/future.md` for detailed future planning.
+See `docs/PROJECT_SPEC.md` for complete phase roadmap and `docs/future/` for detailed research.
