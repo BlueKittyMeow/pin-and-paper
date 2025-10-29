@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import '../models/task_suggestion.dart';
+import 'api_usage_service.dart'; // Phase 2 Stretch
 
 class ClaudeService {
   final String _baseUrl = 'https://api.anthropic.com/v1';
@@ -47,6 +48,16 @@ class ClaudeService {
       );
 
       if (response.statusCode == 200) {
+        // Phase 2 Stretch: Log API usage for cost tracking
+        final decoded = jsonDecode(response.body);
+
+        await ApiUsageService().logUsage(
+          operationType: 'brain_dump',
+          inputTokens: decoded['usage']['input_tokens'] as int,
+          outputTokens: decoded['usage']['output_tokens'] as int,
+          model: _model,
+        );
+
         return _parseResponse(response.body);
       } else {
         throw ClaudeApiException(

@@ -316,6 +316,77 @@ Build minimum viable features, validate with real usage, then enhance. Don't bui
 
 ---
 
+## Phase 2 Stretch Goals - Known Issues
+
+### Draft Management: Combined Draft Duplication Problem
+
+**Issue:** Load combined drafts and then swiping back is an issue - it prompts me to save that draft which means saving the sum of multiple previous drafts too. This is a waste of space. How should we optimize this to not end up with messy duplication?
+
+**Current Behavior:**
+1. User loads multiple drafts from draft manager (combines them)
+2. Combined text appears in Brain Dump screen
+3. User swipes back without processing
+4. Exit confirmation triggers: "Save Draft / Discard / Cancel"
+5. If user saves → new draft created with combined content of all previous drafts
+6. Result: Duplicate content stored in database (wasted space)
+
+**The Problem:**
+- No saving when you are editing a brain dump from multiple drafts? But what about new input - that text is useful!
+- Need to distinguish between:
+  - **Loaded draft content** (already saved, shouldn't be duplicated)
+  - **New user input** (not yet saved, should be preserved)
+
+**Potential Solutions:**
+
+**Option A: Track Draft Source (Recommended)**
+```dart
+class BrainDumpProvider {
+  Set<String> _loadedDraftIds = {}; // Track which drafts were loaded
+
+  String getCombinedDraftsText() {
+    // ... existing code ...
+    _loadedDraftIds = selectedDraftIds.toSet(); // Remember what we loaded
+    return combinedText;
+  }
+
+  Future<void> saveDraft() async {
+    // Don't save if text is unchanged from loaded drafts
+    if (_loadedDraftIds.isNotEmpty && !_userModifiedText) {
+      return; // Skip save - content is already in database
+    }
+
+    // If user added new content, save only the diff or mark as modified
+    // ... save logic ...
+  }
+}
+```
+
+**Option B: Delete Loaded Drafts Immediately**
+- When user loads combined drafts, delete them from database immediately
+- Any new save creates fresh draft with combined content
+- Pros: Simpler logic, prevents duplication
+- Cons: Can't "undo" the load operation
+
+**Option C: Track Text Changes**
+- Store hash of loaded content
+- Only save if content changed from original
+- Pros: Detects if user actually edited
+- Cons: Doesn't distinguish between "loaded" and "new" text
+
+**Recommended Implementation:**
+1. Add `_loadedFromDrafts` boolean flag to BrainDumpProvider
+2. Set to `true` when drafts are loaded
+3. On exit:
+   - If `_loadedFromDrafts` and text unchanged → skip save
+   - If `_loadedFromDrafts` and text changed → save as new draft, delete originals
+   - If not `_loadedFromDrafts` → normal save behavior
+4. Reset flag after successful processing or explicit clear
+
+**Priority:** Medium - affects storage efficiency but not core functionality
+**Phase:** 2 Stretch Goals (Draft Management feature)
+
+---
+
 ## Notes for Future Development
 
 ### Date Parsing Decision Log

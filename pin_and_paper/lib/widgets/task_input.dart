@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/task_provider.dart';
 
 class TaskInput extends StatefulWidget {
@@ -12,14 +13,28 @@ class TaskInput extends StatefulWidget {
 class _TaskInputState extends State<TaskInput> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  static const String _hasLaunchedKey = 'has_launched_before';
 
   @override
   void initState() {
     super.initState();
-    // Auto-focus when widget is created
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
+    // Only auto-focus on first app launch
+    _checkAndFocusOnFirstLaunch();
+  }
+
+  Future<void> _checkAndFocusOnFirstLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasLaunched = prefs.getBool(_hasLaunchedKey) ?? false;
+
+    if (!hasLaunched && mounted) {
+      // First launch - focus the input
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _focusNode.requestFocus();
+        }
+      });
+      await prefs.setBool(_hasLaunchedKey, true);
+    }
   }
 
   @override
@@ -35,7 +50,7 @@ class _TaskInputState extends State<TaskInput> {
 
     context.read<TaskProvider>().createTask(title);
     _controller.clear();
-    _focusNode.requestFocus(); // Keep focus for next task
+    // Don't auto-refocus - let user manually tap if they want to add more
   }
 
   @override

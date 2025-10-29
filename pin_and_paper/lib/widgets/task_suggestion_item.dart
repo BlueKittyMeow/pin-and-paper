@@ -21,11 +21,13 @@ class TaskSuggestionItem extends StatefulWidget {
 
 class _TaskSuggestionItemState extends State<TaskSuggestionItem> {
   late TextEditingController _controller;
+  late FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.suggestion.title);
+    _focusNode = FocusNode();
   }
 
   @override
@@ -33,13 +35,19 @@ class _TaskSuggestionItemState extends State<TaskSuggestionItem> {
     super.didUpdateWidget(oldWidget);
     // Update controller if suggestion changed
     if (oldWidget.suggestion.title != widget.suggestion.title) {
+      final cursorPosition = _controller.selection.baseOffset;
       _controller.text = widget.suggestion.title;
+      // Restore cursor position if it was in valid range
+      if (cursorPosition >= 0 && cursorPosition <= widget.suggestion.title.length) {
+        _controller.selection = TextSelection.collapsed(offset: cursorPosition);
+      }
     }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -56,7 +64,18 @@ class _TaskSuggestionItemState extends State<TaskSuggestionItem> {
         ),
         title: TextField(
           controller: _controller,
-          onChanged: (value) => widget.onEdit(widget.suggestion.id, value),
+          focusNode: _focusNode,
+          onChanged: (value) {
+            // Save cursor position before updating
+            final selection = _controller.selection;
+            widget.onEdit(widget.suggestion.id, value);
+            // Restore cursor position after update
+            if (mounted && selection.isValid && selection.baseOffset <= value.length) {
+              _controller.selection = selection;
+            }
+          },
+          maxLines: 3,
+          minLines: 1,
           decoration: const InputDecoration(
             border: InputBorder.none,
             isDense: true,

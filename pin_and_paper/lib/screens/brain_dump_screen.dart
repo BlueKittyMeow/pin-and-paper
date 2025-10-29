@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import '../providers/brain_dump_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/constants.dart';
+import '../widgets/brain_dump_loading.dart';
+import '../widgets/success_animation.dart';
 import 'settings_screen.dart';
 import 'task_suggestion_preview_screen.dart';
+import 'drafts_list_screen.dart';
 
 class BrainDumpScreen extends StatefulWidget {
   const BrainDumpScreen({super.key});
@@ -15,6 +18,9 @@ class BrainDumpScreen extends StatefulWidget {
 
 class _BrainDumpScreenState extends State<BrainDumpScreen> {
   final TextEditingController _textController = TextEditingController();
+  bool _isProcessing = false;
+  bool _showSuccess = false;
+  int _taskCount = 0;
 
   @override
   void initState() {
@@ -33,6 +39,24 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Show success animation
+    if (_showSuccess) {
+      return SuccessAnimation(
+        taskCount: _taskCount,
+        onComplete: _onSuccessComplete,
+      );
+    }
+
+    // Show loading state
+    if (_isProcessing) {
+      return const Scaffold(
+        body: Center(
+          child: BrainDumpLoading(),
+        ),
+      );
+    }
+
+    // Normal UI
     return PopScope(
       canPop: false, // Prevent automatic navigation
       onPopInvokedWithResult: (bool didPop, Object? result) async {
@@ -54,6 +78,26 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Brain Dump'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.article_outlined),
+              tooltip: 'View Drafts',
+              onPressed: () async {
+                final result = await Navigator.push<String>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DraftsListScreen()),
+                );
+
+                // If user loaded draft(s), populate the text field
+                if (result != null && mounted) {
+                  setState(() {
+                    _textController.text = result;
+                  });
+                  context.read<BrainDumpProvider>().updateDumpText(result);
+                }
+              },
+            ),
+          ],
         ),
         body: Consumer<BrainDumpProvider>(
           builder: (context, provider, child) {
@@ -85,7 +129,6 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
                         border: InputBorder.none,
                       ),
                       style: const TextStyle(fontSize: 16, height: 1.5),
-                      autofocus: true,
                       enabled: !provider.isProcessing,
                     ),
                   ),
@@ -195,18 +238,55 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
     );
 
     if (confirmed == true && mounted) {
-      await provider.processDump();
+      // Set processing state
+      setState(() {
+        _isProcessing = true;
+      });
 
-      // If successful (suggestions available), navigate to preview
-      if (mounted && provider.suggestions.isNotEmpty) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const TaskSuggestionPreviewScreen(),
-          ),
-        );
+      try {
+        await provider.processDump();
+
+        // If successful (suggestions available), show success animation
+        if (mounted && provider.suggestions.isNotEmpty) {
+          setState(() {
+            _isProcessing = false;
+            _showSuccess = true;
+            _taskCount = provider.suggestions.length;
+          });
+          // Navigation happens via _onSuccessComplete callback
+        } else {
+          // No suggestions or error occurred
+          if (mounted) {
+            setState(() {
+              _isProcessing = false;
+              _showSuccess = false;
+            });
+          }
+        }
+      } catch (e) {
+        // Handle any errors
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _showSuccess = false;
+          });
+        }
       }
     }
+  }
+
+  void _onSuccessComplete() {
+    // Reset success state and navigate to preview
+    setState(() {
+      _showSuccess = false;
+    });
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const TaskSuggestionPreviewScreen(),
+      ),
+    );
   }
 
   void _showClearConfirmation() {

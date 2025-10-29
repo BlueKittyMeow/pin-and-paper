@@ -1,0 +1,147 @@
+name: iOS Build & TestFlight
+
+on:
+  workflow_dispatch:  # Manual trigger only - no auto-runs
+    inputs:
+      upload_to_testflight:
+        description: 'Upload to TestFlight after build?'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  build-signed-ipa:
+    name: Build Signed iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter version info
+        run: flutter --version
+
+      - name: Install dependencies
+        run: |
+          cd pin_and_paper
+          flutter pub get
+
+      - name: Run analyzer
+        run: |
+          cd pin_and_paper
+          flutter analyze
+
+      - name: Run tests
+        run: |
+          cd pin_and_paper
+          flutter test
+
+      - name: Decode and install signing certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT }}
+          CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+        run: |
+          # Create keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Decode and import certificate
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $CERT_PATH
+
+          security import $CERT_PATH \
+            -P "$CERT_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k $KEYCHAIN_PATH
+
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Allow codesign to access keychain
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" \
+            $KEYCHAIN_PATH
+
+      - name: Decode and install provisioning profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+          # Copy to provisioning profiles directory
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+
+          # Show profile info
+          security cms -D -i $PP_PATH
+
+      - name: Build signed IPA
+        run: |
+          cd pin_and_paper
+          flutter build ipa --release \
+            --export-options-plist=ios/ExportOptions.plist
+
+      - name: Upload IPA as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-ipa-signed
+          path: pin_and_paper/build/ios/ipa/*.ipa
+          retention-days: 30
+
+      - name: Upload to TestFlight (optional)
+        if: ${{ github.event.inputs.upload_to_testflight == 'true' }}
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          # Decode App Store Connect API key
+          API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8
+          echo -n "$APP_STORE_CONNECT_API_KEY" | base64 --decode -o $API_KEY_PATH
+
+          # Upload to TestFlight using xcrun altool
+          xcrun altool --upload-app \
+            --type ios \
+            --file pin_and_paper/build/ios/ipa/*.ipa \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+
+      - name: Build summary
+        if: success()
+        run: |
+          echo "## ✅ iOS Build Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Signed IPA: Available in Artifacts section" >> $GITHUB_STEP_SUMMARY
+          echo "- File name: pin_and_paper.ipa" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.upload_to_testflight }}" == "true" ]; then
+            echo "### 🚀 TestFlight" >> $GITHUB_STEP_SUMMARY
+            echo "- Build uploaded to TestFlight" >> $GITHUB_STEP_SUMMARY
+            echo "- Processing usually takes 5-10 minutes" >> $GITHUB_STEP_SUMMARY
+            echo "- Install TestFlight app on iPad to test" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### 📥 Manual Install" >> $GITHUB_STEP_SUMMARY
+            echo "1. Download IPA from Artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "2. Install via Xcode or Apple Configurator" >> $GITHUB_STEP_SUMMARY
+            echo "3. See: docs/ios-testflight-setup.md" >> $GITHUB_STEP_SUMMARY
+          fi

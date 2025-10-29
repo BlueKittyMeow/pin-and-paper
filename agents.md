@@ -9,6 +9,8 @@
 
 When you make notes and suggestions in documentation, please sign your individual suggestions/notes with "- 'your name'"
 
+Since we are a team of ai and a coffee powered human, we don't need to worry about unrealistic timelines for implementation, we only need to ensure that the scope of each phase/subphase stays manageable and split into logical groupings. 
+
 ## Flutter app location & commands
 
 This repo’s Flutter app lives in `pin_and_paper/` (underscore).  
@@ -30,9 +32,30 @@ make check    # doctor + analyze + test
 
 This directory contains the planning and design documents for **Pin and Paper**, a cross-platform task management and journaling application.
 
-**Current Status:** ✅ **Phase 2 Complete** (AI Integration shipped to production)
+**Current Status:** ✅ **Phase 2 Stretch Goals Complete** (All core AI features + enhancements shipped)
 
 The directory serves as a comprehensive blueprint for the app, detailing everything from the core philosophy and feature set to the technical architecture and visual design.
+
+### Key Documentation Files
+
+**Stable Files (root directory):**
+- `README.md` - Public GitHub page (don't change)
+- `agents.md` - This file - quick reference for AI team
+
+**Planning & Documentation:**
+- `docs/PROJECT_SPEC.md` - **THE authoritative planning document** (single source of truth)
+- `docs/visual-design.md` - Complete aesthetic specification (colors, lighting, interactions)
+- `docs/color-palettes.html` - Visual color reference tool
+- `docs/future/` - Future phase planning and research
+
+**Completed Work:**
+- `archive/phase-01/` - Phase 1 MVP documentation
+- `archive/phase-02/` - Phase 2 AI Integration documentation
+- `archive/plan-original.md` - Historical: original project vision
+- `archive/project-plan-original.md` - Historical: technical analysis
+
+**Important Note on Living Documents:**
+Phase-specific documentation (e.g., `phase-3.md`, `phase-3-issues.md`) lives in `docs/phases/` during active development. When a phase is complete, these documents are consolidated and moved to `archive/phase-XX/` (where XX is the phase number) to keep active documentation clean and focused on current/future work.
 
 ## Project Overview
 
@@ -46,6 +69,47 @@ The core concept is to provide a digital workspace that feels like a physical de
 *   **Database:** SQLite (for local, offline-first storage)
 *   **State Management:** Provider (initially), migrating to Riverpod later.
 *   **AI Integration:** Claude API for natural language task processing.
+
+### AI Team Tools - MCP Server Documentation Access
+
+**For Claude:** You have access to a context7 MCP server with up-to-date documentation for all 17 core libraries used in this project. Query these whenever you're uncertain about current best practices, API changes, or implementation patterns.
+
+**For Codex & Gemini:** Note that you may not have access to the MCP server due to sandboxing/config issues. If you need current documentation, ask BlueKitty or coordinate with Claude.
+
+**Available Libraries (17 total):**
+
+*Core Framework:*
+- `websites/main-api_flutter_dev` - Flutter
+- `websites/dart_dev` - Dart
+
+*Database:*
+- `websites/www_sqlite_org-docs.html` - SQLite official docs
+- `tekartik/sqflite` - Flutter SQLite package
+
+*State Management:*
+- `websites/pub_dev_packages_provider` - Current (Phase 1-2)
+- `websites/riverpod_dev` - Planned migration (Phase 3+)
+
+*AI Integration:*
+- `websites/docs_anthropic_com-en-home` - Claude API
+
+*Security:*
+- `websites/pub_dev_packages_flutter_secure_storage` - API key storage
+
+*Networking:*
+- `websites/pub_dev_packages_http` - HTTP requests
+- `websites/pub_dev_packages_connectivity_plus` - Network status
+
+*Utilities:*
+- `websites/pub_dev_packages_intl` - Internationalization/formatting
+- `websites/pub_dev_packages_uuid` - UUID generation
+- `websites/pub_dev_path_provider` - File system access
+
+*Development Tools:*
+- `websites/pub_dev_packages_flutter_lints` - Code quality
+- `mockito/mockito` - Testing framework
+- `websites/pub_dev-packages` - General pub.dev reference
+- `websites/pub_dev-help` - pub.dev help docs
 
 ### Stack & Component Versions
 
@@ -86,6 +150,66 @@ The core concept is to provide a digital workspace that feels like a physical de
 ### Architecture
 The application will be built using a service-oriented architecture, with a clear separation between the UI, business logic, and data layers. An API-first approach is planned for the long-term to support multi-device sync and external integrations, but the initial MVP will focus on a local service layer to ensure rapid development.
 
+```
+UI Layer (Flutter Widgets)
+    ↓
+Business Logic (Services)
+    ↓
+Data Layer (SQLite)
+```
+
+### Key Architectural Decisions
+
+**Why Flutter?**
+- Cross-platform (Android, iOS, iPad, Desktop, Web)
+- Skia rendering engine perfect for aesthetic effects (torn paper, shadows, lighting)
+- Hot reload for rapid iteration (1-2 second UI updates)
+- Strong gesture support for spatial interactions
+
+**Why SQLite?**
+- Relational data with complex queries (tags, search, filtering, nesting)
+- Offline-first (no internet required for core functionality)
+- Battle-tested, mature, reliable
+- Better than Hive for our use case (relationships, search performance)
+
+**Why Provider → Riverpod?**
+- Start simple with Provider for MVP (less boilerplate, faster development)
+- Migrate to Riverpod when complexity increases (better testing, compile-time safety)
+- Don't over-engineer early phases
+
+**Why Service Layer (not REST API yet)?**
+- Local-first architecture for MVP (no server needed)
+- Service layer encapsulates business logic cleanly
+- Can add REST API later for sync without major refactoring
+- Faster MVP development (defer API to Phase 5+)
+
+**Why Bounded Workspace (not infinite canvas)?**
+- Performance: Easier viewport culling, pre-calculated bounds
+- UX: Users understand edges better than infinite space
+- Technical: Simpler hit testing and gesture handling
+- Can expand when user runs out of space (but not truly infinite)
+
+### Development Workflow
+
+**Starting Work:**
+1. Read `agents.md` (this file) for current status and quick reference
+2. Check `docs/PROJECT_SPEC.md` for detailed phase planning
+3. Review `docs/visual-design.md` if working on UI/aesthetic features
+4. Check `docs/future/` for future phase details
+
+**During Development:**
+1. Work from `pin_and_paper/` directory (contains `pubspec.yaml`)
+2. Use `make` commands for common tasks (doctor, analyze, test, format)
+3. Keep files under 500 lines (split if larger)
+4. Follow DRY principles (reusable components)
+5. Test on Samsung Galaxy S21 Ultra (primary device)
+
+**When Completing a Phase:**
+1. Consolidate phase documentation into single markdown file
+2. Move completed phase docs to `archive/phase-XX/` (create subdirectory)
+3. Update this file (agents.md) with new current status
+4. Update `docs/PROJECT_SPEC.md` with phase completion notes
+
 ## Building and Running
 
 This is a pre-development project, so there are no build or run commands yet. Based on the project plan, the following commands will be used once the project is initialized:
@@ -125,7 +249,7 @@ The project plan outlines a clear set of development conventions:
 - Provider state management
 - Basic UI with theme
 
-**Documentation:** `archive/phase-1-mvp.md`
+**Documentation:** `archive/phase-01/`
 
 ### ✅ Phase 2: AI Integration (Complete)
 **Status:** Shipped to production
@@ -157,20 +281,28 @@ The project plan outlines a clear set of development conventions:
 **User Feedback:**
 > "Wow, it works! And... it's super cool!!! :D I'm kind of shocked at how well it works haha." — BlueKitty
 
-### 🔜 Phase 2 Stretch Goals (Planned)
-**Branch:** `phase-2-stretch`
-**Status:** Planning
-**Planned Features:**
-- Task completion via natural language ("I finished calling dentist")
-- Draft management UI (load saved drafts)
-- Cost tracking dashboard
+### ✅ Phase 2 Stretch Goals (Complete)
+**Branch:** `phase-2-stretch` → `main`
+**Status:** Shipped to production
+**Date:** October 28, 2025
+**Features:**
+- Hide completed tasks (time-based with customizable threshold)
+- Natural language task completion (local fuzzy matching)
+- Draft management UI (multi-select, combine drafts)
+- Brain dump review bottom sheet (view original text)
+- Cost tracking dashboard (API usage monitoring)
 - Improved loading states & animations
-- Better error handling UX
+
+**Documentation:** `archive/phase-02/`
 
 ### 📅 Future Phases
-**Phase 3:** Natural language date parsing ("next Tuesday")
-**Phase 4+:** Workspace view with spatial organization
-**Phase 5+:** Sync & multi-device
-**Phase 6+:** Aesthetic enhancements (dynamic lighting, textures)
+**Phase 3:** Mobile Polish & Voice Input
+**Phase 4:** Bounded Workspace View (spatial organization)
+**Phase 5:** Sync & Backup (multi-device support)
+**Phase 6:** Aesthetic Enhancement (dynamic lighting, textures, customization)
+**Phase 7:** Journal & History (temporal awareness, productivity tracking)
+**Phase 8:** iPad & Desktop Optimization (Apple Pencil, keyboard shortcuts)
+**Phase 9:** Advanced Features (manila folders, flippable cards, themes)
+**Phase 10:** MCP Server & API Layer (Claude integration, external APIs)
 
-See `docs/phases/future.md` for detailed future planning.
+See `docs/PROJECT_SPEC.md` for complete phase roadmap and `docs/future/` for detailed research.

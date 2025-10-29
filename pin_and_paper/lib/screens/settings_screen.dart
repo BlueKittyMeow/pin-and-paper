@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/task_provider.dart';
 import '../services/settings_service.dart';
+import '../services/api_usage_service.dart';
+import '../services/database_service.dart';
+import '../utils/constants.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -13,6 +17,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   final SettingsService _settingsService = SettingsService();
+  final ApiUsageService _apiUsageService = ApiUsageService();
 
   bool _obscureKey = true;
   bool _isTesting = false;
@@ -46,7 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,9 +149,181 @@ class _SettingsScreenState extends State<SettingsScreen> {
               r'💡 Tip: Claude API costs ~$0.01 per brain dump',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
+            const SizedBox(height: 32),
+
+            // Task Display Section
+            Text(
+              'Task Display',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            Consumer<TaskProvider>(
+              builder: (context, taskProvider, child) {
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile(
+                          title: const Text('Hide old completed tasks'),
+                          subtitle: const Text('Show only recently completed tasks'),
+                          value: taskProvider.hideOldCompleted,
+                          onChanged: (value) {
+                            taskProvider.setHideOldCompleted(value);
+                          },
+                        ),
+                        if (taskProvider.hideOldCompleted) ...[
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Hide tasks marked as completed after:',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<int>(
+                            value: taskProvider.hideThresholdHours,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 6, child: Text('6 hours')),
+                              DropdownMenuItem(value: 12, child: Text('12 hours')),
+                              DropdownMenuItem(value: 24, child: Text('24 hours')),
+                              DropdownMenuItem(value: 72, child: Text('3 days')),
+                              DropdownMenuItem(value: 168, child: Text('1 week')),
+                              DropdownMenuItem(value: 999999, child: Text('Never')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                taskProvider.setHideThresholdHours(value);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'You can always view previously completed tasks by turning off this toggle. Coming soon: view these in your journal!',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 32),
+
+            // API Usage & Costs Section
+            Text(
+              'API Usage & Costs',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            FutureBuilder<UsageStats>(
+              future: _apiUsageService.getStats(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'Error loading usage data: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  );
+                }
+
+                final stats = snapshot.data!;
+
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatRow(
+                          'Total Spent (est.):',
+                          '\$${stats.totalCost.toStringAsFixed(2)}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStatRow(
+                          'This Month:',
+                          '\$${stats.monthCost.toStringAsFixed(2)}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStatRow(
+                          'Brain Dumps:',
+                          '${stats.totalCalls}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStatRow(
+                          'Avg Cost:',
+                          '\$${stats.averageCostPerCall.toStringAsFixed(3)}/dump',
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _showComingSoonSnackBar,
+                                child: const Text('View Detailed Usage'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _showResetDialog,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Reset'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 14),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
@@ -259,5 +436,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: isError ? Colors.red : null,
       ),
     );
+  }
+
+  void _showComingSoonSnackBar() {
+    _showSnackBar('Coming soon');
+  }
+
+  Future<void> _showResetDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Usage Data?'),
+        content: const Text(
+          'This will permanently delete all API usage tracking data. '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _resetUsageData();
+    }
+  }
+
+  Future<void> _resetUsageData() async {
+    try {
+      final db = await DatabaseService.instance.database;
+      await db.delete(AppConstants.apiUsageLogTable);
+
+      if (mounted) {
+        setState(() {
+          // Trigger rebuild to refresh the stats
+        });
+        _showSnackBar('Usage data reset successfully');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Failed to reset usage data: $e', isError: true);
+      }
+    }
   }
 }
