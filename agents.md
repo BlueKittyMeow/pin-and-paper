@@ -38,20 +38,22 @@ The directory serves as a comprehensive blueprint for the app, detailing everyth
 
 **Stable Files (root directory):**
 - `README.md` - Public GitHub page (don't change)
-- `AGENTS.md` - This file - quick reference for AI team
-- `visual-design.md` - Complete aesthetic specification (colors, lighting, interactions)
-- `color-palettes.html` - Visual color reference tool
+- `agents.md` - This file - quick reference for AI team
 
-**Planning & Roadmap:**
+**Planning & Documentation:**
 - `docs/PROJECT_SPEC.md` - **THE authoritative planning document** (single source of truth)
+- `docs/visual-design.md` - Complete aesthetic specification (colors, lighting, interactions)
+- `docs/color-palettes.html` - Visual color reference tool
 - `docs/future/` - Future phase planning and research
 
 **Completed Work:**
-- `archive/` - Completed phases move here when done (living documents archive when complete)
-  - Phase documentation, issue tracking, historical planning docs
+- `archive/phase-01/` - Phase 1 MVP documentation
+- `archive/phase-02/` - Phase 2 AI Integration documentation
+- `archive/plan-original.md` - Historical: original project vision
+- `archive/project-plan-original.md` - Historical: technical analysis
 
 **Important Note on Living Documents:**
-Phase-specific documentation (e.g., `phase-3.md`, `phase-3-issues.md`) lives in `docs/phases/` during active development. When a phase is complete, these documents are consolidated and moved to `archive/` to keep active documentation clean and focused on current/future work.
+Phase-specific documentation (e.g., `phase-3.md`, `phase-3-issues.md`) lives in `docs/phases/` during active development. When a phase is complete, these documents are consolidated and moved to `archive/phase-XX/` (where XX is the phase number) to keep active documentation clean and focused on current/future work.
 
 ## Project Overview
 
@@ -147,9 +149,9 @@ Data Layer (SQLite)
 ### Development Workflow
 
 **Starting Work:**
-1. Read `AGENTS.md` (this file) for current status and quick reference
+1. Read `agents.md` (this file) for current status and quick reference
 2. Check `docs/PROJECT_SPEC.md` for detailed phase planning
-3. Review `visual-design.md` if working on UI/aesthetic features
+3. Review `docs/visual-design.md` if working on UI/aesthetic features
 4. Check `docs/future/` for future phase details
 
 **During Development:**
@@ -161,8 +163,8 @@ Data Layer (SQLite)
 
 **When Completing a Phase:**
 1. Consolidate phase documentation into single markdown file
-2. Move completed phase docs to `archive/`
-3. Update this file (AGENTS.md) with new current status
+2. Move completed phase docs to `archive/phase-XX/` (create subdirectory)
+3. Update this file (agents.md) with new current status
 4. Update `docs/PROJECT_SPEC.md` with phase completion notes
 
 ## Building and Running
@@ -204,7 +206,7 @@ The project plan outlines a clear set of development conventions:
 - Provider state management
 - Basic UI with theme
 
-**Documentation:** `archive/phase-1-mvp.md`
+**Documentation:** `archive/phase-01/`
 
 ### ✅ Phase 2: AI Integration (Complete)
 **Status:** Shipped to production
@@ -248,7 +250,7 @@ The project plan outlines a clear set of development conventions:
 - Cost tracking dashboard (API usage monitoring)
 - Improved loading states & animations
 
-**Documentation:** `archive/phase-2.md` (consolidated with core Phase 2)
+**Documentation:** `archive/phase-02/`
 
 ### 📅 Future Phases
 **Phase 3:** Mobile Polish & Voice Input
