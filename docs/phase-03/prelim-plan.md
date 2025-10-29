@@ -78,6 +78,35 @@ Phase 3 focuses on optimizing Pin and Paper for daily mobile use with voice inpu
 **🎉 All Planning Questions Resolved!**
 All outstanding questions have been answered. Phase 3 planning is complete and ready for implementation.
 
+### Implementation Approach: Hybrid Phased Planning
+
+**Strategy:** Plan and review subphases in groups based on coupling, then implement sequentially.
+
+**Group 1: Tightly Coupled Foundation (Plan & Review Together)**
+- **Phase 3.1:** Database Migration (everything depends on this - one-way migration)
+- **Phase 3.2:** Task Nesting (uses new DB schema from 3.1)
+- **Phase 3.3:** Natural Language Date Parsing (core service used by Brain Dump, manual creation, and voice)
+
+**Rationale:** These three subphases are tightly coupled. The database schema must be correct from the start (irreversible migration), and date parsing is a shared service used across multiple features. Planning them together allows the team to review the architecture holistically and catch cross-dependencies early.
+
+**Group 2: Features Using Foundation (Plan & Review Together)**
+- **Phase 3.4:** Voice Input (uses date parsing via Brain Dump integration)
+- **Phase 3.5:** Notifications (uses user_settings from 3.1)
+
+**Rationale:** These features build on the foundation from Group 1. Planning them together ensures they integrate properly with the core services.
+
+**Group 3: Polish & Stretch Goals (Plan When Ready)**
+- **Phase 3.6:** Search & Quick Actions (mostly independent, marked as stretch)
+
+**Rationale:** This subphase is less tightly coupled and can be planned/reviewed separately when we reach it.
+
+**Next Steps:**
+1. Team review of this preliminary plan (Codex, Gemini feedback)
+2. Create detailed implementation plans for Group 1 (3.1, 3.2, 3.3)
+3. Team review of Group 1 plans together (cross-dependency check)
+4. Implement Group 1 sequentially (3.1 → 3.2 → 3.3)
+5. Repeat for Group 2, then Group 3
+
 ---
 
 ## Team Observations Review
