@@ -1,9 +1,27 @@
 class Task {
+  // Existing fields
   final String id;
   final String title;
   final bool completed;
   final DateTime createdAt;
   final DateTime? completedAt;
+
+  // Phase 3.1: Nesting support
+  final String? parentId; // NULL = top-level task
+  final int position; // Order within parent (or root level)
+  final int depth; // Hierarchy depth (0-3, populated by queries)
+
+  // Phase 3.1: Template support
+  final bool isTemplate; // true = task is a template
+
+  // Phase 3.1: Date support
+  final DateTime? dueDate; // NULL = no due date
+  final bool isAllDay; // true = all-day task (no specific time)
+  final DateTime? startDate; // For multi-day tasks ("weekend")
+
+  // Phase 3.1: Notification support
+  final String notificationType; // 'use_global', 'custom', 'none'
+  final DateTime? notificationTime; // Custom notification time
 
   Task({
     required this.id,
@@ -11,9 +29,19 @@ class Task {
     required this.createdAt,
     this.completed = false,
     this.completedAt,
+    // New fields with defaults
+    this.parentId,
+    this.position = 0,
+    this.depth = 0,
+    this.isTemplate = false,
+    this.dueDate,
+    this.isAllDay = true,
+    this.startDate,
+    this.notificationType = 'use_global',
+    this.notificationTime,
   });
 
-  // Convert Task to Map for database
+  /// Serialize to database map
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -21,10 +49,20 @@ class Task {
       'completed': completed ? 1 : 0,
       'created_at': createdAt.millisecondsSinceEpoch,
       'completed_at': completedAt?.millisecondsSinceEpoch,
+      // New fields
+      'parent_id': parentId,
+      'position': position,
+      // NOTE: 'depth' is NOT persisted - computed field from queries
+      'is_template': isTemplate ? 1 : 0,
+      'due_date': dueDate?.millisecondsSinceEpoch,
+      'is_all_day': isAllDay ? 1 : 0,
+      'start_date': startDate?.millisecondsSinceEpoch,
+      'notification_type': notificationType,
+      'notification_time': notificationTime?.millisecondsSinceEpoch,
     };
   }
 
-  // Create Task from Map (database row)
+  /// Deserialize from database map
   factory Task.fromMap(Map<String, dynamic> map) {
     return Task(
       id: map['id'] as String,
@@ -38,16 +76,43 @@ class Task {
               map['completed_at'] as int,
             )
           : null,
+      // New fields (handle NULL for backward compatibility)
+      parentId: map['parent_id'] as String?,
+      position: (map['position'] as int?) ?? 0,
+      depth: (map['depth'] as int?) ?? 0,
+      isTemplate: (map['is_template'] as int?) == 1,
+      dueDate: map['due_date'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['due_date'] as int)
+          : null,
+      isAllDay: (map['is_all_day'] as int?) == null
+          ? true
+          : map['is_all_day'] != 0,
+      startDate: map['start_date'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['start_date'] as int)
+          : null,
+      notificationType: (map['notification_type'] as String?) ?? 'use_global',
+      notificationTime: map['notification_time'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['notification_time'] as int)
+          : null,
     );
   }
 
-  // Create a copy with modifications
+  /// Copy with method for immutable updates
   Task copyWith({
     String? id,
     String? title,
     bool? completed,
     DateTime? createdAt,
     DateTime? completedAt,
+    String? parentId,
+    int? position,
+    int? depth,
+    bool? isTemplate,
+    DateTime? dueDate,
+    bool? isAllDay,
+    DateTime? startDate,
+    String? notificationType,
+    DateTime? notificationTime,
   }) {
     return Task(
       id: id ?? this.id,
@@ -55,6 +120,15 @@ class Task {
       completed: completed ?? this.completed,
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
+      parentId: parentId ?? this.parentId,
+      position: position ?? this.position,
+      depth: depth ?? this.depth,
+      isTemplate: isTemplate ?? this.isTemplate,
+      dueDate: dueDate ?? this.dueDate,
+      isAllDay: isAllDay ?? this.isAllDay,
+      startDate: startDate ?? this.startDate,
+      notificationType: notificationType ?? this.notificationType,
+      notificationTime: notificationTime ?? this.notificationTime,
     );
   }
 

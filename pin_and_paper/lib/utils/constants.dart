@@ -1,12 +1,20 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 3; // Phase 2 Stretch: Added api_usage_log table
+  static const int databaseVersion = 4; // Phase 3: Task nesting, dates, user settings
 
   // Table names
   static const String tasksTable = 'tasks';
   static const String brainDumpDraftsTable = 'brain_dump_drafts'; // Phase 2
   static const String apiUsageLogTable = 'api_usage_log'; // Phase 2 Stretch
+
+  // Phase 3 tables
+  static const String userSettingsTable = 'user_settings';
+  static const String taskImagesTable = 'task_images';
+  static const String entitiesTable = 'entities';
+  static const String tagsTable = 'tags';
+  static const String taskEntitiesTable = 'task_entities';
+  static const String taskTagsTable = 'task_tags';
 
   // App metadata
   static const String appName = 'Pin and Paper';
