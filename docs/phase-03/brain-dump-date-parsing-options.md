@@ -452,15 +452,85 @@ testWidgets('Brain Dump applies user preferences to extracted dates', (tester) a
 
 ## Decision Log
 
-**Pending:** Team review in progress
+**Votes:**
+- ✅ BlueKitty: Option 2 (proposed this approach)
+- ✅ Claude: Option 2 (cleaner architecture, lower cost, single source of truth)
+- ✅ Gemini: Option 2 (single source of truth, separation of concerns, testability)
+- ⏳ Codex: Pending (onboarding in progress)
 
-**BlueKitty's Initial Take:** ✅ Option 2 (proposed this approach)
-**Claude's Initial Take:** ✅ Option 2 (cleaner architecture, lower cost, single source of truth)
+**Final Decision:** ✅ **OPTION 2 APPROVED** (2025-10-30)
 
-**Final Decision:** TBD after team discussion
+**Implementation Status:** Proceeding with Option 2 architecture
+- Brain Dump will send raw text to Claude (no UserSettings context)
+- Claude extracts date phrases verbatim (new `datePhrase` field in response)
+- Local DateParserService applies user rules AFTER extraction
+- Codex can provide feedback as they onboard, but decision is made
 
 ---
 
 **Created By:** BlueKitty + Claude
 **Last Updated:** 2025-10-30
-**Status:** 📋 Ready for team review
+**Status:** ✅ **APPROVED - Option 2** (BlueKitty, Claude, Gemini consensus)
+
+---
+---
+
+## Gemini's Feedback and Vote
+
+### Responses to Questions for Gemini
+
+1.  **Does Option 2's two-stage processing introduce unacceptable complexity?**
+    No. The complexity is minimal and well-justified. The "two-stage" process is a clean separation of concerns: LLM for language understanding, and local code for deterministic rule application. This is a standard, robust pattern for this kind of feature. The local parsing step is a single, isolated function call. The benefits in testability, maintainability, and consistency far outweigh the minor increase in workflow steps.
+
+2.  **Are there edge cases where Claude needs user context to extract correctly?**
+    Yes, but they are rare and can be handled. For example, if a user's brain dump says "schedule meeting for Mom's birthday," Claude would ideally need to know when "Mom's birthday" is to suggest a date. However, under Option 2, Claude would simply extract "Mom's birthday" as the `datePhrase`. The local parser would fail to parse this, and the user would manually set the date. This is an acceptable failure mode. The vast majority of date phrases ("tomorrow", "next Friday") do not require deep personal context. Forcing Claude to handle all date logic (Option 1) for these rare cases is an over-optimization that introduces significant downsides.
+
+3.  **Any concerns about reliability of Claude extracting phrases verbatim?**
+    I have high confidence in Claude's ability to extract phrases verbatim. This is a much simpler task than interpreting and applying rules. A prompt like "Extract any phrases that look like dates or times exactly as they are written" is direct and less prone to interpretation errors than "Apply these 15 user preference rules to the dates you find." Option 2 reduces the cognitive load on the LLM, which generally increases reliability and speed.
+
+### Vote
+
+[X] **Option 2** (Local applies user preferences)
+
+**Reasoning:**
+
+I vote for **Option 2** for several key architectural reasons:
+
+1.  **Single Source of Truth:** This is the most compelling argument. Having a single, testable `DateParserService` that governs all date logic in the application is vastly superior to maintaining two separate, inconsistent implementations (one in Dart, one in a Claude prompt). It guarantees that "tomorrow morning" means the same thing everywhere in the app.
+2.  **Separation of Concerns:** Option 2 allows each component to do what it does best. Claude's strength is in understanding unstructured language and identifying entities (like tasks and date phrases). The Dart code's strength is applying deterministic, user-defined business logic. This clear separation makes the system more robust and easier to debug.
+3.  **Testability and Maintainability:** As highlighted in the document, unit testing the `DateParserService` is straightforward. Testing Claude's adherence to a complex set of rules is difficult, expensive, and non-deterministic. When a user's date preference logic needs to be updated, changing it in one place in the Dart code is far more reliable than editing a prompt and hoping the LLM interprets it correctly every time.
+4.  **Cost and Performance:** While the cost savings are minor, they are not zero. More importantly, reducing the complexity of the LLM's task should lead to faster response times, which directly impacts user experience.
+
+In short, Option 2 is the superior choice for building a reliable, maintainable, and scalable feature. It aligns with sound software engineering principles.
+
+---
+---
+
+## BlueKitty's Feedback and Vote
+
+### Vote
+
+[X] **Option 2** (Local applies user preferences)
+
+**Reasoning:**
+
+I proposed Option 2 specifically to avoid the "tangle" issue I was concerned about - where date parsing happens before Claude sees the input, potentially mangling things. Option 2 gives us:
+
+1. **Clean Architecture:** Raw text → Claude extracts → local applies rules. No pre-processing tangle.
+2. **No Confusion:** DateParserService is THE date engine. Period. No wondering "did Claude implement midnight purist correctly?"
+3. **Cost Matters:** Even small savings add up, and faster responses improve UX.
+4. **Future-Proof:** As we add more time preferences, we update ONE place. Done.
+
+The two-stage processing actually makes debugging EASIER - if a date is wrong, I know exactly where to look (DateParserService). With Option 1, I'd be debugging Claude prompts and hoping the LLM "gets it."
+
+**Decision:** Proceeding with Option 2. Codex can review and provide feedback, but Gemini's analysis sealed it for me.
+
+---
+---
+
+## Codex's Feedback and Vote
+
+**Status:** Onboarding in progress - feedback pending
+
+---
+---
