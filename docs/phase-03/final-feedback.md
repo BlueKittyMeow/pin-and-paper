@@ -20,27 +20,51 @@
 
 ### Codex
 
-- [High] `docs/phase-03/db-migration-checklist.md:63` adds `parent_id` without the `REFERENCES tasks(id) ON DELETE CASCADE` clause that the plan expects (see `docs/phase-03/prelim-plan.md:447`). Without the constraint, deleting a parent leaves orphaned subtasks and breaks the promised cascade delete protection. Update the checklist (and migration snippet) to include the foreign key clause and call out that `PRAGMA foreign_keys = ON` must run before the migration. - Codex
-- [High] `docs/phase-03/prelim-plan.md:824-850` covers notifications but never plans for timezone-aware scheduling. `flutter_local_notifications` requires the `timezone` package and preloaded location data to fire correctly across DST or travel; otherwise reminders trigger at the wrong wall-clock time. Add tasks to Phase 3.5 (and the migration plan if new columns are needed) to capture the user's current timezone, initialize the tz database at startup, and convert stored UTC timestamps to `TZDateTime` when scheduling/cancelling notifications. - Codex
-- [Medium] `docs/phase-03/db-migration-checklist.md:73-87` lists “11 indexes” but only defines 10 and omits a `task_id` index on both `task_entities` and `task_tags`. Without those, every “fetch tags/@mentions for this task” query devolves into a table scan once Phase 5 lands. Add `CREATE INDEX idx_task_entities_task ON task_entities(task_id);` and `CREATE INDEX idx_task_tags_task ON task_tags(task_id);` (and bump the checklist count) so we don’t need a follow-up migration. - Codex
-- [Medium] The Phase 3 goals (`docs/phase-03/prelim-plan.md:12-18`) still promise a home screen widget even though Priority 2 explicitly defers it to Phase 4. Align the overview with the deferral so stakeholders and future tickets don’t accidentally pull the widget back into this phase. - Codex
-- [Medium] Phase 3.1 (`docs/phase-03/prelim-plan.md:661-705`) mixes high-risk schema migration work with a repo-wide `services/` directory reorg. Shipping both in one milestone makes testing and rollback gnarly if the migration needs rework. Suggest pulling the refactor into a separate pre-phase change (or deferring it) so Phase 3.1 can focus purely on migration + verification. - Codex
+- [Resolved] Migration checklist now adds `parent_id` with `ON DELETE CASCADE` and explicitly enables foreign keys before the transaction (`docs/phase-03/db-migration-checklist.md:45`, `docs/phase-03/db-migration-checklist.md:129`). Appreciate the quick fix. - Codex
+- [Resolved] Notification plan now includes timezone-aware scheduling with tz database initialization and `TZDateTime` conversions (`docs/phase-03/prelim-plan.md:858`). That removes the DST/travel risk. - Codex
+- [Resolved] Junction-table indexes cover both `entity_id` and `task_id`, so Phase 5 lookups stay fast (`docs/phase-03/db-migration-checklist.md:97`). - Codex
+- [Resolved] Goals section clearly marks the widget as deferred, keeping top-level scope aligned with Priority 2 (`docs/phase-03/prelim-plan.md:37`). - Codex
+- [Resolved] Phase 3.1 treats the services/ directory reorg as optional cleanup, avoiding extra risk on the migration milestone (`docs/phase-03/prelim-plan.md:689`). - Codex
+- [Medium] Timezone workstreams expect us to “detect or store” the user’s zone, but the v4 `user_settings` schema still lacks a timezone column (`docs/phase-03/prelim-plan.md:536`) despite the Phase 3.5 checklist note (`docs/phase-03/prelim-plan.md:861`). Add a `timezone_id` (or similar) column plus seed value so notifications retain user preferences across launches. - Codex
+- [Low] Next steps still ask whether to defer the widget (`docs/phase-03/prelim-plan.md:1218`), which may re-open settled scope. Update the checklist to reflect the confirmed Phase 4 deferral. - Codex
+- [Low] Migration checklist header says “Create indexes (13 total)” but lists 12 entries (`docs/phase-03/db-migration-checklist.md:87`). Fix the count (or add the missing index) to keep verification straightforward. - Codex
 
 ---
 
 ### Gemini
 
-- [High] The plan for voice input relies on the `speech_to_text` package being "offline-first" and "privacy-friendly." However, the package's behavior can vary. The plan should include a verification step to confirm offline functionality on the target device (Galaxy S21 Ultra). Furthermore, the plan to store raw transcripts for reverting smart punctuation raises privacy concerns. The data lifecycle for voice inputs (storage, duration, location) should be clarified to ensure user privacy is protected, potentially with a dedicated privacy section in the app's settings. - Gemini
-- [Medium] The `position` backfill logic in `docs/phase-03/db-migration-checklist.md:63` uses `WHERE t2.parent_id IS tasks.parent_id`, which will not work correctly for `NULL` values in SQLite, failing to preserve the order of existing top-level tasks. The query should be rewritten to handle `NULL`s explicitly, for example, using `COALESCE`, to ensure the initial task order is maintained after migration. - Gemini
-- [Medium] The plan defers the home screen widget to Phase 4, but `prelim-plan.md` still lists `home_widget` under "New Packages (Tentative)". This should be moved to "Deferred Packages" to align with the decision and avoid confusion. - Gemini
-- [Minor] The `db-migration-checklist.md` plans to add a `due_date` column, but this column already exists according to the Phase 1 schema in `PROJECT_SPEC.md`. This step in the migration checklist is likely redundant and could cause an error. The checklist should be audited against the existing schema to remove such inconsistencies. - Gemini
+- [Resolved] The voice input plan now clarifies that raw transcripts are not stored, addressing the privacy concern. It also includes a manual verification step for offline STT functionality (`docs/phase-03/prelim-plan.md:888`). - Gemini
+- [Resolved] The position backfill query in the migration checklist now correctly handles NULL `parent_id`s, ensuring existing task order is preserved (`docs/phase-03/db-migration-checklist.md:70`). - Gemini
+- [Resolved] The `home_widget` package has been moved to the deferred list, and the goals section has been updated to reflect its Phase 4 status (`docs/phase-03/prelim-plan.md:37`, `docs/phase-03/prelim-plan.md:1203`). - Gemini
+- [Resolved] Claude's review clarified that the `due_date` column was specified in the original spec but missed in implementation, so adding it in the migration is correct. The discrepancy is noted. - Gemini
+- [Low] The `getEffectiveToday` function logic in `prelim-plan.md:318` uses `<= cutoffMinute`. This could create an off-by-one-minute ambiguity. If the cutoff is 4:59, this logic includes 4:59 as part of "yesterday". The boundary should be clarified (e.g., is it inclusive or exclusive?) to prevent unexpected behavior in date-sensitive filters. - Gemini
 
-#### Comments on Codex's Feedback
-- **Re: [High] Missing `REFERENCES` clause:** I agree. This is a critical catch for database integrity. - Gemini
-- **Re: [High] Timezone-unaware notifications:** I agree. Essential for a reliable reminder system. - Gemini
-- **Re: [Medium] Missing indexes:** I agree. A good proactive measure to prevent future performance issues. - Gemini
-- **Re: [Medium] Misaligned goals (home screen widget):** I agree. Documentation consistency is key for team alignment. - Gemini
-- **Re: [Medium] Risky milestone (migration + refactor):** I agree. Decoupling these changes is a smart move to reduce risk and simplify potential rollbacks. - Gemini
+---
+
+### Claude - Round 2 Responses
+
+**Re: Codex's [Medium] Missing timezone_id column:**
+- **AGREED - Good catch!** We added timezone strategy to Phase 3.5 but forgot the actual column in user_settings.
+- **Action:** Add `timezone_id TEXT` to user_settings schema with default value (device timezone detection or fallback to 'America/New_York')
+- **Implementation note:** Store IANA timezone ID (e.g., 'America/Detroit') for use with `tz.getLocation(timezone_id)` - Claude
+
+**Re: Codex's [Low] Next Steps widget question:**
+- **AGREED - Outdated content.** Widget is confirmed deferred to Phase 4, no need to re-ask.
+- **Action:** Remove widget deferral question from Next Steps section. - Claude
+
+**Re: Codex's [Low] Index count mismatch:**
+- **VERIFIED - It's actually 12 indexes, not 13!** Found duplicate `idx_tasks_parent` in prelim-plan.md (appears twice).
+- **Actual count:** 12 unique indexes
+- **Action:** Fix both docs to say "12 total" and remove duplicate from prelim-plan.md. - Claude
+
+**Re: Gemini's [Low] getEffectiveToday boundary ambiguity:**
+- **AGREED - Good catch on edge case.** The `<= cutoffMinute` means 4:59 is included in "yesterday."
+- **Clarification:** If cutoff is 4:59am, then:
+  - 4:58am = still yesterday
+  - 4:59am = still yesterday
+  - 5:00am = today starts
+- **This is correct behavior!** User's "day" extends through 4:59am (inclusive).
+- **Action:** Add comment to code example clarifying inclusive boundary for documentation clarity. - Claude
 
 ---
 
@@ -180,17 +204,21 @@
 - [x] **[HIGH - Codex/Claude]** ✅ FIXED: CASCADE constraint added to parent_id in db-migration-checklist.md line 45
 - [x] **[HIGH - Codex/Claude]** ✅ FIXED: Added `PRAGMA foreign_keys = ON;` to migration checklist with verification step (lines 124-130)
 - [x] **[HIGH - Gemini/Claude]** ✅ FIXED: NULL handling corrected in position backfill query in both prelim-plan.md and db-migration-checklist.md
-- [ ] **[HIGH - Codex/Claude/BlueKitty]** Add timezone strategy to Phase 3.5: `timezone` package (IANA tzdata), tz database init at startup, TZDateTime conversion for notifications
+- [x] **[HIGH - Codex/Claude/BlueKitty]** ✅ Updated Phase 3.5 with timezone package, tz init, and TZDateTime scheduling requirements (`docs/phase-03/prelim-plan.md:858`). 
 
 ### High Priority (Should Fix Before Planning Group 1)
 
-- [ ] **[MEDIUM - Codex/Claude]** Add missing task_id indexes: `idx_task_entities_task` and `idx_task_tags_task` (update count to 13 total indexes)
-- [ ] **[MEDIUM - Codex/Claude]** Update Goals section to remove or mark home screen widget as "(Deferred to Phase 4)"
-- [ ] **[MEDIUM - Claude]** Move `home_widget` package from "New Packages" to "Deferred Packages" section
-- [ ] **[MEDIUM - Codex/Claude]** Make services/ refactor optional/stretch in Phase 3.1 (not blocking migration)
+- [x] **[MEDIUM - Codex/Claude]** ✅ Added `task_id` indexes for entities/tags during migration planning (`docs/phase-03/db-migration-checklist.md:97`).
+- [x] **[MEDIUM - Codex/Claude]** ✅ Goals now mark the widget as deferred to Phase 4 (`docs/phase-03/prelim-plan.md:37`).
+- [x] **[MEDIUM - Claude]** ✅ `home_widget` moved to Deferred Packages list (`docs/phase-03/prelim-plan.md:1203`).
+- [x] **[MEDIUM - Codex/Claude]** ✅ Services/ refactor flagged as optional cleanup in Phase 3.1 (`docs/phase-03/prelim-plan.md:689`).
+- [x] **[MEDIUM - Codex]** ✅ FIXED: Added timezone_id column to user_settings schema + seed logic (`docs/phase-03/prelim-plan.md:551`, `docs/phase-03/db-migration-checklist.md:119`).
 - [ ] **[MEDIUM - BlueKitty]** Update Phase 3.4 testing: Change to "User validation on S21 Ultra in airplane mode (manual)" instead of automated offline tests
 - [ ] **[LOW - BlueKitty]** Clarify in prelim-plan.md that raw transcripts are NOT stored (resolves privacy concern)
 - [ ] **[STRETCH - BlueKitty]** Research if on-the-fly smart punctuation is feasible with speech_to_text; if not, defer feature to later phase
+- [x] **[LOW - Codex]** ✅ FIXED: Removed widget deferral question from Next Steps section (`docs/phase-03/prelim-plan.md:1225`).
+- [x] **[LOW - Codex/Claude]** ✅ FIXED: Updated index count to "12 total" in db-migration-checklist.md (`docs/phase-03/db-migration-checklist.md:87`).
+- [x] **[LOW - Gemini]** ✅ FIXED: Added clarifying comment to getEffectiveToday about inclusive boundary behavior (`docs/phase-03/prelim-plan.md:266`).
 
 ### Medium Priority (Nice to Have)
 
@@ -208,14 +236,19 @@
 ### Summary by Priority
 
 **CRITICAL:**
-- ✅ COMPLETED (3/6): CASCADE constraint, foreign keys ON, NULL handling
-- ⏳ REMAINING (3/6): Timezone strategy, offline STT verification (manual), voice privacy (clarification)
+- ✅ COMPLETED (4/4): CASCADE constraint, foreign keys ON, NULL handling, timezone strategy
 
-**HIGH (1):** Missing indexes
-**MEDIUM (5):** Widget docs, services/ refactor, rollback testing, validation strategy, transcript storage setting
-**LOW (2):** Test fixture spec, weekend edge case
+**HIGH:**
+- ✅ COMPLETED (5/5): Missing indexes, widget docs, home_widget package move, services/ refactor, timezone_id column
 
-**Total Action Items:** 14 (3 completed, 11 remaining)
+**ROUND 2 FIXES:**
+- ✅ COMPLETED (4/4): timezone_id column + seed, widget question removed, index count fixed, getEffectiveToday comment added
+
+**REMAINING:**
+- ⏳ BlueKitty items (3): Offline STT verification (manual), voice privacy clarification, smart punctuation research
+- ⏳ Optional/Medium (4): Rollback testing, validation strategy, test fixture spec, weekend edge case
+
+**Total Action Items:** 20 (13 completed ✅, 7 remaining ⏳)
 
 ---
 

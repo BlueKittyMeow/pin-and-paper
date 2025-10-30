@@ -263,6 +263,11 @@ DateTime getEffectiveToday(UserSettings settings) {
   final cutoffHour = settings.todayCutoffHour; // From user_settings
   final cutoffMinute = settings.todayCutoffMinute;
 
+  // NOTE: Cutoff boundary is INCLUSIVE (e.g., 4:59am cutoff means 4:59:59 is still "yesterday")
+  // Example with 4:59am cutoff:
+  //   4:58am → still yesterday
+  //   4:59am → still yesterday (inclusive)
+  //   5:00am → today starts
   if (now.hour < cutoffHour ||
       (now.hour == cutoffHour && now.minute <= cutoffMinute)) {
     return DateTime(now.year, now.month, now.day - 1);
@@ -547,6 +552,8 @@ CREATE TABLE user_settings (
   today_cutoff_minute INTEGER DEFAULT 59,
   -- Week/calendar preferences
   week_start_day INTEGER DEFAULT 1,      -- 0=Sunday, 1=Monday, 2=Tuesday, etc. (default Monday)
+  -- Timezone preferences (for DST-aware notification scheduling)
+  timezone_id TEXT,                      -- IANA timezone ID (e.g., 'America/Detroit'), detected from device or user-specified
   -- Display preferences
   use_24hour_time INTEGER DEFAULT 0,     -- 0 = 12-hour display, 1 = 24-hour display
   -- Task behavior preferences
@@ -1215,8 +1222,7 @@ final parsedDate = dateParserService.parse(
 3. **Prototype:** Database migration (v3 → v4) and test with Phase 2 data
 4. **Prototype:** Task nesting UI (sketch/mockup)
 5. **Prototype:** Date parser test cases (20-30 common phrases)
-6. **Decision:** Widget in Phase 3 or defer to Phase 3.5?
-7. **Create:** `phase-3-issues.md` for tracking bugs and questions during implementation
+6. **Create:** `phase-3-issues.md` for tracking bugs and questions during implementation
 
 ---
 

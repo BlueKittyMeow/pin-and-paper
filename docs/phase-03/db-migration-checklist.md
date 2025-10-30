@@ -84,7 +84,7 @@
   - [ ] task_tags
   - [ ] user_settings (with default row seeding)
 
-- [ ] **Create indexes (13 total):**
+- [ ] **Create indexes (12 total):**
   - [ ] idx_tasks_parent
   - [ ] idx_tasks_due_date
   - [ ] idx_tasks_start_date
@@ -101,6 +101,10 @@
 - [ ] **Seed user_settings table**
   ```dart
   final now = DateTime.now().millisecondsSinceEpoch;
+  // Detect device timezone for notification scheduling (Phase 3.5)
+  // Falls back to null - will be populated on first notification setup
+  final deviceTimezone = await tz.local.name; // or null if not yet initialized
+
   await db.insert('user_settings', {
     'id': 1,
     'early_morning_hour': 5,
@@ -112,6 +116,7 @@
     'today_cutoff_hour': 4,
     'today_cutoff_minute': 59,
     'week_start_day': 1,
+    'timezone_id': deviceTimezone, // IANA timezone ID (e.g., 'America/Detroit'), null until Phase 3.5
     'use_24hour_time': 0,
     'auto_complete_children': 'prompt',
     'default_notification_hour': 9,
