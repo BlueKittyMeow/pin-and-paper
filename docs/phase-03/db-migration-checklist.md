@@ -84,7 +84,7 @@
   - [ ] task_tags
   - [ ] user_settings (with default row seeding)
 
-- [ ] **Create indexes (11 total):**
+- [ ] **Create indexes (13 total):**
   - [ ] idx_tasks_parent
   - [ ] idx_tasks_due_date
   - [ ] idx_tasks_start_date
@@ -94,7 +94,9 @@
   - [ ] idx_entities_name
   - [ ] idx_tags_name
   - [ ] idx_task_entities_entity
+  - [ ] idx_task_entities_task
   - [ ] idx_task_tags_tag
+  - [ ] idx_task_tags_task
 
 - [ ] **Seed user_settings table**
   ```dart
@@ -349,7 +351,7 @@
   - Create entities/tags tables (Phase 5 future-proofing)
   - Create user_settings table with defaults
   - Backfill task positions based on created_at
-  - Add 11 performance indexes
+  - Add 13 performance indexes
 
   BREAKING CHANGE: Database v3 → v4 (no rollback)"
   ```
@@ -391,7 +393,7 @@
 - [x] Migration completes without errors
 - [x] Database version = 4
 - [x] All 6 new tables created
-- [x] All 11 indexes created
+- [x] All 13 indexes created
 - [x] Task count unchanged
 - [x] Task positions backfilled correctly (0, 1, 2... sequential)
 - [x] user_settings table has default row (id=1)

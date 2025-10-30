@@ -1,9 +1,26 @@
 # Phase 3: Mobile Polish & Voice Input - Preliminary Planning
 
-**Status:** Planning
+**Status:** Preliminary Planning (High-Level Strategy)
 **Estimated Duration:** 3-4 weeks
 **Database Version:** 3 → 4
 **Target Device:** Samsung Galaxy S21 Ultra (Android)
+
+---
+
+## Planning Scope & Approach
+
+**This document provides high-level preliminary planning for Phase 3.** It establishes:
+- Overall architecture and database schema
+- Major feature decisions and trade-offs
+- Cross-subphase dependencies
+- Basic implementation strategies
+
+**Detailed implementation planning** will be created separately for each subphase group:
+- **Group 1 (Foundation):** Detailed plans for 3.1, 3.2, 3.3 will specify exact file structures, function signatures, UI mockups, and line-by-line migration steps
+- **Group 2 (Features):** Detailed plans for 3.4, 3.5 after Group 1 is complete
+- **Group 3 (Polish):** Detailed plan for 3.6 as stretch goals
+
+**This preliminary plan is intentionally high-level** to allow team review of the overall approach before diving into implementation details. Think of this as the "what and why," with detailed plans providing the "how."
 
 ---
 
@@ -16,8 +33,8 @@ Phase 3 focuses on optimizing Pin and Paper for daily mobile use with voice inpu
 1. **Voice Integration:** Enable hands-free task capture via voice-to-text
 2. **Task Organization:** Add nesting/subtasks with collapsible groups
 3. **Smart Dates:** Parse natural language dates ("next Tuesday", "tomorrow at 3pm")
-4. **Quick Access:** Home screen widget for instant capture
-5. **Mobile UX:** Quick actions, improved search, notifications
+4. **Mobile UX:** Quick actions, improved search, notifications
+5. ~~**Quick Access:** Home screen widget~~ *(Deferred to Phase 4)*
 
 ### Recent Decisions (BlueKitty + Claude)
 
@@ -554,7 +571,9 @@ CREATE INDEX idx_task_images_hero ON task_images(task_id) WHERE is_hero = 1;
 CREATE INDEX idx_entities_name ON entities(name);
 CREATE INDEX idx_tags_name ON tags(name);
 CREATE INDEX idx_task_entities_entity ON task_entities(entity_id);
+CREATE INDEX idx_task_entities_task ON task_entities(task_id);
 CREATE INDEX idx_task_tags_tag ON task_tags(tag_id);
+CREATE INDEX idx_task_tags_task ON task_tags(task_id);
 ```
 
 ### Migration Strategy
@@ -667,7 +686,9 @@ CREATE INDEX idx_task_tags_tag ON task_tags(tag_id);
 
 - [ ] **Research:** Study Todoist's natural language date parsing (day-of-week, ambiguity rules)
 - [ ] Clean up `brain_dump_provider.dart` reminders (use AppConstants for table names)
-- [ ] Reorganize `services/` directory structure (api/, data/, features/ subdirectories)
+- [ ] **OPTIONAL:** Reorganize `services/` directory structure (api/, data/, features/ subdirectories)
+  - **Note:** Marked optional to reduce risk - if migration testing is complex, defer this cleanup
+  - Lightweight refactor (just moving files), but mixing with high-risk migration complicates rollback
 - [ ] **Database Migration (v3 → v4)** - See `db-migration-checklist.md` for full protocol
   - [ ] Add task nesting columns (parent_id, position)
   - [ ] Add template support (is_template)
@@ -799,23 +820,28 @@ CREATE INDEX idx_task_tags_tag ON task_tags(tag_id);
   - [ ] Stop button to end transcription
   - [ ] Show interim results (streaming text)
   - [ ] Append to existing text (not replace)
-- [ ] **Smart punctuation toggle:**
-  - [ ] Setting: voice_smart_punctuation (default ON)
-  - [ ] Store raw transcript before formatting (allow user to revert)
-  - [ ] Conditionally apply punctuation based on setting
+- [ ] **Smart punctuation (optional/stretch):**
+  - [ ] **IMPORTANT:** Raw transcripts are NOT stored - only final text user saves persists
+  - [ ] **Privacy:** No transcript storage = no privacy concerns
+  - [ ] **Implementation approach:** On-the-fly formatting during transcription (if feasible with `speech_to_text`)
+  - [ ] **If on-the-fly not possible:** Defer feature to later phase - no post-processing/storage of raw transcripts
+  - [ ] Research: Does `speech_to_text` package support real-time punctuation control?
 - [ ] Permission flow handling (RECORD_AUDIO)
   - [ ] Request permission on first mic button tap
   - [ ] Show friendly dialog if denied with Settings deep-link
 - [ ] Error handling (permissions denied, STT initialization failures, background noise)
 - [ ] **Testing (continuous):**
-  - [ ] Write unit tests for smart punctuation toggle logic
-  - [ ] Write unit tests for raw transcript storage/revert functionality
   - [ ] Write unit tests for permission flow handling
+  - [ ] Write unit tests for streaming transcription display logic
+  - [ ] Write unit tests for error handling (permissions denied, STT failures)
   - [ ] **Device testing:** Test on Galaxy S21 Ultra with various dictation scenarios
     - [ ] Short phrases ("call dentist tomorrow")
     - [ ] Long dictation (brain dump paragraph)
     - [ ] Background noise scenarios
-    - [ ] Punctuation accuracy with smart toggle ON vs OFF
+    - [ ] Streaming interim results display
+  - [ ] **Offline verification (manual):** BlueKitty tests in airplane mode on S21 Ultra
+    - [ ] Verify device STT works without internet connection
+    - [ ] Confirm no unexpected network errors
   - [ ] **User experience testing:** BlueKitty qualitative feedback on responsiveness
     - [ ] Does streaming feel smooth and natural?
     - [ ] Is visual feedback (animations, interim text) satisfying?
@@ -829,6 +855,13 @@ CREATE INDEX idx_task_tags_tag ON task_tags(tag_id);
 **Goal:** Due date reminders with hybrid notification model
 
 - [ ] Implement local notifications (`flutter_local_notifications`)
+- [ ] **Timezone-aware scheduling (critical for DST/travel):**
+  - [ ] Add `timezone` package dependency (uses IANA Time Zone Database)
+  - [ ] Initialize tz database at app startup (`tz.initializeTimeZones()`)
+  - [ ] Detect or store user's timezone (device timezone or user_settings)
+  - [ ] Convert all due_date timestamps to `TZDateTime` for scheduling
+  - [ ] Handle DST transitions automatically
+  - [ ] Note: Timezone data updates via `flutter pub upgrade`
 - [ ] **Hybrid notification model:**
   - [ ] Global default (9am, user-configurable in user_settings)
   - [ ] Per-task override (notification_type: use_global/custom/none)
@@ -1163,6 +1196,7 @@ final parsedDate = dateParserService.parse(
 ### New Packages (Tentative - check MCP for latest)
 - `speech_to_text` ^6.0.0 - Voice transcription (device-based, offline-first)
 - `flutter_local_notifications` ^17.0.0 - Due date reminders
+- `timezone` - IANA Time Zone Database for timezone-aware notification scheduling (critical for DST/travel)
 - Consider: `jiffy` or custom date parser (TBD based on implementation complexity)
 
 ### Deferred Packages (Phase 4+)
