@@ -6,6 +6,18 @@
 
 ---
 
+## For Reviewers: How to Provide Feedback
+
+1. **Read** the review instructions and scope below
+2. **Add your feedback** in your designated section using the feedback template format
+3. **Use priority levels** (CRITICAL/HIGH/MEDIUM/LOW) and categories consistently
+4. **Be specific** - include line numbers, code examples, and concrete suggestions
+5. **Sign off** when all your concerns are addressed
+
+See the **Feedback Template** section below for the exact format to use.
+
+---
+
 ## Context
 
 [Brief description of what is being reviewed - implementation plan, architectural decision, design document, etc.]
@@ -158,66 +170,5 @@ Once all feedback is addressed, each reviewer will sign off here:
 
 ---
 
-## Template Usage Notes
-
-**How to Use This Template:**
-
-1. **Copy this file** and rename it for your specific review (e.g., `feature-name-review.md`)
-2. **Replace all bracketed placeholders** `[like this]` with actual content
-3. **Customize reviewer sections** - add/remove as needed for your team size
-4. **Add to feedback template** - Add any project-specific priority levels or categories
-5. **Update regularly** - Keep the summary table and action items current as reviews come in
-
-**Template Features:**
-
-- ✅ **Structured feedback format** - Ensures consistent, actionable feedback
-- ✅ **Priority levels** - Helps triage issues by urgency
-- ✅ **Category tags** - Makes it easy to group and track similar issues
-- ✅ **Voting/sign-off section** - Clear consensus tracking
-- ✅ **Summary tables** - Quick overview of review status
-- ✅ **Action items checklist** - Track fixes and follow-ups
-
-**Best Practices:**
-
-- Keep feedback **specific and actionable** (include line numbers, code examples)
-- Use **priority levels consistently** across all reviewers
-- **Update the summary table** as feedback comes in (don't wait until the end)
-- **Link to relevant docs** when referencing architectural decisions
-- **Create follow-up issues** for items that need tracking beyond the review
-
-**Example Feedback Entry:**
-
-```markdown
-### HIGH - Logic - Task depth calculation incorrect for nested hierarchies
-
-**Location:** `task_service.dart:245-260`
-
-**Issue Description:**
-The current depth calculation only works for one level of nesting. For a task structure like:
-- Parent (depth 0)
-  - Child (depth 1)
-    - Grandchild (should be depth 2, but shows as depth 1)
-
-The recursive query doesn't properly increment depth for grandchildren.
-
-**Suggested Fix:**
-Update the recursive CTE to properly track depth:
-\`\`\`sql
-WITH RECURSIVE task_tree AS (
-  SELECT *, 0 as depth FROM tasks WHERE parent_id IS NULL
-  UNION ALL
-  SELECT t.*, tt.depth + 1 as depth  -- Add +1 here
-  FROM tasks t
-  JOIN task_tree tt ON t.parent_id = tt.id
-)
-\`\`\`
-
-**Impact:**
-UI will show incorrect indentation for deeply nested tasks, breaking the visual hierarchy.
-```
-
----
-
-**Created By:** BlueKitty + Claude
 **Template Version:** 1.0
-**Last Updated:** 2025-10-30
+**See also:** `docs/templates/review-template-about.md` for template management instructions
