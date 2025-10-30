@@ -661,7 +661,10 @@ CREATE INDEX idx_task_tags_task ON task_tags(task_id);
   - Enforce hours in range 0-23
   - Enforce relative ordering (e.g., early_morning < morning < noon < afternoon < tonight < late_night)
   - **Allow wrap-around schedules** for shift workers (e.g., cycle can start mid-afternoon)
-  - Validation ensures logical progression while supporting circadian-shifted schedules
+  - **Validation strategy (two-layer approach):**
+    - **Settings UI:** Real-time warnings for invalid configurations (e.g., "morning_hour cannot be earlier than early_morning_hour")
+    - **Database level:** No CHECK constraints (too complex for wrap-around logic) - rely on UI validation only
+    - **Fail-safe:** App uses fallback defaults if invalid settings detected at runtime
   - **Settings UI:** Include 24-hour radial control or timeline preview to visualize user's shifted day
 - **Auto-complete children preference:** 'prompt' (ask with remember choice), 'always', 'never'
 - **Voice smart punctuation:** Default ON (1), user can disable (0) for raw transcription
@@ -778,12 +781,21 @@ CREATE INDEX idx_task_tags_task ON task_tags(task_id);
     - [ ] due_date = Mon (end of user's Sunday, respects cutoff)
     - [ ] Example: 4:59am cutoff → weekend = Sat 4:59am to Mon 4:59am
     - [ ] Task shows in "For Today" view on both Saturday and Sunday
+    - [ ] **Edge case - "weekend" on Saturday after cutoff (e.g., Sat 5:30am with 4:59am cutoff):**
+      - [ ] Decision: "weekend" = THIS weekend (already started, due Mon 4:59am)
+      - [ ] Rationale: User's effective "day" is Saturday, so "weekend" means current weekend
+      - [ ] Alternative considered: "next weekend" (rejected - requires explicit "next" keyword)
+      - [ ] Test case: Verify Saturday 5:30am → start_date = Sat 4:59am (past), due_date = Mon 4:59am (future)
   - [ ] midnight handling (see outstanding questions for nuance)
 - [ ] **Today window logic** (4:59am cutoff, wrap-around support for shift workers)
 - [ ] **All-day default** when no time specified
 - [ ] **Relative date parsing** (today, tomorrow, next week, in 3 days)
 - [ ] **Weekday parsing** ("next Tuesday", "this Friday" - use Todoist research for ambiguity)
-- [ ] **Curate test fixture file** with 20-30 phrases (timezones, night-owl edges)
+- [ ] **Curate test fixture file:** `test/fixtures/date_parsing_test_cases.json`
+  - [ ] Create structured test data with 20-30 phrases
+  - [ ] Format: `{ "input": "tomorrow at 3pm", "expectedDate": "2025-11-01T15:00:00", "userSettings": {...}, "edgeCase": "night-owl boundary" }`
+  - [ ] Include timezones, night-owl edges, weekend parsing, weekday ambiguity
+  - [ ] Use for regression testing and accuracy validation (>80% target)
 - [ ] **Brain Dump integration:**
   - [ ] Update Claude prompt to include user_settings as system context
   - [ ] Format: "User's time preferences: day boundary 4:59am, morning=9am, etc."
@@ -819,6 +831,8 @@ CREATE INDEX idx_task_tags_task ON task_tags(task_id);
 ### Phase 3.4: Voice Input
 **Goal:** Hands-free task capture with device-based STT (offline-first, privacy-friendly)
 
+**Privacy Note:** Raw voice transcripts are NOT stored. Only the final text the user explicitly saves (as draft or task) persists in the database. No intermediate transcription data is retained.
+
 - [ ] Integrate `speech_to_text` package (device-based STT via OS)
 - [ ] Implement voice transcription with streaming interim results
 - [ ] **Brain Dump integration:**
@@ -827,12 +841,12 @@ CREATE INDEX idx_task_tags_task ON task_tags(task_id);
   - [ ] Stop button to end transcription
   - [ ] Show interim results (streaming text)
   - [ ] Append to existing text (not replace)
-- [ ] **Smart punctuation (optional/stretch):**
-  - [ ] **IMPORTANT:** Raw transcripts are NOT stored - only final text user saves persists
-  - [ ] **Privacy:** No transcript storage = no privacy concerns
-  - [ ] **Implementation approach:** On-the-fly formatting during transcription (if feasible with `speech_to_text`)
-  - [ ] **If on-the-fly not possible:** Defer feature to later phase - no post-processing/storage of raw transcripts
-  - [ ] Research: Does `speech_to_text` package support real-time punctuation control?
+- [ ] **Smart punctuation toggle (user preference):**
+  - [ ] ✅ **RESEARCH COMPLETE:** `speech_to_text` v6.6.0+ supports `autoPunctuation` parameter in `SpeechListenOptions`
+  - [ ] **Implementation:** Pass `autoPunctuation: true/false` based on user_settings.voice_smart_punctuation
+  - [ ] **Privacy:** No storage required - punctuation applied during transcription, not post-processed
+  - [ ] **User control:** Toggle in settings (default ON), affects live transcription only
+  - [ ] Test on iOS (explicit support mentioned) and Android (device-dependent)
 - [ ] Permission flow handling (RECORD_AUDIO)
   - [ ] Request permission on first mic button tap
   - [ ] Show friendly dialog if denied with Settings deep-link
@@ -846,9 +860,11 @@ CREATE INDEX idx_task_tags_task ON task_tags(task_id);
     - [ ] Long dictation (brain dump paragraph)
     - [ ] Background noise scenarios
     - [ ] Streaming interim results display
-  - [ ] **Offline verification (manual):** BlueKitty tests in airplane mode on S21 Ultra
-    - [ ] Verify device STT works without internet connection
-    - [ ] Confirm no unexpected network errors
+  - [ ] **Offline functionality - User validation (manual testing):**
+    - [ ] BlueKitty tests on Galaxy S21 Ultra in airplane mode
+    - [ ] Verify device-based STT works without internet connection
+    - [ ] Confirm no unexpected network errors or degraded accuracy
+    - [ ] Note: No automated offline tests - device dependency requires manual validation
   - [ ] **User experience testing:** BlueKitty qualitative feedback on responsiveness
     - [ ] Does streaming feel smooth and natural?
     - [ ] Is visual feedback (animations, interim text) satisfying?

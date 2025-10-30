@@ -25,10 +25,15 @@
   - Test DB: `pin-and-paper-v3-test.db`
   - Keep production DB untouched during testing
 
-- [ ] **Prepare rollback plan**
-  - Document steps to restore from backup
-  - Test restore procedure with dummy backup
-  - Ensure app can revert to Phase 2 code + v3 database if needed
+- [ ] **CRITICAL: Test rollback procedure BEFORE production migration**
+  - [ ] Create a dummy backup of test database
+  - [ ] Simulate a failed migration (intentionally corrupt data mid-migration)
+  - [ ] Execute rollback: Restore database from backup
+  - [ ] Verify app launches successfully with restored v3 database
+  - [ ] Verify all Phase 2 functionality works (create task, brain dump, etc.)
+  - [ ] Document any issues encountered during rollback testing
+  - [ ] Confirm rollback procedure is reliable before touching production database
+  - **Rationale:** Migration is one-way and high-risk. Rollback must be proven reliable.
 
 ---
 

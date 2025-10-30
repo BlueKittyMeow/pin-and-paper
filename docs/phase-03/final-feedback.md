@@ -213,23 +213,23 @@
 - [x] **[MEDIUM - Claude]** ✅ `home_widget` moved to Deferred Packages list (`docs/phase-03/prelim-plan.md:1203`).
 - [x] **[MEDIUM - Codex/Claude]** ✅ Services/ refactor flagged as optional cleanup in Phase 3.1 (`docs/phase-03/prelim-plan.md:689`).
 - [x] **[MEDIUM - Codex]** ✅ FIXED: Added timezone_id column to user_settings schema + seed logic (`docs/phase-03/prelim-plan.md:551`, `docs/phase-03/db-migration-checklist.md:119`).
-- [ ] **[MEDIUM - BlueKitty]** Update Phase 3.4 testing: Change to "User validation on S21 Ultra in airplane mode (manual)" instead of automated offline tests
-- [ ] **[LOW - BlueKitty]** Clarify in prelim-plan.md that raw transcripts are NOT stored (resolves privacy concern)
-- [ ] **[STRETCH - BlueKitty]** Research if on-the-fly smart punctuation is feasible with speech_to_text; if not, defer feature to later phase
+- [x] **[MEDIUM - BlueKitty]** ✅ FIXED: Updated Phase 3.4 testing to "User validation (manual testing)" with clear note about device dependency (`docs/phase-03/prelim-plan.md:851`).
+- [x] **[LOW - BlueKitty]** ✅ FIXED: Added prominent privacy note at top of Phase 3.4 section clarifying raw transcripts are NOT stored (`docs/phase-03/prelim-plan.md:822`).
+- [x] **[STRETCH - BlueKitty]** ✅ RESEARCH COMPLETE: `speech_to_text` v6.6.0+ supports `autoPunctuation` parameter - on-the-fly punctuation IS feasible! Updated implementation plan (`docs/phase-03/prelim-plan.md:832`).
 - [x] **[LOW - Codex]** ✅ FIXED: Removed widget deferral question from Next Steps section (`docs/phase-03/prelim-plan.md:1225`).
 - [x] **[LOW - Codex/Claude]** ✅ FIXED: Updated index count to "12 total" in db-migration-checklist.md (`docs/phase-03/db-migration-checklist.md:87`).
 - [x] **[LOW - Gemini]** ✅ FIXED: Added clarifying comment to getEffectiveToday about inclusive boundary behavior (`docs/phase-03/prelim-plan.md:266`).
 
 ### Medium Priority (Nice to Have)
 
-- [ ] **[MEDIUM - Claude]** Add rollback testing to pre-migration checklist (verify restore from backup works)
-- [ ] **[LOW - Claude]** Clarify validation strategy for time keywords (UI warnings vs database constraints)
-- [ ] **[LOW - Claude]** Specify test fixture location and format: `test/fixtures/date_parsing_test_cases.json`
-- [ ] **[QUESTION - Claude]** Define and test weekend edge case: "weekend" said on Saturday 5:30am (after cutoff) = this weekend or next?
+- [x] **[MEDIUM - Claude]** ✅ FIXED: Added CRITICAL rollback testing procedure to pre-migration checklist with step-by-step validation (`docs/phase-03/db-migration-checklist.md:28`).
+- [x] **[LOW - Claude]** ✅ FIXED: Clarified validation strategy - two-layer approach with UI warnings + fail-safe fallbacks, no database CHECK constraints (`docs/phase-03/prelim-plan.md:664`).
+- [x] **[LOW - Claude]** ✅ FIXED: Specified test fixture location `test/fixtures/date_parsing_test_cases.json` with structured format and 20-30 phrases (`docs/phase-03/prelim-plan.md:786`).
+- [x] **[QUESTION - Claude]** ✅ RESOLVED: Weekend edge case defined - "weekend" on Saturday after cutoff = THIS weekend (current weekend, already started). Documented with rationale and test case (`docs/phase-03/prelim-plan.md:784`).
 
 ### Documentation Consistency
 
-- [ ] **[MEDIUM - Gemini]** Consider adding user setting for raw transcript storage: "Store raw transcripts for revert (Y/N)"
+- [x] **[MEDIUM - Gemini]** ✅ NOT APPLICABLE: Raw transcript storage suggestion is unnecessary. Implementation uses `speech_to_text` on-the-fly `autoPunctuation` parameter - no transcripts stored, nothing to revert. Privacy note clarifies this (`docs/phase-03/prelim-plan.md:822`, line 835).
 
 ---
 
@@ -245,10 +245,16 @@
 - ✅ COMPLETED (4/4): timezone_id column + seed, widget question removed, index count fixed, getEffectiveToday comment added
 
 **REMAINING:**
-- ⏳ BlueKitty items (3): Offline STT verification (manual), voice privacy clarification, smart punctuation research
-- ⏳ Optional/Medium (4): Rollback testing, validation strategy, test fixture spec, weekend edge case
+- ✅ ALL COMPLETE! (0 remaining)
 
-**Total Action Items:** 20 (13 completed ✅, 7 remaining ⏳)
+**FINAL ROUND (8 items completed):**
+- ✅ BlueKitty items (3/3): Offline STT verification wording, voice privacy prominence, smart punctuation research
+- ✅ Optional/Medium (4/4): Rollback testing procedure, validation strategy, test fixture spec, weekend edge case
+- ✅ Documentation Consistency (1/1): Raw transcript storage (N/A - not needed with on-the-fly punctuation)
+
+**Total Action Items:** 21 (21 completed ✅, 0 remaining ⏳)
+
+🎉 **All team feedback addressed! Preliminary planning complete and ready for Group 1 detailed implementation planning.**
 
 ---
 
