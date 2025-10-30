@@ -18,7 +18,7 @@ Instead of confronting users with abstract settings like "today cutoff hour" or 
 
 **Implementation:**
 - Show on first launch (optional, dismissable)
-- 8 questions, ~3 minutes
+- 9 questions, ~3-4 minutes
 - Set user_settings based on responses
 - "Retake quiz" option in settings
 - "Explain my settings" feature that shows which quiz answers led to current config
@@ -147,7 +147,29 @@ Instead of confronting users with abstract settings like "today cutoff hour" or 
 
 ---
 
-### 7. Task Completion Behavior (Bonus Question)
+### 7. Quick Add Field - Date Parsing Preference (New in Phase 3.4)
+
+**Question:**
+> "When you type 'Call dentist Jan 15' in the quick-add field, what should happen?"
+
+**Answers:**
+- **A: Automatically detect the date** - Highlight 'Jan 15' and set it as the due date
+  - **Sets:** `enable_quick_add_date_parsing = 1` (default)
+  - **Rationale:** User wants smart date parsing (Todoist-style)
+
+- **B: Keep it simple** - Just create a task titled 'Call dentist Jan 15'
+  - **Sets:** `enable_quick_add_date_parsing = 0`
+  - **Rationale:** User prefers quick-add to stay simple and fast
+
+**UI Note:** Split-screen preview showing both behaviors
+- Left: Text field with "Jan 15" highlighted in blue
+- Right: Plain text field without highlights
+
+**Implementation Note:** This setting only affects the Quick Add Field at the top of the home screen. Brain Dump (with Claude) always uses smart date parsing regardless of this setting.
+
+---
+
+### 8. Task Completion Behavior (Bonus Question)
 
 **Question:**
 > "You complete a parent task that has 3 unfinished subtasks. What should happen to the subtasks?"
@@ -166,7 +188,7 @@ Instead of confronting users with abstract settings like "today cutoff hour" or 
 
 ---
 
-### 8. Sleep Schedule - End of Day Detection
+### 9. Sleep Schedule - End of Day Detection
 
 **Question:**
 > "On a usual day, what time do you fall asleep?"
@@ -287,7 +309,7 @@ Instead of confronting users with abstract settings like "today cutoff hour" or 
 
 ### Quiz Flow
 1. **Welcome screen:** "Let's learn how you think about time!" (skip button visible)
-2. **Questions 1-8:** One per screen, with illustrations
+2. **Questions 1-9:** One per screen, with illustrations
 3. **Results screen:** "Your personalized settings are ready!" with summary
 4. **Settings preview:** "Here's what we configured for you" (option to tweak)
 
@@ -301,8 +323,9 @@ Instead of confronting users with abstract settings like "today cutoff hour" or 
 | 4 (Tonight keyword) | `tonight_hour` | 7pm (19:00) |
 | 5 (Morning keyword) | `morning_hour`, `early_morning_hour` | 9am, 5am |
 | 6 (Time format) | `use_24hour_time` | 12-hour (0) |
-| 7 (Auto-complete) | `auto_complete_children` | 'prompt' |
-| 8 (Sleep schedule) | Cross-validates Q1, refines `today_cutoff_hour` | 4:59am |
+| 7 (Quick Add date parsing) | `enable_quick_add_date_parsing` | ON (1) |
+| 8 (Auto-complete) | `auto_complete_children` | 'prompt' |
+| 9 (Sleep schedule) | Cross-validates Q1, refines `today_cutoff_hour` | 4:59am |
 
 ### Additional Settings (Not in Quiz)
 These would still use smart defaults but be manually adjustable:
