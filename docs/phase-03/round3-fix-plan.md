@@ -18,6 +18,49 @@ This document provides **step-by-step instructions** for applying all Round 3 fi
 
 ---
 
+## Team Feedback Incorporated (Round 3.5)
+
+**Date:** 2025-10-30
+**Reviewers:** Gemini, Codex
+
+### Critical Updates from Team Review
+
+**1. CRITICAL - Task.copyWith Completeness (Codex)**
+- **Issue:** Phase 2 optimistic update in `onNodeAccepted` created new Task() with only subset of fields
+- **Impact:** Would silently strip startDate, isTemplate, notificationType, notificationTime, etc. on every drag
+- **Fix Applied:** Changed to `movedTask.copyWith(parentId:..., position:..., depth:...)` (lines 429-433)
+- **Status:** ✅ FIXED in Phase 2 Step 2.5
+
+**2. HIGH - TreeController Expansion State (Codex)**
+- **Issue:** Plan kept `_collapsedTaskIds` Set and old `toggleCollapse` logic after moving to TreeController
+- **Impact:** TreeController owns expansion state - toggling Set wouldn't affect UI, nodes would never collapse
+- **Fix Applied:**
+  - Phase 2 Step 2.6: Added `toggleCollapse(Task task)` that calls `treeController.toggleExpansion()`
+  - Phase 4 Steps 4.1-4.2: Removed `_collapsedTaskIds` Set and old `toggleCollapse(String taskId)` method
+  - Phase 4 Steps 4.4-4.5: Updated both HomeScreen modes to pass `entry.isExpanded`
+  - Phase 5: Renamed `isCollapsed` to `isExpanded` in TaskItem signature, updated icon logic
+- **Status:** ✅ FIXED across Phases 2, 4, and 5
+
+**3. UX Enhancement - Depth Limit Feedback (Gemini)**
+- **Issue:** `_showDepthLimitError()` only sets error message in provider state
+- **Recommendation:** Trigger SnackBar/Toast for immediate visual feedback
+- **Fix Applied:** Added TODO comment for UX refinement (line 447)
+- **Status:** ✅ NOTED for future enhancement
+
+**4. Task.copyWith Reminder (Gemini)**
+- **Issue:** Optimistic update comment said `// ... other fields` without expansion
+- **Fix Applied:** Now uses `.copyWith()` which automatically preserves all fields
+- **Status:** ✅ FIXED (covered by fix #1)
+
+### Review Praise Points
+- ✅ Complete replacement of _createDB mirroring _migrateToV4 (Phase 1)
+- ✅ Decisive removal of legacy code (Phase 3)
+- ✅ Single source of truth for visibility (Phase 4)
+- ✅ Detailed verification checklists (all phases)
+- ✅ Root cause analysis identifying "Incomplete Replacement Pattern"
+
+---
+
 ## Phase 1: Fix _createDB Schema (CRITICAL)
 
 **File:** `docs/phase-03/group1.md`
@@ -425,18 +468,11 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
       final movedTask = _tasks[movedTaskIndex];
 
       // Create updated task with new parent/position/depth
-      final updatedTask = Task(
-        id: movedTask.id,
-        title: movedTask.title,
-        completed: movedTask.completed,
-        createdAt: movedTask.createdAt,
-        completedAt: movedTask.completedAt,
-        dueDate: movedTask.dueDate,
-        isAllDay: movedTask.isAllDay,
+      // CRITICAL: Use copyWith to preserve ALL fields (startDate, isTemplate, notificationTime, etc.)
+      final updatedTask = movedTask.copyWith(
         parentId: newParentId,
         position: newPosition,
         depth: newDepth,
-        // ... other fields
       );
 
       _tasks[movedTaskIndex] = updatedTask;
@@ -451,11 +487,29 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 
   /// Show error when depth limit exceeded
   void _showDepthLimitError() {
-    // Show snackbar: "Cannot move task: Maximum nesting depth (4 levels) reached"
+    // TODO (UX Enhancement): Trigger SnackBar/Toast for immediate visual feedback
+    // Current implementation: Sets error message in provider state
     _errorMessage = 'Maximum nesting depth (4 levels) reached';
     notifyListeners();
   }
 ```
+
+### Step 2.6: Add toggleCollapse Method Using TreeController
+
+**Location:** After `_showDepthLimitError` method
+**Action:** Add toggleCollapse that delegates to TreeController
+
+**Add:**
+```dart
+  /// Toggle collapse/expand for a task node
+  /// Uses TreeController for expansion state (not _collapsedTaskIds)
+  void toggleCollapse(Task task) {
+    treeController.toggleExpansion(task);
+  }
+```
+
+**Important:** This replaces the old `toggleCollapse(String taskId)` that mutated `_collapsedTaskIds`.
+TreeController owns expansion state, so we delegate to `toggleExpansion()`.
 
 ### Verification 2:
 - [ ] Import statement present
@@ -464,7 +518,8 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 - [ ] _findParent helper present
 - [ ] loadTasks refreshes treeController.roots
 - [ ] onNodeAccepted handler complete
-- [ ] _showDepthLimitError method present
+- [ ] _showDepthLimitError method present (with UX TODO note)
+- [ ] toggleCollapse delegates to treeController.toggleExpansion
 
 ---
 
@@ -541,7 +596,46 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 **Estimated Time:** 20 minutes
 **Risk:** MEDIUM
 
-### Step 4.1: Add Note to visibleTasks Getter
+**Key Change:** TreeController owns expansion state. Remove `_collapsedTaskIds` Set and `isCollapsed` plumbing.
+
+### Step 4.1: Remove _collapsedTaskIds and collapsedTaskIds Getter
+
+**Location:** Lines 1756 and 1763 (TaskProvider fields/getters)
+**Action:** Delete these lines
+
+**Delete:**
+```dart
+Set<String> _collapsedTaskIds = {}; // IDs of collapsed parent tasks
+```
+
+**Delete:**
+```dart
+Set<String> get collapsedTaskIds => _collapsedTaskIds;
+```
+
+**Reason:** TreeController manages expansion state via `toggleExpansion()` and `setExpansionState()`.
+The `_collapsedTaskIds` Set is no longer used.
+
+### Step 4.2: Remove Old toggleCollapse Method
+
+**Location:** Lines 1806-1812 (old toggleCollapse implementation)
+**Action:** Delete entire method (already replaced in Phase 2 Step 2.6)
+
+**Delete:**
+```dart
+  void toggleCollapse(String taskId) {
+    if (_collapsedTaskIds.contains(taskId)) {
+      _collapsedTaskIds.remove(taskId);
+    } else {
+      _collapsedTaskIds.add(taskId);
+    }
+    notifyListeners();
+  }
+```
+
+**Note:** Phase 2 Step 2.6 already added the new `toggleCollapse(Task task)` that uses TreeController.
+
+### Step 4.3: Add Note to visibleTasks Getter
 
 **Location:** Lines 1782-1803 (existing visibleTasks getter)
 **Action:** Add deprecation comment above method
@@ -557,7 +651,7 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
   /// TODO: Remove this once all code uses TreeController.
 ```
 
-### Step 4.2: Update HomeScreen Normal Mode to Use TreeView
+### Step 4.4: Update HomeScreen Normal Mode to Use TreeView
 
 **Location:** Lines 1964-1979 (HomeScreen ListView.builder for normal mode)
 **Action:** Replace with AnimatedTreeView
@@ -595,18 +689,68 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
                 depth: entry.node.depth,
                 isReorderMode: false,
                 hasChildren: taskProvider.hasChildren(entry.node.id),
-                isCollapsed: taskProvider.collapsedTaskIds.contains(entry.node.id),
-                onToggleCollapse: () => taskProvider.toggleCollapse(entry.node.id),
+                isExpanded: entry.isExpanded,  // ✅ Use TreeEntry.isExpanded
+                onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
               );
             },
           );
 ```
 
+### Step 4.5: Update Reorder Mode DragAndDropTaskTile
+
+**Location:** Lines 1944-1960 (HomeScreen reorder mode AnimatedTreeView)
+**Action:** Update DragAndDropTaskTile to remove isCollapsed and pass entry
+
+**Replace:**
+```dart
+          if (taskProvider.isReorderMode) {
+            return AnimatedTreeView<Task>(
+              treeController: taskProvider.treeController,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              nodeBuilder: (context, TreeEntry<Task> entry) {
+                return DragAndDropTaskTile(
+                  entry: entry,
+                  onNodeAccepted: taskProvider.onNodeAccepted,
+                  isReorderMode: true,
+                  isCollapsed: taskProvider.collapsedTaskIds.contains(entry.node.id),
+                  onToggleCollapse: () => taskProvider.toggleCollapse(entry.node.id),
+                  taskProvider: taskProvider, // For hasChildren check
+                );
+              },
+            );
+          }
+```
+
+**With:**
+```dart
+          if (taskProvider.isReorderMode) {
+            return AnimatedTreeView<Task>(
+              treeController: taskProvider.treeController,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              nodeBuilder: (context, TreeEntry<Task> entry) {
+                return DragAndDropTaskTile(
+                  entry: entry,
+                  onNodeAccepted: taskProvider.onNodeAccepted,
+                  taskProvider: taskProvider,
+                );
+              },
+            );
+          }
+```
+
+**Note:** DragAndDropTaskTile will be updated to extract info from `entry` (including `entry.isExpanded`).
+The wrapper should handle passing the full TreeEntry to TaskItem. See tree-drag-drop-integration-plan.md.
+
 ### Verification 4:
+- [ ] _collapsedTaskIds Set removed
+- [ ] collapsedTaskIds getter removed
+- [ ] Old toggleCollapse(String taskId) removed
 - [ ] visibleTasks has deprecation warning
 - [ ] Both normal and reorder modes use AnimatedTreeView
 - [ ] TreeController is single source of visibility truth
 - [ ] No more ListView.builder in HomeScreen
+- [ ] isCollapsed parameter removed from TaskItem builders
+- [ ] onToggleCollapse passes Task object (not String ID)
 
 ---
 
@@ -617,7 +761,7 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 **Estimated Time:** 10 minutes
 **Risk:** LOW
 
-### Step 5.1: Add depth and decoration Parameters
+### Step 5.1: Add depth and decoration Parameters, Rename isCollapsed to isExpanded
 
 **Location:** Lines 2015-2028 (TaskItem constructor)
 **Action:** Update class fields and constructor
@@ -653,7 +797,7 @@ class TaskItem extends StatelessWidget {
   final int depth;  // ✅ Explicit parameter
   final bool isReorderMode;
   final bool hasChildren;
-  final bool isCollapsed;
+  final bool isExpanded;  // ✅ RENAMED from isCollapsed (aligns with TreeController API)
   final VoidCallback onToggleCollapse;
   final Decoration? decoration;  // ✅ Optional for drag feedback
 
@@ -663,7 +807,7 @@ class TaskItem extends StatelessWidget {
     required this.depth,  // ✅ Required
     required this.isReorderMode,
     required this.hasChildren,
-    required this.isCollapsed,
+    required this.isExpanded,  // ✅ RENAMED from isCollapsed
     required this.onToggleCollapse,
     this.decoration,  // ✅ Optional
   }) : super(key: key);
@@ -720,11 +864,44 @@ class TaskItem extends StatelessWidget {
         child: ListTile(
 ```
 
+### Step 5.3: Update Icon Logic to Use isExpanded
+
+**Location:** Lines 2103-2110 (_buildLeadingIcon method)
+**Action:** Update icon to use `isExpanded` instead of `isCollapsed`
+
+**Replace:**
+```dart
+      // Parent task: Show expand/collapse button
+      return IconButton(
+        icon: Icon(
+          isCollapsed ? Icons.chevron_right : Icons.expand_more,
+        ),
+        iconSize: 20,
+        padding: EdgeInsets.zero,
+        onPressed: onToggleCollapse,
+      );
+```
+
+**With:**
+```dart
+      // Parent task: Show expand/collapse button
+      return IconButton(
+        icon: Icon(
+          isExpanded ? Icons.expand_more : Icons.chevron_right,  // ✅ Inverted logic
+        ),
+        iconSize: 20,
+        padding: EdgeInsets.zero,
+        onPressed: onToggleCollapse,
+      );
+```
+
 ### Verification 5:
 - [ ] TaskItem has depth parameter
 - [ ] TaskItem has decoration parameter
+- [ ] TaskItem isCollapsed renamed to isExpanded
+- [ ] Icon logic updated (isExpanded ? expand_more : chevron_right)
 - [ ] build() uses decoration if provided
-- [ ] All TaskItem instantiations updated (in Phase 4.2)
+- [ ] All TaskItem instantiations updated (in Phase 4)
 
 ---
 
