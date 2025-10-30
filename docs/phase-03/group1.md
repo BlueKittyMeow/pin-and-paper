@@ -1830,23 +1830,6 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  /// ⚠️ DEPRECATED: This getter is superseded by TreeController for tree view.
-  ///
-  /// TreeController manages visibility through its own expansion state.
-  /// This getter is kept for backwards compatibility but should not be used
-  /// with AnimatedTreeView. Use TreeController.roots instead.
-  ///
-  /// TODO: Remove this once all code uses TreeController.
-  List<Task> get visibleTasks {
-    // Returns all root tasks (TreeController handles visibility)
-    return _tasks.where((t) => t.parentId == null).toList();
-  }
-
-  /// Check if task has children
-  bool hasChildren(String taskId) {
-    return _tasks.any((t) => t.parentId == taskId);
-  }
-
   /// Enter/exit reorder mode
   void setReorderMode(bool enabled) {
     _isReorderMode = enabled;
@@ -2027,9 +2010,8 @@ class HomeScreen extends StatelessWidget {
             return Center(child: Text(taskProvider.errorMessage!));
           }
 
-          final visibleTasks = taskProvider.visibleTasks;
-
-          if (visibleTasks.isEmpty) {
+          // Check if there are any root tasks
+          if (taskProvider.treeController.roots.isEmpty) {
             return const Center(
               child: Text('No tasks yet.\nAdd one above!'),
             );
@@ -2060,7 +2042,7 @@ class HomeScreen extends StatelessWidget {
                 task: entry.node,
                 depth: entry.node.depth,
                 isReorderMode: false,
-                hasChildren: taskProvider.hasChildren(entry.node.id),
+                hasChildren: entry.hasChildren,  // ✅ Use TreeEntry.hasChildren
                 isExpanded: entry.isExpanded,  // ✅ Use TreeEntry.isExpanded
                 onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
               );
@@ -2365,11 +2347,11 @@ class TaskContextMenu extends StatelessWidget {
 ### Phase 3.2 Completion Criteria
 
 - [ ] TaskService implements hierarchical queries
-- [ ] TaskProvider manages collapse/expand state
+- [ ] TaskProvider manages collapse/expand state via TreeController
 - [ ] HomeScreen displays tasks with indentation
-- [ ] ReorderableListView implemented for reorder mode
+- [ ] AnimatedTreeView + DragAndDropTaskTile implemented for reorder mode
 - [ ] TaskItem shows expand/collapse buttons for parents
-- [ ] Drag handle visible in reorder mode
+- [ ] Drag-and-drop with hover zones (30/40/30) works correctly
 - [ ] Context menu implemented with all actions
 - [ ] CASCADE delete confirmation dialog works
 - [ ] Maximum nesting depth (4 levels) enforced
