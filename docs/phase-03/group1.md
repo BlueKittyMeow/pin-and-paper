@@ -207,7 +207,7 @@ class Task {
       // New fields
       'parent_id': parentId,
       'position': position,
-      'depth': depth,
+      // ❌ REMOVED 'depth': depth - computed field, not persisted in database
       'is_template': isTemplate ? 1 : 0,
       'due_date': dueDate?.millisecondsSinceEpoch,
       'is_all_day': isAllDay ? 1 : 0,
@@ -294,6 +294,22 @@ class Task {
 **File:** `lib/models/user_settings.dart` (NEW FILE)
 
 ```dart
+import 'package:clock/clock.dart';
+
+/// Wrapper class to distinguish "parameter not provided" from "explicitly set to null"
+/// in copyWith methods.
+///
+/// Example usage:
+/// ```dart
+/// settings.copyWith();  // Keep existing timezoneId
+/// settings.copyWith(timezoneId: Value('America/New_York'));  // Set to new value
+/// settings.copyWith(timezoneId: Value(null));  // Clear back to null
+/// ```
+class Value<T> {
+  const Value(this.value);
+  final T value;
+}
+
 class UserSettings {
   final int id; // Always 1 (single-row table)
 
@@ -401,7 +417,7 @@ class UserSettings {
 
   /// Create default settings (for first-time initialization)
   factory UserSettings.defaults() {
-    final now = DateTime.now();
+    final now = clock.now(); // ✅ Use clock for testable timestamps
     return UserSettings(
       createdAt: now,
       updatedAt: now,
@@ -418,7 +434,7 @@ class UserSettings {
     int? todayCutoffHour,
     int? todayCutoffMinute,
     int? weekStartDay,
-    String? timezoneId,
+    Value<String?>? timezoneId, // ✅ Wrapped in Value to enable clearing to null
     bool? use24HourTime,
     String? autoCompleteChildren,
     int? defaultNotificationHour,
@@ -437,14 +453,14 @@ class UserSettings {
       todayCutoffHour: todayCutoffHour ?? this.todayCutoffHour,
       todayCutoffMinute: todayCutoffMinute ?? this.todayCutoffMinute,
       weekStartDay: weekStartDay ?? this.weekStartDay,
-      timezoneId: timezoneId ?? this.timezoneId,
+      timezoneId: timezoneId != null ? timezoneId.value : this.timezoneId, // ✅ Unwrap Value
       use24HourTime: use24HourTime ?? this.use24HourTime,
       autoCompleteChildren: autoCompleteChildren ?? this.autoCompleteChildren,
       defaultNotificationHour: defaultNotificationHour ?? this.defaultNotificationHour,
       defaultNotificationMinute: defaultNotificationMinute ?? this.defaultNotificationMinute,
       voiceSmartPunctuation: voiceSmartPunctuation ?? this.voiceSmartPunctuation,
       createdAt: this.createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
+      updatedAt: updatedAt ?? clock.now(), // ✅ Use clock for testable timestamps
     );
   }
 }
@@ -770,6 +786,203 @@ Future<void> _migrateToV4(Database db) async {
 
   print('✅ Database migrated to v4 successfully');
 }
+
+/// Create database from scratch (fresh installs)
+///
+/// CRITICAL: This creates the COMPLETE Phase 3 (v4) schema.
+/// Must match the end state of _migrateToV4 to ensure parity between
+/// fresh installs and migrated databases.
+Future<void> _createDB(Database db, int version) async {
+  // ===========================================
+  // 1. CREATE TASKS TABLE (with ALL Phase 3 columns)
+  // ===========================================
+
+  await db.execute('''
+    CREATE TABLE ${AppConstants.tasksTable} (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      completed INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      completed_at INTEGER,
+
+      -- Phase 3.1: Date fields
+      due_date INTEGER,
+      is_all_day INTEGER DEFAULT 1,
+      start_date INTEGER,
+
+      -- Phase 3.1: Nesting
+      parent_id TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+
+      -- Phase 3.1: Template support
+      is_template INTEGER NOT NULL DEFAULT 0,
+
+      -- Phase 3.1: Notification support
+      notification_type TEXT NOT NULL DEFAULT 'use_global',
+      notification_time INTEGER,
+
+      FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+    )
+  ''');
+
+  // ===========================================
+  // 2. CREATE USER SETTINGS TABLE
+  // ===========================================
+
+  await db.execute('''
+    CREATE TABLE ${AppConstants.userSettingsTable} (
+      id INTEGER PRIMARY KEY,
+      early_morning_hour INTEGER NOT NULL DEFAULT 5,
+      morning_hour INTEGER NOT NULL DEFAULT 9,
+      noon_hour INTEGER NOT NULL DEFAULT 12,
+      afternoon_hour INTEGER NOT NULL DEFAULT 15,
+      tonight_hour INTEGER NOT NULL DEFAULT 19,
+      late_night_hour INTEGER NOT NULL DEFAULT 22,
+      today_cutoff_hour INTEGER NOT NULL DEFAULT 4,
+      today_cutoff_minute INTEGER NOT NULL DEFAULT 59,
+      week_start_day INTEGER NOT NULL DEFAULT 1,
+      timezone_id TEXT,
+      use_24hour_time INTEGER NOT NULL DEFAULT 0,
+      auto_complete_children TEXT NOT NULL DEFAULT 'prompt',
+      default_notification_hour INTEGER NOT NULL DEFAULT 9,
+      default_notification_minute INTEGER NOT NULL DEFAULT 0,
+      voice_smart_punctuation INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''');
+
+  // ===========================================
+  // 3. CREATE FUTURE TABLES (Phase 3.1 preparation)
+  // ===========================================
+
+  // Brain dump drafts (from Phase 2)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.brainDumpDraftsTable} (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_modified INTEGER NOT NULL
+    )
+  ''');
+
+  // API usage log (from Phase 2)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.apiUsageLogTable} (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      operation_type TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL,
+      output_tokens INTEGER NOT NULL,
+      estimated_cost_usd REAL NOT NULL,
+      model_name TEXT NOT NULL
+    )
+  ''');
+
+  // Task images (Phase 3.1 preparation)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.taskImagesTable} (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      image_path TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+    )
+  ''');
+
+  // Entities (Phase 3.1 preparation)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.entitiesTable} (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(name, entity_type)
+    )
+  ''');
+
+  // Tags (Phase 3.1 preparation)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.tagsTable} (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      created_at INTEGER NOT NULL
+    )
+  ''');
+
+  // Task-Entity junction (Phase 3.1 preparation)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.taskEntitiesTable} (
+      task_id TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      PRIMARY KEY (task_id, entity_id),
+      FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE,
+      FOREIGN KEY (entity_id) REFERENCES ${AppConstants.entitiesTable}(id) ON DELETE CASCADE
+    )
+  ''');
+
+  // Task-Tag junction (Phase 3.1 preparation)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.taskTagsTable} (
+      task_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      PRIMARY KEY (task_id, tag_id),
+      FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE,
+      FOREIGN KEY (tag_id) REFERENCES ${AppConstants.tagsTable}(id) ON DELETE CASCADE
+    )
+  ''');
+
+  // ===========================================
+  // 4. CREATE ALL INDEXES (12 total)
+  // ===========================================
+
+  // Task indexes (existing + new)
+  await db.execute('CREATE INDEX idx_tasks_completed ON ${AppConstants.tasksTable}(completed)');
+  await db.execute('CREATE INDEX idx_tasks_completed_at ON ${AppConstants.tasksTable}(completed_at)');
+  await db.execute('CREATE INDEX idx_tasks_created_at ON ${AppConstants.tasksTable}(created_at)');
+  await db.execute('CREATE INDEX idx_tasks_due_date ON ${AppConstants.tasksTable}(due_date)');
+  await db.execute('CREATE INDEX idx_tasks_parent ON ${AppConstants.tasksTable}(parent_id)');
+  await db.execute('CREATE INDEX idx_tasks_position ON ${AppConstants.tasksTable}(parent_id, position)');
+  await db.execute('CREATE INDEX idx_tasks_hierarchy ON ${AppConstants.tasksTable}(parent_id, position, completed)');
+
+  // Brain dump drafts index
+  await db.execute('CREATE INDEX idx_drafts_modified ON ${AppConstants.brainDumpDraftsTable}(last_modified DESC)');
+
+  // API usage indexes
+  await db.execute('CREATE INDEX idx_usage_timestamp ON ${AppConstants.apiUsageLogTable}(timestamp DESC)');
+  await db.execute('CREATE INDEX idx_usage_operation ON ${AppConstants.apiUsageLogTable}(operation_type, timestamp DESC)');
+  await db.execute('CREATE INDEX idx_usage_model ON ${AppConstants.apiUsageLogTable}(model_name, timestamp DESC)');
+  await db.execute('CREATE INDEX idx_usage_month ON ${AppConstants.apiUsageLogTable}(timestamp DESC, estimated_cost_usd)');
+
+  // ===========================================
+  // 5. SEED USER SETTINGS
+  // ===========================================
+
+  final now = DateTime.now().millisecondsSinceEpoch;
+
+  await db.insert(AppConstants.userSettingsTable, {
+    'id': 1,
+    'early_morning_hour': 5,
+    'morning_hour': 9,
+    'noon_hour': 12,
+    'afternoon_hour': 15,
+    'tonight_hour': 19,
+    'late_night_hour': 22,
+    'today_cutoff_hour': 4,
+    'today_cutoff_minute': 59,
+    'week_start_day': 1,
+    'timezone_id': null, // Populated when user sets up notifications
+    'use_24hour_time': 0,
+    'auto_complete_children': 'prompt',
+    'default_notification_hour': 9,
+    'default_notification_minute': 0,
+    'voice_smart_punctuation': 1,
+    'created_at': now,
+    'updated_at': now,
+  });
+
+  print('✅ Database created with v4 schema');
+}
 ```
 
 ---
@@ -810,6 +1023,7 @@ class AppConstants {
 **File:** `lib/services/user_settings_service.dart` (NEW FILE)
 
 ```dart
+import 'package:clock/clock.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/user_settings.dart';
 import '../utils/constants.dart';
@@ -839,7 +1053,7 @@ class UserSettingsService {
   Future<UserSettings> updateUserSettings(UserSettings settings) async {
     final db = await _databaseService.database;
 
-    final updatedSettings = settings.copyWith(updatedAt: DateTime.now());
+    final updatedSettings = settings.copyWith(updatedAt: clock.now()); // ✅ Use clock for testable timestamps
 
     await db.update(
       AppConstants.userSettingsTable,
@@ -1727,21 +1941,19 @@ class HomeScreen extends StatelessWidget {
             );
           }
 
-          // Reorder mode: Use ReorderableListView
+          // Reorder mode: Use flutter_fancy_tree_view2 for hierarchical drag-and-drop
           if (taskProvider.isReorderMode) {
-            return ReorderableListView.builder(
+            return AnimatedTreeView<Task>(
+              treeController: taskProvider.treeController,
               padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: visibleTasks.length,
-              onReorder: taskProvider.reorderTasks,
-              itemBuilder: (context, index) {
-                final task = visibleTasks[index];
-                return TaskItem(
-                  key: ValueKey(task.id),
-                  task: task,
+              nodeBuilder: (context, TreeEntry<Task> entry) {
+                return DragAndDropTaskTile(
+                  entry: entry,
+                  onNodeAccepted: taskProvider.onNodeAccepted,
                   isReorderMode: true,
-                  hasChildren: taskProvider.hasChildren(task.id),
-                  isCollapsed: taskProvider.collapsedTaskIds.contains(task.id),
-                  onToggleCollapse: () => taskProvider.toggleCollapse(task.id),
+                  isCollapsed: taskProvider.collapsedTaskIds.contains(entry.node.id),
+                  onToggleCollapse: () => taskProvider.toggleCollapse(entry.node.id),
+                  taskProvider: taskProvider, // For hasChildren check
                 );
               },
             );
@@ -1773,7 +1985,26 @@ class HomeScreen extends StatelessWidget {
 
 ---
 
-### Step 4: Update TaskItem Widget for Hierarchy
+### Step 4: Implement Tree Drag-and-Drop Widget
+
+**IMPORTANT:** For tree-based drag-and-drop implementation details, see:
+**`docs/phase-03/tree-drag-drop-integration-plan.md`**
+
+That document provides complete implementation for:
+- `DragAndDropTaskTile` widget (wraps TaskItem with drag-and-drop)
+- TreeController setup in TaskProvider
+- `onNodeAccepted` handler with hover zone pattern (30/40/30 split)
+- Visual feedback (borders showing drop location)
+- Depth limit validation
+- Optimistic state updates
+
+**File:** `lib/widgets/drag_and_drop_task_tile.dart` (NEW FILE)
+
+See tree-drag-drop-integration-plan.md for complete implementation.
+
+---
+
+### Step 5: Update TaskItem Widget for Hierarchy
 
 **File:** `lib/widgets/task_item.dart`
 

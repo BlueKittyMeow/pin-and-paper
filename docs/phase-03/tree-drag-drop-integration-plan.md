@@ -90,9 +90,9 @@ class Task {
   // ... existing fields ...
 
   // For flutter_fancy_tree_view2 compatibility
-  Task? get parent => parentId; // Will be resolved by TaskProvider
+  String? get parentIdForTree => parentId; // Expose parent ID for tree
   int get index => position;
-  bool get isLeaf => !hasChildren; // Will be checked by TaskProvider
+  // Note: isLeaf check will be done via TaskProvider.hasChildren()
 }
 ```
 
@@ -107,25 +107,47 @@ import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 
 class TaskProvider with ChangeNotifier {
   // ... existing fields ...
+  List<Task> _tasks = [];
 
   late TreeController<Task> treeController;
 
-  @override
-  void initState() {
+  // Initialize in constructor, NOT initState (ChangeNotifier is not a StatefulWidget)
+  TaskProvider() {
     treeController = TreeController<Task>(
-      roots: _tasks.where((t) => t.parentId == null),
+      roots: [],  // Start empty, will be populated in loadTasks
       childrenProvider: (Task task) => _tasks.where((t) => t.parentId == task.id),
-      parentProvider: (Task task) {
-        if (task.parentId == null) return null;
-        return _tasks.firstWhere((t) => t.id == task.parentId);
-      },
+      parentProvider: (Task task) => _findParent(task.parentId),
     );
+  }
+
+  Task? _findParent(String? parentId) {
+    if (parentId == null) return null;
+    try {
+      return _tasks.firstWhere((t) => t.id == parentId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  bool hasChildren(String taskId) {
+    return _tasks.any((t) => t.parentId == taskId);
+  }
+
+  Future<void> loadTasks() async {
+    _tasks = await _taskService.getAllTasksHierarchical();
+
+    // ✅ CRITICAL: Refresh roots after loading tasks
+    treeController.roots = _tasks.where((t) => t.parentId == null);
+    treeController.rebuild();
+
+    notifyListeners();
   }
 
   /// Handle drag-and-drop reordering with hierarchy support
   Future<void> onNodeAccepted(TreeDragAndDropDetails<Task> details) async {
     String? newParentId;
     int newPosition;
+    int newDepth;
 
     // Use the hover zone pattern to determine drop location
     details.mapDropPosition(
@@ -133,12 +155,14 @@ class TaskProvider with ChangeNotifier {
         // Insert as previous sibling of target
         newParentId = details.targetNode.parentId;
         newPosition = details.targetNode.position;
+        newDepth = details.targetNode.depth; // ✅ Use existing depth from target
       },
       whenInside: () {
         // Insert as last child of target
         newParentId = details.targetNode.id;
         final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
         newPosition = siblings.length;
+        newDepth = details.targetNode.depth + 1; // ✅ Parent's depth + 1
 
         // Auto-expand target to show new child
         treeController.setExpansionState(details.targetNode, true);
@@ -147,12 +171,12 @@ class TaskProvider with ChangeNotifier {
         // Insert as next sibling of target
         newParentId = details.targetNode.parentId;
         newPosition = details.targetNode.position + 1;
+        newDepth = details.targetNode.depth; // ✅ Use existing depth from target
       },
     );
 
-    // Validate depth limit
-    final newDepth = await _calculateDepth(newParentId);
-    if (newDepth >= 3) {
+    // Validate depth limit using calculated depth (no O(N) walk needed)
+    if (newDepth >= 4) {
       // Show error: "Maximum nesting depth (4 levels) reached"
       _showDepthLimitError();
       return;
@@ -165,20 +189,42 @@ class TaskProvider with ChangeNotifier {
       newPosition: newPosition,
     );
 
-    // Rebuild tree view
-    await loadTasks();
-    treeController.rebuild();
-  }
+    // ✅ Optimistic update: Update in-memory state BEFORE reloading from DB
+    final movedTaskIndex = _tasks.indexWhere((t) => t.id == details.draggedNode.id);
+    if (movedTaskIndex != -1) {
+      final movedTask = _tasks[movedTaskIndex];
 
-  Future<int> _calculateDepth(String? parentId) async {
-    if (parentId == null) return 0;
-    final parent = _tasks.firstWhere((t) => t.id == parentId);
-    return 1 + await _calculateDepth(parent.parentId);
+      // Create updated task with new parent/position/depth
+      final updatedTask = Task(
+        id: movedTask.id,
+        title: movedTask.title,
+        completed: movedTask.completed,
+        createdAt: movedTask.createdAt,
+        completedAt: movedTask.completedAt,
+        dueDate: movedTask.dueDate,
+        isAllDay: movedTask.isAllDay,
+        parentId: newParentId,
+        position: newPosition,
+        depth: newDepth,
+      );
+
+      // Replace in list
+      _tasks[movedTaskIndex] = updatedTask;
+    }
+
+    // ✅ Refresh tree controller with updated in-memory state (no DB round-trip)
+    treeController.roots = _tasks.where((t) => t.parentId == null);
+    treeController.rebuild();
+
+    notifyListeners();
+
+    // Optional: Reload from DB in background to ensure consistency
+    // This is a "trust but verify" approach - uncomment if needed
+    // unawaited(loadTasks());
   }
 
   void _showDepthLimitError() {
-    // Show snackbar or dialog
-    // "Cannot move task: Maximum nesting depth (4 levels) reached"
+    // Show snackbar: "Cannot move task: Maximum nesting depth (4 levels) reached"
   }
 
   @override
@@ -191,9 +237,11 @@ class TaskProvider with ChangeNotifier {
 
 **Key Points:**
 - ✅ Reuses existing `changeTaskParent` method (cycle detection + sibling reindexing already implemented)
-- ✅ Validates depth limit before moving
+- ✅ Validates depth limit using existing depth field (no O(N) calculation)
+- ✅ Optimistic UI updates (updates in-memory state, no DB round-trip per drag)
 - ✅ Auto-expands target when making child
 - ✅ Uses `mapDropPosition` helper for clean zone logic
+- ✅ Refreshes treeController.roots after state changes
 
 ---
 
@@ -221,6 +269,7 @@ return AnimatedTreeView<Task>(
       isReorderMode: taskProvider.isReorderMode,
       isCollapsed: taskProvider.collapsedTaskIds.contains(entry.node.id),
       onToggleCollapse: () => taskProvider.toggleCollapse(entry.node.id),
+      taskProvider: taskProvider, // Pass provider for hasChildren check
     );
   },
 );
@@ -241,6 +290,7 @@ class DragAndDropTaskTile extends StatelessWidget {
     required this.isReorderMode,
     required this.isCollapsed,
     required this.onToggleCollapse,
+    required this.taskProvider, // Need provider to check hasChildren
   });
 
   final TreeEntry<Task> entry;
@@ -248,16 +298,20 @@ class DragAndDropTaskTile extends StatelessWidget {
   final bool isReorderMode;
   final bool isCollapsed;
   final VoidCallback onToggleCollapse;
+  final TaskProvider taskProvider;
 
   @override
   Widget build(BuildContext context) {
+    // Check if task has children via provider
+    final hasChildren = taskProvider.hasChildren(entry.node.id);
+
     // Only enable drag-and-drop in reorder mode
     if (!isReorderMode) {
       return TaskItem(
         task: entry.node,
         depth: entry.node.depth,
         isReorderMode: false,
-        hasChildren: !entry.node.isLeaf,
+        hasChildren: hasChildren,
         isCollapsed: isCollapsed,
         onToggleCollapse: onToggleCollapse,
       );
@@ -298,7 +352,7 @@ class DragAndDropTaskTile extends StatelessWidget {
                 task: entry.node,
                 depth: entry.node.depth,
                 isReorderMode: true,
-                hasChildren: !entry.node.isLeaf,
+                hasChildren: hasChildren,
                 isCollapsed: isCollapsed,
                 onToggleCollapse: onToggleCollapse,
               ),
@@ -313,7 +367,7 @@ class DragAndDropTaskTile extends StatelessWidget {
                 task: entry.node,
                 depth: 0, // No indentation in feedback
                 isReorderMode: true,
-                hasChildren: !entry.node.isLeaf,
+                hasChildren: hasChildren,
                 isCollapsed: isCollapsed,
                 onToggleCollapse: () {}, // No-op in feedback
               ),
@@ -325,7 +379,7 @@ class DragAndDropTaskTile extends StatelessWidget {
             task: entry.node,
             depth: entry.node.depth,
             isReorderMode: true,
-            hasChildren: !entry.node.isLeaf,
+            hasChildren: hasChildren,
             isCollapsed: isCollapsed,
             onToggleCollapse: onToggleCollapse,
             decoration: decoration, // Add this parameter to TaskItem
