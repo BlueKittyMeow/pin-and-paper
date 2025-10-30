@@ -166,7 +166,7 @@ class UserSettings {
           defaultNotificationMinute ?? this.defaultNotificationMinute,
       voiceSmartPunctuation:
           voiceSmartPunctuation ?? this.voiceSmartPunctuation,
-      createdAt: this.createdAt,
+      createdAt: createdAt,
       updatedAt: updatedAt ?? clock.now(), // Use clock for testable timestamps
     );
   }
