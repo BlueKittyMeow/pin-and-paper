@@ -73,6 +73,11 @@ CREATE TABLE tasks (
 )
 ```
 
+**Note on due_date:** PROJECT_SPEC.md documented `due_date`, `notes`, and `priority` in the
+Phase 1 schema, but these were never implemented. The actual Phase 1 implementation only
+includes 5 columns (id, title, completed, created_at, completed_at). We are adding
+`due_date` and related columns NOW in Phase 3 for the first time.
+
 **Task Model:** `lib/models/task.dart`
 ```dart
 class Task {
@@ -159,6 +164,7 @@ class Task {
   // Phase 3.1: Nesting support
   final String? parentId;         // NULL = top-level task
   final int position;             // Order within parent (or root level)
+  final int depth;                // Hierarchy depth (0-3, populated by queries)
 
   // Phase 3.1: Template support
   final bool isTemplate;          // true = task is a template
@@ -181,6 +187,7 @@ class Task {
     // New fields with defaults
     this.parentId,
     this.position = 0,
+    this.depth = 0,
     this.isTemplate = false,
     this.dueDate,
     this.isAllDay = true,
@@ -200,6 +207,7 @@ class Task {
       // New fields
       'parent_id': parentId,
       'position': position,
+      'depth': depth,
       'is_template': isTemplate ? 1 : 0,
       'due_date': dueDate?.millisecondsSinceEpoch,
       'is_all_day': isAllDay ? 1 : 0,
@@ -222,11 +230,12 @@ class Task {
       // New fields (handle NULL for backward compatibility)
       parentId: map['parent_id'] as String?,
       position: (map['position'] as int?) ?? 0,
+      depth: (map['depth'] as int?) ?? 0,
       isTemplate: (map['is_template'] as int?) == 1,
       dueDate: map['due_date'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['due_date'] as int)
           : null,
-      isAllDay: (map['is_all_day'] as int?) != 0, // Default to true
+      isAllDay: (map['is_all_day'] as int?) == null ? true : map['is_all_day'] != 0,
       startDate: map['start_date'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['start_date'] as int)
           : null,
@@ -246,6 +255,7 @@ class Task {
     DateTime? completedAt,
     String? parentId,
     int? position,
+    int? depth,
     bool? isTemplate,
     DateTime? dueDate,
     bool? isAllDay,
@@ -261,6 +271,7 @@ class Task {
       completedAt: completedAt ?? this.completedAt,
       parentId: parentId ?? this.parentId,
       position: position ?? this.position,
+      depth: depth ?? this.depth,
       isTemplate: isTemplate ?? this.isTemplate,
       dueDate: dueDate ?? this.dueDate,
       isAllDay: isAllDay ?? this.isAllDay,
@@ -432,7 +443,7 @@ class UserSettings {
       defaultNotificationHour: defaultNotificationHour ?? this.defaultNotificationHour,
       defaultNotificationMinute: defaultNotificationMinute ?? this.defaultNotificationMinute,
       voiceSmartPunctuation: voiceSmartPunctuation ?? this.voiceSmartPunctuation,
-      createdAt: createdAt,
+      createdAt: this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
   }
@@ -1286,7 +1297,7 @@ class TaskService {
         SELECT
           *,
           0 as depth,
-          position as sort_key
+          printf('%05d', position) as sort_key
         FROM ${AppConstants.tasksTable}
         WHERE parent_id IS NULL
 
@@ -1299,7 +1310,7 @@ class TaskService {
           tt.sort_key || '.' || printf('%05d', t.position) as sort_key
         FROM ${AppConstants.tasksTable} t
         INNER JOIN task_tree tt ON t.parent_id = tt.id
-        WHERE tt.depth < 3  -- Max 4 levels (0-indexed)
+        WHERE tt.depth < 4  -- Max 4 levels (0-indexed: 0, 1, 2, 3)
       )
       SELECT * FROM task_tree
       ORDER BY sort_key
@@ -1328,28 +1339,53 @@ class TaskService {
   }) async {
     final db = await _databaseService.database;
 
-    // Validate depth if moving to new parent
-    if (newParentId != null) {
-      final depth = await _getTaskDepth(newParentId);
-      if (depth >= 3) {
-        throw Exception('Maximum nesting depth (4 levels) exceeded');
+    await db.transaction((txn) async {
+      // 1. Validate depth if moving to new parent
+      if (newParentId != null) {
+        final depth = await _getTaskDepth(newParentId, txn);
+        if (depth >= 3) {
+          throw Exception('Maximum nesting depth (4 levels) exceeded');
+        }
       }
-    }
 
-    await db.update(
-      AppConstants.tasksTable,
-      {
-        'parent_id': newParentId,
-        'position': newPosition,
-      },
-      where: 'id = ?',
-      whereArgs: [taskId],
-    );
+      // 2. Check for cycles - prevent moving task under its own descendant
+      if (newParentId != null && await _wouldCreateCycle(taskId, newParentId, txn)) {
+        throw Exception('Cannot move task under its own descendant');
+      }
+
+      // 3. Get old parent for source list reindexing
+      final oldTaskResult = await txn.query(
+        AppConstants.tasksTable,
+        columns: ['parent_id'],
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+      final oldParentId = oldTaskResult.isNotEmpty
+          ? oldTaskResult.first['parent_id'] as String?
+          : null;
+
+      // 4. Move task to new parent with new position
+      await txn.update(
+        AppConstants.tasksTable,
+        {
+          'parent_id': newParentId,
+          'position': newPosition,
+        },
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      // 5. Reindex siblings in SOURCE list (old parent)
+      await _reindexSiblings(oldParentId, txn);
+
+      // 6. Reindex siblings in DESTINATION list (new parent)
+      await _reindexSiblings(newParentId, txn);
+    });
   }
 
   /// Get depth of a task in the hierarchy
-  Future<int> _getTaskDepth(String taskId) async {
-    final db = await _databaseService.database;
+  Future<int> _getTaskDepth(String taskId, [dynamic dbOrTxn]) async {
+    final db = dbOrTxn ?? await _databaseService.database;
 
     final result = await db.rawQuery('''
       WITH RECURSIVE parent_chain AS (
@@ -1367,6 +1403,53 @@ class TaskService {
     ''', [taskId]);
 
     return (result.first['max_depth'] as int?) ?? 0;
+  }
+
+  /// Check if moving taskId under newParentId would create a cycle
+  Future<bool> _wouldCreateCycle(
+    String taskId,
+    String newParentId,
+    dynamic txn,
+  ) async {
+    // Walk up from newParentId to root, checking if we hit taskId
+    String? current = newParentId;
+
+    while (current != null) {
+      if (current == taskId) {
+        return true;  // Cycle detected!
+      }
+
+      final parent = await txn.query(
+        AppConstants.tasksTable,
+        columns: ['parent_id'],
+        where: 'id = ?',
+        whereArgs: [current],
+      );
+
+      if (parent.isEmpty) break;
+      current = parent.first['parent_id'] as String?;
+    }
+
+    return false;  // No cycle
+  }
+
+  /// Reindex siblings under a parent to maintain sequential positions
+  Future<void> _reindexSiblings(String? parentId, dynamic txn) async {
+    final siblings = await txn.query(
+      AppConstants.tasksTable,
+      where: parentId == null ? 'parent_id IS NULL' : 'parent_id = ?',
+      whereArgs: parentId == null ? null : [parentId],
+      orderBy: 'position ASC',
+    );
+
+    for (int i = 0; i < siblings.length; i++) {
+      await txn.update(
+        AppConstants.tasksTable,
+        {'position': i},
+        where: 'id = ?',
+        whereArgs: [siblings[i]['id']],
+      );
+    }
   }
 
   /// Get children of a task
@@ -1388,7 +1471,7 @@ class TaskService {
     final db = await _databaseService.database;
 
     // Get count of children for confirmation dialog
-    final childCount = await _getDescendantCount(taskId);
+    final childCount = await countDescendants(taskId);
 
     // Delete task (CASCADE will handle children automatically)
     await db.delete(
@@ -1401,7 +1484,7 @@ class TaskService {
   }
 
   /// Count descendants recursively
-  Future<int> _getDescendantCount(String taskId) async {
+  Future<int> countDescendants(String taskId) async {
     final db = await _databaseService.database;
 
     final result = await db.rawQuery('''
@@ -1570,7 +1653,7 @@ class TaskProvider with ChangeNotifier {
   ) async {
     try {
       // Get child count for confirmation
-      final childCount = await _taskService._getDescendantCount(taskId);
+      final childCount = await _taskService.countDescendants(taskId);
 
       // Show confirmation if has children
       if (childCount > 0) {
@@ -1713,11 +1796,9 @@ class TaskItem extends StatelessWidget {
     required this.onToggleCollapse,
   }) : super(key: key);
 
-  /// Calculate depth from parent_id chain (for indentation)
+  /// Get depth from Task model (populated by hierarchical query)
   int get depth {
-    // In practice, we'd store depth in the Task model during query
-    // For now, approximate based on parent_id presence
-    return task.parentId != null ? 1 : 0; // Simplified
+    return task.depth;
   }
 
   @override
@@ -2028,6 +2109,7 @@ class TaskContextMenu extends StatelessWidget {
 **File:** `lib/services/date_parser_service.dart` (NEW FILE)
 
 ```dart
+import 'package:clock/clock.dart';
 import 'package:intl/intl.dart';
 import '../models/user_settings.dart';
 
@@ -2086,7 +2168,7 @@ class DateParserService {
 
   /// Get user's effective "today" respecting day boundary
   DateTime getEffectiveToday() {
-    final now = DateTime.now();
+    final now = clock.now();  // Use clock for testability
     final cutoffHour = userSettings.todayCutoffHour;
     final cutoffMinute = userSettings.todayCutoffMinute;
 
@@ -2105,29 +2187,56 @@ class DateParserService {
 
   /// Parse absolute dates: "Jan 15", "2025-01-15", "1/15"
   ParsedDate? _parseAbsoluteDate(String text) {
-    // Try common date formats
+    // Split text into tokens to find date phrases within larger text
+    final words = text.split(RegExp(r'\s+'));
+
     final formats = [
       DateFormat('yyyy-MM-dd'),     // 2025-01-15
       DateFormat('MM/dd/yyyy'),     // 01/15/2025
       DateFormat('M/d/yyyy'),       // 1/15/2025
-      DateFormat('MM/dd'),          // 01/15 (current year)
-      DateFormat('M/d'),            // 1/15 (current year)
-      DateFormat('MMM d'),          // Jan 15
-      DateFormat('MMMM d'),         // January 15
+      DateFormat('MM/dd'),          // 01/15 (needs year normalization)
+      DateFormat('M/d'),            // 1/15 (needs year normalization)
+      DateFormat('MMM d'),          // Jan 15 (needs year normalization)
+      DateFormat('MMMM d'),         // January 15 (needs year normalization)
       DateFormat('MMM d, yyyy'),    // Jan 15, 2025
       DateFormat('MMMM d, yyyy'),   // January 15, 2025
     ];
 
-    for (final format in formats) {
-      try {
-        final parsed = format.parseStrict(text);
-        return ParsedDate(
-          dateTime: parsed,
-          isAllDay: true,
-          matchedPhrase: text,
-        );
-      } catch (e) {
-        // Try next format
+    // Try 1-4 word windows to find date phrases
+    for (int i = 0; i < words.length; i++) {
+      for (int windowSize = 1; windowSize <= 4 && i + windowSize <= words.length; windowSize++) {
+        final phrase = words.sublist(i, i + windowSize).join(' ');
+
+        for (final format in formats) {
+          try {
+            final parsed = format.parseStrict(phrase);
+
+            // Year normalization: if parsed year is before 2000, use current/next year
+            DateTime normalized = parsed;
+            if (parsed.year < 2000) {
+              final now = getEffectiveToday();
+              final currentYear = now.year;
+
+              // Try current year first
+              var candidate = DateTime(currentYear, parsed.month, parsed.day);
+
+              // If date is in the past, use next year
+              if (candidate.isBefore(now)) {
+                candidate = DateTime(currentYear + 1, parsed.month, parsed.day);
+              }
+
+              normalized = candidate;
+            }
+
+            return ParsedDate(
+              dateTime: normalized,
+              isAllDay: true,
+              matchedPhrase: phrase,
+            );
+          } catch (e) {
+            // Try next format
+          }
+        }
       }
     }
 
@@ -2533,6 +2642,7 @@ class DateParserService {
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/models/user_settings.dart';
 import 'package:pin_and_paper/services/date_parser_service.dart';
@@ -2571,13 +2681,34 @@ void main() {
       expect(result.dateTime!.weekday, DateTime.friday);
     });
 
-    test('respects user cutoff for "today"', () {
-      // Simulate it's 2am (before 4:59am cutoff)
-      // "today" should return yesterday's date
-      // NOTE: This test would need to mock DateTime.now()
-      // For now, test the getEffectiveToday method directly
+    test('respects user cutoff for "today" at 2am (before cutoff)', () {
+      // Mock current time to 2025-10-31 02:00:00 (before 4:59am cutoff)
+      withClock(Clock.fixed(DateTime(2025, 10, 31, 2, 0)), () {
+        final settings = UserSettings.defaults();
+        final parser = DateParserService(settings);
 
-      // TODO: Implement with clock mocking
+        final result = parser.parse('today');
+
+        // At 2am with 4:59am cutoff, "today" = yesterday (Oct 30)
+        expect(result.dateTime, isNotNull);
+        expect(result.dateTime!.day, 30);
+        expect(result.dateTime!.month, 10);
+      });
+    });
+
+    test('respects user cutoff for "today" at 5am (after cutoff)', () {
+      // Mock current time to 2025-10-31 05:00:00 (after 4:59am cutoff)
+      withClock(Clock.fixed(DateTime(2025, 10, 31, 5, 0)), () {
+        final settings = UserSettings.defaults();
+        final parser = DateParserService(settings);
+
+        final result = parser.parse('today');
+
+        // At 5am after 4:59am cutoff, "today" = Oct 31
+        expect(result.dateTime, isNotNull);
+        expect(result.dateTime!.day, 31);
+        expect(result.dateTime!.month, 10);
+      });
     });
 
     test('parses "weekend" as multi-day task', () {
@@ -2729,6 +2860,30 @@ Future<Task> createTaskWithParsedDate(String title) async {
   return task;
 }
 ```
+
+**Performance Optimization Note:** The above example creates a new `DateParserService` for every call, which is inefficient. In production, use service-level caching:
+
+```dart
+class TaskService {
+  DateParserService? _cachedParser;
+  UserSettings? _cachedSettings;
+
+  Future<Task> createTaskWithParsedDate(String title) async {
+    final userSettings = await UserSettingsService().getUserSettings();
+
+    // Reuse parser if settings haven't changed
+    if (_cachedParser == null || _cachedSettings != userSettings) {
+      _cachedParser = DateParserService(userSettings);
+      _cachedSettings = userSettings;
+    }
+
+    final parsedDate = _cachedParser!.parse(title);
+    // ... rest of implementation
+  }
+}
+```
+
+This avoids repeated object creation while still respecting user settings changes.
 
 ### Integration Point 2: Hierarchical Tasks with Dates
 

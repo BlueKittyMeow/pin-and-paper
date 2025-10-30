@@ -25,9 +25,10 @@
 - [Resolved] Junction-table indexes cover both `entity_id` and `task_id`, so Phase 5 lookups stay fast (`docs/phase-03/db-migration-checklist.md:97`). - Codex
 - [Resolved] Goals section clearly marks the widget as deferred, keeping top-level scope aligned with Priority 2 (`docs/phase-03/prelim-plan.md:37`). - Codex
 - [Resolved] Phase 3.1 treats the services/ directory reorg as optional cleanup, avoiding extra risk on the migration milestone (`docs/phase-03/prelim-plan.md:689`). - Codex
-- [Medium] Timezone workstreams expect us to “detect or store” the user’s zone, but the v4 `user_settings` schema still lacks a timezone column (`docs/phase-03/prelim-plan.md:536`) despite the Phase 3.5 checklist note (`docs/phase-03/prelim-plan.md:861`). Add a `timezone_id` (or similar) column plus seed value so notifications retain user preferences across launches. - Codex
-- [Low] Next steps still ask whether to defer the widget (`docs/phase-03/prelim-plan.md:1218`), which may re-open settled scope. Update the checklist to reflect the confirmed Phase 4 deferral. - Codex
-- [Low] Migration checklist header says “Create indexes (13 total)” but lists 12 entries (`docs/phase-03/db-migration-checklist.md:87`). Fix the count (or add the missing index) to keep verification straightforward. - Codex
+- [Resolved] `user_settings` now includes a `timezone_id` column and seeded default, so notification preferences persist across launches (`docs/phase-03/prelim-plan.md:556`, `docs/phase-03/db-migration-checklist.md:124`). - Codex
+- [Medium] Migration seeding still calls `tz.local.name` during `onUpgrade` (`docs/phase-03/db-migration-checklist.md:111`), but `tz.initializeTimeZones()` may not have run yet. Guard this call (try/catch + null fallback) or initialize tz before opening the database to avoid `TZDataNotInitializedException` on first launch. - Codex
+- [Resolved] Next steps list no longer reopens the widget decision, keeping scope locked (`docs/phase-03/prelim-plan.md:1213`). - Codex
+- [Resolved] Migration checklist now states “12 total” indexes, matching the defined entries (`docs/phase-03/db-migration-checklist.md:89`). - Codex
 
 ---
 
@@ -216,6 +217,7 @@
 - [x] **[MEDIUM - BlueKitty]** ✅ FIXED: Updated Phase 3.4 testing to "User validation (manual testing)" with clear note about device dependency (`docs/phase-03/prelim-plan.md:851`).
 - [x] **[LOW - BlueKitty]** ✅ FIXED: Added prominent privacy note at top of Phase 3.4 section clarifying raw transcripts are NOT stored (`docs/phase-03/prelim-plan.md:822`).
 - [x] **[STRETCH - BlueKitty]** ✅ RESEARCH COMPLETE: `speech_to_text` v6.6.0+ supports `autoPunctuation` parameter - on-the-fly punctuation IS feasible! Updated implementation plan (`docs/phase-03/prelim-plan.md:832`).
+- [ ] **[MEDIUM - Codex/Claude]** Guard migration-time timezone detection so `tz.local.name` doesn’t run before tz initialization (wrap in try/catch or move init ahead of `openDatabase`) (`docs/phase-03/db-migration-checklist.md:111`).
 - [x] **[LOW - Codex]** ✅ FIXED: Removed widget deferral question from Next Steps section (`docs/phase-03/prelim-plan.md:1225`).
 - [x] **[LOW - Codex/Claude]** ✅ FIXED: Updated index count to "12 total" in db-migration-checklist.md (`docs/phase-03/db-migration-checklist.md:87`).
 - [x] **[LOW - Gemini]** ✅ FIXED: Added clarifying comment to getEffectiveToday about inclusive boundary behavior (`docs/phase-03/prelim-plan.md:266`).
@@ -235,26 +237,15 @@
 
 ### Summary by Priority
 
-**CRITICAL:**
-- ✅ COMPLETED (4/4): CASCADE constraint, foreign keys ON, NULL handling, timezone strategy
+**CRITICAL:** 4 / 4 complete (CASCADE constraint, foreign keys, NULL backfill handling, timezone strategy).
 
-**HIGH:**
-- ✅ COMPLETED (5/5): Missing indexes, widget docs, home_widget package move, services/ refactor, timezone_id column
+**HIGH PRIORITY:** 11 / 12 complete. Remaining gap: guard `tz.local.name` during migration so tz initialization happens first or the call falls back safely.
 
-**ROUND 2 FIXES:**
-- ✅ COMPLETED (4/4): timezone_id column + seed, widget question removed, index count fixed, getEffectiveToday comment added
+**MEDIUM PRIORITY:** 4 / 4 complete (rollback testing, validation strategy, fixture spec, weekend edge case).
 
-**REMAINING:**
-- ✅ ALL COMPLETE! (0 remaining)
+**DOCUMENTATION CONSISTENCY:** 1 / 1 complete (raw transcript privacy note aligned with implementation).
 
-**FINAL ROUND (8 items completed):**
-- ✅ BlueKitty items (3/3): Offline STT verification wording, voice privacy prominence, smart punctuation research
-- ✅ Optional/Medium (4/4): Rollback testing procedure, validation strategy, test fixture spec, weekend edge case
-- ✅ Documentation Consistency (1/1): Raw transcript storage (N/A - not needed with on-the-fly punctuation)
-
-**Total Action Items:** 21 (21 completed ✅, 0 remaining ⏳)
-
-🎉 **All team feedback addressed! Preliminary planning complete and ready for Group 1 detailed implementation planning.**
+**Total Action Items:** 21 tracked → 20 complete ✅, 1 remaining ⏳ (migration-time timezone guard).
 
 ---
 
