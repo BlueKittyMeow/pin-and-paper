@@ -790,8 +790,7 @@ Future<void> _migrateToV4(Database db) async {
 /// Create database from scratch (fresh installs)
 ///
 /// CRITICAL: This creates the COMPLETE Phase 3 (v4) schema.
-/// Must match the end state of _migrateToV4 to ensure parity between
-/// fresh installs and migrated databases.
+/// Must match the end state of _migrateToV4 EXACTLY to ensure parity.
 Future<void> _createDB(Database db, int version) async {
   // ===========================================
   // 1. CREATE TASKS TABLE (with ALL Phase 3 columns)
@@ -810,15 +809,15 @@ Future<void> _createDB(Database db, int version) async {
       is_all_day INTEGER DEFAULT 1,
       start_date INTEGER,
 
-      -- Phase 3.1: Nesting
+      -- Phase 3.2: Nesting
       parent_id TEXT,
       position INTEGER NOT NULL DEFAULT 0,
 
       -- Phase 3.1: Template support
-      is_template INTEGER NOT NULL DEFAULT 0,
+      is_template INTEGER DEFAULT 0,
 
       -- Phase 3.1: Notification support
-      notification_type TEXT NOT NULL DEFAULT 'use_global',
+      notification_type TEXT DEFAULT 'use_global',
       notification_time INTEGER,
 
       FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
@@ -831,29 +830,29 @@ Future<void> _createDB(Database db, int version) async {
 
   await db.execute('''
     CREATE TABLE ${AppConstants.userSettingsTable} (
-      id INTEGER PRIMARY KEY,
-      early_morning_hour INTEGER NOT NULL DEFAULT 5,
-      morning_hour INTEGER NOT NULL DEFAULT 9,
-      noon_hour INTEGER NOT NULL DEFAULT 12,
-      afternoon_hour INTEGER NOT NULL DEFAULT 15,
-      tonight_hour INTEGER NOT NULL DEFAULT 19,
-      late_night_hour INTEGER NOT NULL DEFAULT 22,
-      today_cutoff_hour INTEGER NOT NULL DEFAULT 4,
-      today_cutoff_minute INTEGER NOT NULL DEFAULT 59,
-      week_start_day INTEGER NOT NULL DEFAULT 1,
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      early_morning_hour INTEGER DEFAULT 5,
+      morning_hour INTEGER DEFAULT 9,
+      noon_hour INTEGER DEFAULT 12,
+      afternoon_hour INTEGER DEFAULT 15,
+      tonight_hour INTEGER DEFAULT 19,
+      late_night_hour INTEGER DEFAULT 22,
+      today_cutoff_hour INTEGER DEFAULT 4,
+      today_cutoff_minute INTEGER DEFAULT 59,
+      week_start_day INTEGER DEFAULT 1,
       timezone_id TEXT,
-      use_24hour_time INTEGER NOT NULL DEFAULT 0,
-      auto_complete_children TEXT NOT NULL DEFAULT 'prompt',
-      default_notification_hour INTEGER NOT NULL DEFAULT 9,
-      default_notification_minute INTEGER NOT NULL DEFAULT 0,
-      voice_smart_punctuation INTEGER NOT NULL DEFAULT 1,
+      use_24hour_time INTEGER DEFAULT 0,
+      auto_complete_children TEXT DEFAULT 'prompt',
+      default_notification_hour INTEGER DEFAULT 9,
+      default_notification_minute INTEGER DEFAULT 0,
+      voice_smart_punctuation INTEGER DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
   ''');
 
   // ===========================================
-  // 3. CREATE FUTURE TABLES (Phase 3.1 preparation)
+  // 3. CREATE AUXILIARY TABLES
   // ===========================================
 
   // Brain dump drafts (from Phase 2)
@@ -879,53 +878,63 @@ Future<void> _createDB(Database db, int version) async {
     )
   ''');
 
-  // Task images (Phase 3.1 preparation)
+  // Task images (Phase 6 - future-proofing)
   await db.execute('''
     CREATE TABLE ${AppConstants.taskImagesTable} (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
-      image_path TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      source_url TEXT,
+      is_hero INTEGER DEFAULT 0,
+      position INTEGER DEFAULT 0,
+      caption TEXT,
+      mime_type TEXT NOT NULL,
+      file_size INTEGER,
       created_at INTEGER NOT NULL,
       FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
     )
   ''');
 
-  // Entities (Phase 3.1 preparation)
+  // Entities for @mentions (Phase 5 - future-proofing)
   await db.execute('''
     CREATE TABLE ${AppConstants.entitiesTable} (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      entity_type TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      UNIQUE(name, entity_type)
-    )
-  ''');
-
-  // Tags (Phase 3.1 preparation)
-  await db.execute('''
-    CREATE TABLE ${AppConstants.tagsTable} (
-      id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      type TEXT DEFAULT 'person',
+      notes TEXT,
       created_at INTEGER NOT NULL
     )
   ''');
 
-  // Task-Entity junction (Phase 3.1 preparation)
+  // Tags for #tags (Phase 5 - future-proofing)
+  await db.execute('''
+    CREATE TABLE ${AppConstants.tagsTable} (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT,
+      created_at INTEGER NOT NULL
+    )
+  ''');
+
+  // Junction table: tasks ↔ entities
   await db.execute('''
     CREATE TABLE ${AppConstants.taskEntitiesTable} (
       task_id TEXT NOT NULL,
       entity_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
       PRIMARY KEY (task_id, entity_id),
       FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE,
       FOREIGN KEY (entity_id) REFERENCES ${AppConstants.entitiesTable}(id) ON DELETE CASCADE
     )
   ''');
 
-  // Task-Tag junction (Phase 3.1 preparation)
+  // Junction table: tasks ↔ tags
   await db.execute('''
     CREATE TABLE ${AppConstants.taskTagsTable} (
       task_id TEXT NOT NULL,
       tag_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
       PRIMARY KEY (task_id, tag_id),
       FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE,
       FOREIGN KEY (tag_id) REFERENCES ${AppConstants.tagsTable}(id) ON DELETE CASCADE
@@ -933,26 +942,60 @@ Future<void> _createDB(Database db, int version) async {
   ''');
 
   // ===========================================
-  // 4. CREATE ALL INDEXES (12 total)
+  // 4. CREATE INDEXES (12 total, matching _migrateToV4)
   // ===========================================
 
-  // Task indexes (existing + new)
-  await db.execute('CREATE INDEX idx_tasks_completed ON ${AppConstants.tasksTable}(completed)');
-  await db.execute('CREATE INDEX idx_tasks_completed_at ON ${AppConstants.tasksTable}(completed_at)');
-  await db.execute('CREATE INDEX idx_tasks_created_at ON ${AppConstants.tasksTable}(created_at)');
-  await db.execute('CREATE INDEX idx_tasks_due_date ON ${AppConstants.tasksTable}(due_date)');
-  await db.execute('CREATE INDEX idx_tasks_parent ON ${AppConstants.tasksTable}(parent_id)');
-  await db.execute('CREATE INDEX idx_tasks_position ON ${AppConstants.tasksTable}(parent_id, position)');
-  await db.execute('CREATE INDEX idx_tasks_hierarchy ON ${AppConstants.tasksTable}(parent_id, position, completed)');
+  // Task indexes (with partial indexes for performance)
+  await db.execute('''
+    CREATE INDEX idx_tasks_parent ON ${AppConstants.tasksTable}(parent_id, position)
+  ''');
 
-  // Brain dump drafts index
-  await db.execute('CREATE INDEX idx_drafts_modified ON ${AppConstants.brainDumpDraftsTable}(last_modified DESC)');
+  await db.execute('''
+    CREATE INDEX idx_tasks_due_date ON ${AppConstants.tasksTable}(due_date) WHERE due_date IS NOT NULL
+  ''');
 
-  // API usage indexes
-  await db.execute('CREATE INDEX idx_usage_timestamp ON ${AppConstants.apiUsageLogTable}(timestamp DESC)');
-  await db.execute('CREATE INDEX idx_usage_operation ON ${AppConstants.apiUsageLogTable}(operation_type, timestamp DESC)');
-  await db.execute('CREATE INDEX idx_usage_model ON ${AppConstants.apiUsageLogTable}(model_name, timestamp DESC)');
-  await db.execute('CREATE INDEX idx_usage_month ON ${AppConstants.apiUsageLogTable}(timestamp DESC, estimated_cost_usd)');
+  await db.execute('''
+    CREATE INDEX idx_tasks_start_date ON ${AppConstants.tasksTable}(start_date) WHERE start_date IS NOT NULL
+  ''');
+
+  await db.execute('''
+    CREATE INDEX idx_tasks_template ON ${AppConstants.tasksTable}(is_template) WHERE is_template = 1
+  ''');
+
+  // Task images indexes
+  await db.execute('''
+    CREATE INDEX idx_task_images_task ON ${AppConstants.taskImagesTable}(task_id, position)
+  ''');
+
+  await db.execute('''
+    CREATE INDEX idx_task_images_hero ON ${AppConstants.taskImagesTable}(task_id) WHERE is_hero = 1
+  ''');
+
+  // Entity and tag indexes
+  await db.execute('''
+    CREATE INDEX idx_entities_name ON ${AppConstants.entitiesTable}(name)
+  ''');
+
+  await db.execute('''
+    CREATE INDEX idx_tags_name ON ${AppConstants.tagsTable}(name)
+  ''');
+
+  // Junction table indexes (bidirectional lookups)
+  await db.execute('''
+    CREATE INDEX idx_task_entities_entity ON ${AppConstants.taskEntitiesTable}(entity_id)
+  ''');
+
+  await db.execute('''
+    CREATE INDEX idx_task_entities_task ON ${AppConstants.taskEntitiesTable}(task_id)
+  ''');
+
+  await db.execute('''
+    CREATE INDEX idx_task_tags_tag ON ${AppConstants.taskTagsTable}(tag_id)
+  ''');
+
+  await db.execute('''
+    CREATE INDEX idx_task_tags_task ON ${AppConstants.taskTagsTable}(task_id)
+  ''');
 
   // ===========================================
   // 5. SEED USER SETTINGS
@@ -1713,25 +1756,6 @@ class TaskService {
 
     return (result.first['count'] as int?) ?? 0;
   }
-
-  /// Reorder tasks in bulk (after drag-and-drop)
-  Future<void> reorderTasks(List<Task> tasks) async {
-    final db = await _databaseService.database;
-
-    await db.transaction((txn) async {
-      for (int i = 0; i < tasks.length; i++) {
-        await txn.update(
-          AppConstants.tasksTable,
-          {
-            'parent_id': tasks[i].parentId,
-            'position': i,
-          },
-          where: 'id = ?',
-          whereArgs: [tasks[i].id],
-        );
-      }
-    });
-  }
 }
 ```
 
@@ -1744,6 +1768,8 @@ class TaskService {
 Add state for hierarchy and reordering:
 
 ```dart
+import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
+
 class TaskProvider with ChangeNotifier {
   final TaskService _taskService = TaskService();
 
@@ -1753,15 +1779,35 @@ class TaskProvider with ChangeNotifier {
   String? _errorMessage;
 
   // NEW: Hierarchy state
-  Set<String> _collapsedTaskIds = {}; // IDs of collapsed parent tasks
   bool _isReorderMode = false;
+
+  // Tree view controller for hierarchical drag-and-drop
+  late TreeController<Task> treeController;
 
   // Getters
   List<Task> get tasks => _tasks;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  Set<String> get collapsedTaskIds => _collapsedTaskIds;
   bool get isReorderMode => _isReorderMode;
+
+  /// Initialize provider with TreeController
+  TaskProvider() {
+    treeController = TreeController<Task>(
+      roots: [],  // Start empty, populated in loadTasks
+      childrenProvider: (Task task) => _tasks.where((t) => t.parentId == task.id),
+      parentProvider: (Task task) => _findParent(task.parentId),
+    );
+  }
+
+  /// Helper to find parent task by ID
+  Task? _findParent(String? parentId) {
+    if (parentId == null) return null;
+    try {
+      return _tasks.firstWhere((t) => t.id == parentId);
+    } catch (e) {
+      return null;
+    }
+  }
 
   /// Load tasks with hierarchy
   Future<void> loadTasks() async {
@@ -1770,6 +1816,11 @@ class TaskProvider with ChangeNotifier {
 
     try {
       _tasks = await _taskService.getAllTasksHierarchical();
+
+      // ✅ CRITICAL: Refresh TreeController roots after loading
+      treeController.roots = _tasks.where((t) => t.parentId == null);
+      treeController.rebuild();
+
       _errorMessage = null;
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
@@ -1779,37 +1830,16 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  /// Get visible tasks (respecting collapsed state)
+  /// ⚠️ DEPRECATED: This getter is superseded by TreeController for tree view.
+  ///
+  /// TreeController manages visibility through its own expansion state.
+  /// This getter is kept for backwards compatibility but should not be used
+  /// with AnimatedTreeView. Use TreeController.roots instead.
+  ///
+  /// TODO: Remove this once all code uses TreeController.
   List<Task> get visibleTasks {
-    final visible = <Task>[];
-    final hiddenParents = <String>{};
-
-    for (final task in _tasks) {
-      // Skip if any ancestor is collapsed
-      if (task.parentId != null && hiddenParents.contains(task.parentId)) {
-        hiddenParents.add(task.id); // Hide descendants too
-        continue;
-      }
-
-      visible.add(task);
-
-      // If this task is collapsed, hide its children
-      if (_collapsedTaskIds.contains(task.id)) {
-        hiddenParents.add(task.id);
-      }
-    }
-
-    return visible;
-  }
-
-  /// Toggle collapse/expand for a parent task
-  void toggleCollapse(String taskId) {
-    if (_collapsedTaskIds.contains(taskId)) {
-      _collapsedTaskIds.remove(taskId);
-    } else {
-      _collapsedTaskIds.add(taskId);
-    }
-    notifyListeners();
+    // Returns all root tasks (TreeController handles visibility)
+    return _tasks.where((t) => t.parentId == null).toList();
   }
 
   /// Check if task has children
@@ -1823,22 +1853,86 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Reorder tasks (drag and drop)
-  Future<void> reorderTasks(int oldIndex, int newIndex) async {
-    final visible = visibleTasks;
+  /// Handle tree drag-and-drop reordering
+  Future<void> onNodeAccepted(TreeDragAndDropDetails<Task> details) async {
+    String? newParentId;
+    int newPosition;
+    int newDepth;
 
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
+    // Determine drop location based on hover zone
+    details.mapDropPosition(
+      whenAbove: () {
+        // Insert as previous sibling of target
+        newParentId = details.targetNode.parentId;
+        newPosition = details.targetNode.position;
+        newDepth = details.targetNode.depth;
+      },
+      whenInside: () {
+        // Insert as last child of target
+        newParentId = details.targetNode.id;
+        final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
+        newPosition = siblings.length;
+        newDepth = details.targetNode.depth + 1;
+
+        // Auto-expand target to show new child
+        treeController.setExpansionState(details.targetNode, true);
+      },
+      whenBelow: () {
+        // Insert as next sibling of target
+        newParentId = details.targetNode.parentId;
+        newPosition = details.targetNode.position + 1;
+        newDepth = details.targetNode.depth;
+      },
+    );
+
+    // Validate depth limit (max 4 levels)
+    if (newDepth >= 4) {
+      _showDepthLimitError();
+      return;
     }
 
-    final task = visible.removeAt(oldIndex);
-    visible.insert(newIndex, task);
+    // Use existing changeTaskParent (has cycle detection + sibling reindexing)
+    await changeTaskParent(
+      taskId: details.draggedNode.id,
+      newParentId: newParentId,
+      newPosition: newPosition,
+    );
 
-    // Update positions in database
-    await _taskService.reorderTasks(visible);
+    // Optimistic update: Update in-memory state (no DB round-trip)
+    final movedTaskIndex = _tasks.indexWhere((t) => t.id == details.draggedNode.id);
+    if (movedTaskIndex != -1) {
+      final movedTask = _tasks[movedTaskIndex];
 
-    // Reload to refresh from database
-    await loadTasks();
+      // Create updated task with new parent/position/depth
+      // CRITICAL: Use copyWith to preserve ALL fields (startDate, isTemplate, notificationTime, etc.)
+      final updatedTask = movedTask.copyWith(
+        parentId: newParentId,
+        position: newPosition,
+        depth: newDepth,
+      );
+
+      _tasks[movedTaskIndex] = updatedTask;
+    }
+
+    // Refresh TreeController with updated state
+    treeController.roots = _tasks.where((t) => t.parentId == null);
+    treeController.rebuild();
+
+    notifyListeners();
+  }
+
+  /// Show error when depth limit exceeded
+  void _showDepthLimitError() {
+    // TODO (UX Enhancement): Trigger SnackBar/Toast for immediate visual feedback
+    // Current implementation: Sets error message in provider state
+    _errorMessage = 'Maximum nesting depth (4 levels) reached';
+    notifyListeners();
+  }
+
+  /// Toggle collapse/expand for a task node
+  /// Uses TreeController for expansion state (not _collapsedTaskIds)
+  void toggleCollapse(Task task) {
+    treeController.toggleExpansion(task);
   }
 
   /// Move task to new parent (nest/unnest)
@@ -1950,28 +2044,25 @@ class HomeScreen extends StatelessWidget {
                 return DragAndDropTaskTile(
                   entry: entry,
                   onNodeAccepted: taskProvider.onNodeAccepted,
-                  isReorderMode: true,
-                  isCollapsed: taskProvider.collapsedTaskIds.contains(entry.node.id),
-                  onToggleCollapse: () => taskProvider.toggleCollapse(entry.node.id),
-                  taskProvider: taskProvider, // For hasChildren check
+                  taskProvider: taskProvider,
                 );
               },
             );
           }
 
-          // Normal mode: Regular ListView
-          return ListView.builder(
+          // Normal mode: TreeView (no drag-and-drop)
+          return AnimatedTreeView<Task>(
+            treeController: taskProvider.treeController,
             padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: visibleTasks.length,
-            itemBuilder: (context, index) {
-              final task = visibleTasks[index];
+            nodeBuilder: (context, TreeEntry<Task> entry) {
               return TaskItem(
-                key: ValueKey(task.id),
-                task: task,
+                key: ValueKey(entry.node.id),
+                task: entry.node,
+                depth: entry.node.depth,
                 isReorderMode: false,
-                hasChildren: taskProvider.hasChildren(task.id),
-                isCollapsed: taskProvider.collapsedTaskIds.contains(task.id),
-                onToggleCollapse: () => taskProvider.toggleCollapse(task.id),
+                hasChildren: taskProvider.hasChildren(entry.node.id),
+                isExpanded: entry.isExpanded,  // ✅ Use TreeEntry.isExpanded
+                onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
               );
             },
           );
@@ -2013,24 +2104,23 @@ Add visual hierarchy and interactions:
 ```dart
 class TaskItem extends StatelessWidget {
   final Task task;
+  final int depth;  // ✅ Explicit parameter
   final bool isReorderMode;
   final bool hasChildren;
-  final bool isCollapsed;
+  final bool isExpanded;  // ✅ RENAMED from isCollapsed (aligns with TreeController API)
   final VoidCallback onToggleCollapse;
+  final Decoration? decoration;  // ✅ Optional for drag feedback
 
   const TaskItem({
     Key? key,
     required this.task,
+    required this.depth,  // ✅ Required
     required this.isReorderMode,
     required this.hasChildren,
-    required this.isCollapsed,
+    required this.isExpanded,  // ✅ RENAMED from isCollapsed
     required this.onToggleCollapse,
+    this.decoration,  // ✅ Optional
   }) : super(key: key);
-
-  /// Get depth from Task model (populated by hierarchical query)
-  int get depth {
-    return task.depth;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2048,7 +2138,7 @@ class TaskItem extends StatelessWidget {
           top: 4,
           bottom: 4,
         ),
-        decoration: BoxDecoration(
+        decoration: decoration ?? BoxDecoration(  // ✅ Use provided or default
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
           boxShadow: [
@@ -2103,7 +2193,7 @@ class TaskItem extends StatelessWidget {
       // Parent task: Show expand/collapse button
       return IconButton(
         icon: Icon(
-          isCollapsed ? Icons.chevron_right : Icons.expand_more,
+          isExpanded ? Icons.expand_more : Icons.chevron_right,  // ✅ Inverted logic
         ),
         iconSize: 20,
         padding: EdgeInsets.zero,
