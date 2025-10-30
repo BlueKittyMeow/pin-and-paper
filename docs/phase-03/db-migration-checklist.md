@@ -42,7 +42,7 @@
 - [ ] **Task table alterations (in order):**
   ```dart
   // 1. Add nesting columns
-  await db.execute('ALTER TABLE tasks ADD COLUMN parent_id TEXT');
+  await db.execute('ALTER TABLE tasks ADD COLUMN parent_id TEXT REFERENCES tasks(id) ON DELETE CASCADE');
   await db.execute('ALTER TABLE tasks ADD COLUMN position INTEGER DEFAULT 0');
 
   // 2. Add template support
@@ -61,12 +61,16 @@
 - [ ] **CRITICAL: Position backfill logic**
   ```dart
   // Backfill positions based on created_at to maintain current order
+  // IMPORTANT: Handles NULL parent_id correctly for top-level tasks
   await db.execute('''
     UPDATE tasks
     SET position = (
       SELECT COUNT(*)
       FROM tasks AS t2
-      WHERE t2.parent_id IS tasks.parent_id
+      WHERE (
+        (t2.parent_id IS NULL AND tasks.parent_id IS NULL)
+        OR (t2.parent_id = tasks.parent_id)
+      )
         AND t2.created_at <= tasks.created_at
     ) - 1
   ''');
@@ -117,6 +121,14 @@
   ```
 
 ### 4. Add Migration Transaction Wrapper
+- [ ] **CRITICAL: Enable foreign keys BEFORE migration**
+  ```dart
+  // SQLite disables foreign keys by default - MUST enable them!
+  await db.execute('PRAGMA foreign_keys = ON');
+  ```
+  - Without this, the CASCADE constraint on parent_id won't work
+  - Verify with testing: `PRAGMA foreign_keys;` should return 1
+
 - [ ] **Wrap entire migration in transaction**
   ```dart
   await db.transaction((txn) async {

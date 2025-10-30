@@ -572,11 +572,15 @@ CREATE INDEX idx_task_tags_tag ON task_tags(tag_id);
 5. **CRITICAL: Position Backfill** - Existing tasks must be assigned monotonically increasing positions to preserve current visual order:
    ```sql
    -- Backfill positions based on created_at to maintain order
+   -- IMPORTANT: Handles NULL parent_id correctly for top-level tasks
    UPDATE tasks
    SET position = (
      SELECT COUNT(*)
      FROM tasks AS t2
-     WHERE t2.parent_id IS tasks.parent_id
+     WHERE (
+       (t2.parent_id IS NULL AND tasks.parent_id IS NULL)
+       OR (t2.parent_id = tasks.parent_id)
+     )
        AND t2.created_at <= tasks.created_at
    ) - 1;
    ```
