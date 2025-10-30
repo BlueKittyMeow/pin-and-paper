@@ -177,9 +177,9 @@
 
 ### Critical (Must Fix Before Implementation)
 
-- [ ] **[HIGH - Codex/Claude]** Fix CASCADE constraint: Update parent_id column definition to include `REFERENCES tasks(id) ON DELETE CASCADE` in both prelim-plan.md and db-migration-checklist.md
-- [ ] **[HIGH - Codex/Claude]** Add `PRAGMA foreign_keys = ON;` verification to migration checklist testing protocol
-- [ ] **[HIGH - Gemini/Claude]** Fix NULL handling in position backfill query - use `WHERE (t2.parent_id IS NULL AND tasks.parent_id IS NULL) OR (t2.parent_id = tasks.parent_id)` or COALESCE approach
+- [x] **[HIGH - Codex/Claude]** ✅ FIXED: CASCADE constraint added to parent_id in db-migration-checklist.md line 45
+- [x] **[HIGH - Codex/Claude]** ✅ FIXED: Added `PRAGMA foreign_keys = ON;` to migration checklist with verification step (lines 124-130)
+- [x] **[HIGH - Gemini/Claude]** ✅ FIXED: NULL handling corrected in position backfill query in both prelim-plan.md and db-migration-checklist.md
 - [ ] **[HIGH - Codex/Claude/BlueKitty]** Add timezone strategy to Phase 3.5: `timezone` package (IANA tzdata), tz database init at startup, TZDateTime conversion for notifications
 
 ### High Priority (Should Fix Before Planning Group 1)
@@ -207,12 +207,15 @@
 
 ### Summary by Priority
 
-**CRITICAL (6):** CASCADE constraint, foreign keys ON, NULL handling, timezone strategy, offline STT verification, voice privacy
+**CRITICAL:**
+- ✅ COMPLETED (3/6): CASCADE constraint, foreign keys ON, NULL handling
+- ⏳ REMAINING (3/6): Timezone strategy, offline STT verification (manual), voice privacy (clarification)
+
 **HIGH (1):** Missing indexes
 **MEDIUM (5):** Widget docs, services/ refactor, rollback testing, validation strategy, transcript storage setting
 **LOW (2):** Test fixture spec, weekend edge case
 
-**Total Action Items:** 14
+**Total Action Items:** 14 (3 completed, 11 remaining)
 
 ---
 
