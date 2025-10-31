@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart'; // For debugPrint
 import '../utils/constants.dart';
 import '../models/brain_dump_draft.dart';
 
@@ -600,7 +601,7 @@ class DatabaseService {
       });
     });
 
-    print('✅ Database migrated to v4 successfully');
+    debugPrint('✅ Database migrated to v4 successfully');
   }
 
   Future<void> close() async {
