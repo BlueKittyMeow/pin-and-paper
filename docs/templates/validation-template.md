@@ -1,9 +1,11 @@
-# Phase [X.Y] Validation Cycles
+# Phase [X.Y] Validation - Version [N]
 
 **Subphase:** [X.Y - Brief Description]
 **Implementation Commits:** [Commit range, e.g., 072553b..d1f22a2]
-**Started:** [YYYY-MM-DD]
-**Status:** [🔄 In Progress / ✅ Validated / ⚠️ Issues Found]
+**Validation Version:** [N]
+**Created:** [YYYY-MM-DD]
+**Status:** [🔄 In Progress / ✅ FINAL - Validated / ⚠️ Issues Found]
+**Previous Version:** [link to vN-1 if applicable, or "N/A" for v1]
 
 ---
 
@@ -27,11 +29,18 @@
 
 ---
 
-## Cycle 1: Initial Validation
+## This Validation Cycle
 
 **Date:** [YYYY-MM-DD]
-**Trigger:** Initial implementation complete (commits: [hash])
-**Focus:** First-pass review of implementation
+**Trigger:** [Implementation complete / Fixes from v[N-1] applied]
+**Focus:** [First-pass review / Verify v[N-1] fixes / etc.]
+
+**Issues from Previous Version:**
+[If v2+, list issues from v[N-1] to verify]
+- [ ] Issue #1 from v[N-1] - [Status: Fixed / Still present / Regression]
+- [ ] Issue #2 from v[N-1] - [Status]
+
+[If v1, delete this section]
 
 ### Findings
 
@@ -173,10 +182,10 @@
 
 ---
 
-### Cycle 1 Status
+### This Cycle Status
 
-**Date Closed:** [YYYY-MM-DD]
-**Outcome:** [✅ Ready for Cycle 2 / ⚠️ Needs More Work]
+**Date Closed:** [YYYY-MM-DD or "In Progress"]
+**Outcome:** [⏳ In Progress / ✅ Validated - FINAL / ⚠️ Issues Found - Need v[N+1]]
 
 **Issues Resolved:** [X]/[X]
 **Issues Deferred:** [X]
@@ -184,123 +193,65 @@
 
 ---
 
-## Cycle 2: Verification
+## Next Steps
 
-**Date:** [YYYY-MM-DD]
-**Trigger:** Cycle 1 fixes applied (commit: [hash])
-**Focus:** Verify fixes worked, catch any regressions
+### If Issues Remain (Create v[N+1])
 
-### Findings
+**Trigger:** Fixes applied, need verification
 
-#### Codex Verification
-**Date:** [YYYY-MM-DD]
-**Status:** [⏳ In Progress / ✅ Complete]
+**Process:**
+1. Claude applies fixes from this version
+2. Create new file: `phase-X.Y-validation-v[N+1].md`
+3. Reference this version in "Previous Version" field
+4. List issues from this version to verify
+5. Team reviews and adds new findings
 
-**Verified Issues:**
-- [x] #C1: ✅ Confirmed fixed
-- [x] #H1: ✅ Confirmed fixed
-- [ ] #H2: ⚠️ Still present / regression
-
-**New Issues Found:** [X]
-
-[If new issues, use same format as Cycle 1]
+**Example:**
+If this is v1 with issues → create v2 after fixes applied
 
 ---
 
-#### Gemini Verification
-**Date:** [YYYY-MM-DD]
-**Status:** [⏳ In Progress / ✅ Complete]
+### If Validation Complete (Mark FINAL)
 
-**Build Verification:**
-```bash
-flutter analyze
-flutter test
-flutter build apk
-```
+**Criteria:**
+- [ ] All CRITICAL issues resolved
+- [ ] All HIGH issues resolved or deferred
+- [ ] Build passes (flutter analyze, test, build)
+- [ ] Team signs off
 
-**Results:**
-- [x] Static analysis: ✅ Clean
-- [x] Tests: ✅ [X]/[X] passing
-- [x] Build: ✅ [Size]MB APK
-
-**New Issues Found:** [X]
+**Action:**
+1. Update header: `**Status:** ✅ FINAL - Phase [X.Y] VALIDATED`
+2. Complete sign-off section below
+3. No v[N+1] needed - validation closed
 
 ---
 
-### Claude's Response
+## Sign-Off
+
+[Only complete if this is the FINAL version]
 
 **Date:** [YYYY-MM-DD]
 
-**Verification Summary:**
-- ✅ [X] issues confirmed fixed
-- ⚠️ [X] issues still present
-- 🆕 [X] new issues found
-
-**Plan:**
-[If issues remain, plan for Cycle 3. Otherwise, close validation.]
-
----
-
-### Cycle 2 Status
-
-**Date Closed:** [YYYY-MM-DD]
-**Outcome:** [✅ Validation Complete / ⏳ Need Cycle 3]
-
----
-
-## [Cycle 3: Additional Round]
-
-[If needed, repeat same structure as Cycle 2]
-
----
-
-## Final Validation Status
-
-**Date Closed:** [YYYY-MM-DD]
-**Status:** ✅ Phase [X.Y] VALIDATED
-
-**Final Metrics:**
-- Total cycles: [X]
-- Total issues found: [X]
-- Issues fixed: [X]
-- Issues deferred: [X]
-- Issues won't fix: [X]
+- [ ] **Codex:** No blocking issues found
+- [ ] **Gemini:** Build verification passed
+- [ ] **Claude:** All critical issues resolved
+- [ ] **BlueKitty:** Phase [X.Y] approved
 
 **Outstanding Work:**
 - [ ] [Deferred issue 1] - Target: Phase [X.Y]
 - [ ] [Deferred issue 2] - Target: Separate cleanup task
 
-**Sign-Off:**
-- [x] **Codex:** No blocking issues found
-- [x] **Gemini:** Build verification passed
-- [x] **Claude:** All critical issues resolved
-- [x] **BlueKitty:** Phase [X.Y] approved for production
-
 ---
 
-## Lessons Learned
-
-**What Went Well:**
-- [Positive 1]
-- [Positive 2]
-
-**What Could Improve:**
-- [Improvement 1]
-- [Improvement 2]
-
-**Process Changes:**
-- [Change 1 for next phase]
-- [Change 2 for next phase]
-
----
-
-**Template Version:** 1.0
+**Template Version:** 2.0 (versioned validation cycles)
 **Document Owner:** BlueKitty
-**Last Updated:** [YYYY-MM-DD]
+**Last Updated:** 2025-10-30
 
 ---
 
 **See Also:**
 - Implementation report: `docs/phase-XX/phase-X.Y-implementation-report.md`
-- Pre-implementation review: `docs/phase-XX/groupX-review.md`
-- Codex findings archive: `docs/archive/phase-XX/codex-findings.md`
+- Pre-implementation review: `docs/phase-XX/phase-XXA-review-vN.md`
+- Ongoing findings: `codex-findings.md`, `gemini-findings.md`, `claude-findings.md`
+- Previous validation: `phase-X.Y-validation-v[N-1].md` (if applicable)
+- Next validation: `phase-X.Y-validation-v[N+1].md` (if needed)
