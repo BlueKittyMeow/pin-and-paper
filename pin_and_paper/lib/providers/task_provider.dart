@@ -131,6 +131,7 @@ class TaskProvider extends ChangeNotifier {
     try {
       final newTask = await _taskService.createTask(title);
       _tasks.insert(0, newTask); // Add to beginning of list
+      _categorizeTasks(); // Keep derived task buckets in sync for UI
       notifyListeners();
     } catch (e) {
       _errorMessage = 'Failed to create task: $e';
