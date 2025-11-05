@@ -1,0 +1,6 @@
+{
+    "cmake.configureOnOpen": false,
+    "task.allowAutomaticTasks": "on",
+    "terminal.integrated.defaultLocation": "editor",
+}
+

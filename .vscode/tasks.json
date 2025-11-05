@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "agent: claude", "type": "shell", "command": "claude",
+      "presentation": { "reveal": "never", "panel": "dedicated", "group": "claude" } },
+    { "label": "agent: codex",  "type": "shell", "command": "codex",
+      "presentation": { "reveal": "never", "panel": "dedicated", "group": "codex" } },
+    { "label": "agent: gemini", "type": "shell", "command": "gemini",
+      "presentation": { "reveal": "never", "panel": "dedicated", "group": "gemini" } },
+    { "label": "terminal: run", "type": "shell", "command": "bash -i",
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "run" } },
+
+    { "label": "agents: all", "dependsOn": [
+        "agent: claude", "agent: codex", "agent: gemini", "terminal: run"
+      ],
+      "runOptions": { "runOn": "folderOpen" }
+    }
+  ]
+}

@@ -411,6 +411,7 @@ class DatabaseService {
       // Assigns monotonically increasing positions based on created_at
       // Preserves existing visual order (newest tasks at top)
       // Handles NULL parent_id correctly for top-level tasks
+      // Uses id as tie-breaker for tasks with identical timestamps
       await txn.execute('''
         UPDATE ${AppConstants.tasksTable}
         SET position = (
@@ -420,7 +421,10 @@ class DatabaseService {
             (t2.parent_id IS NULL AND ${AppConstants.tasksTable}.parent_id IS NULL)
             OR (t2.parent_id = ${AppConstants.tasksTable}.parent_id)
           )
-            AND t2.created_at <= ${AppConstants.tasksTable}.created_at
+            AND (
+              t2.created_at < ${AppConstants.tasksTable}.created_at
+              OR (t2.created_at = ${AppConstants.tasksTable}.created_at AND t2.id <= ${AppConstants.tasksTable}.id)
+            )
         ) - 1
       ''');
 
@@ -534,6 +538,14 @@ class DatabaseService {
 
       await txn.execute('''
         CREATE INDEX idx_tasks_template ON ${AppConstants.tasksTable}(is_template) WHERE is_template = 1
+      ''');
+
+      await txn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_tasks_created ON ${AppConstants.tasksTable}(created_at DESC)
+      ''');
+
+      await txn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_tasks_completed ON ${AppConstants.tasksTable}(completed, completed_at)
       ''');
 
       // Task images indexes

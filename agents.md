@@ -7,6 +7,8 @@
 - Gemini
 - BlueKitty (the human dev who is project manager)
 
+Each of you has individual .md files in the agents directory. When you learn something or find a better way to approach problem solving or want to record a reminder for yourself, add this to the file with your name on it. Important! Only ever touch your own file. 
+
 When you make notes and suggestions in documentation, please sign your individual suggestions/notes with "- 'your name'"
 
 Since we are a team of ai and a coffee powered human, we don't need to worry about unrealistic timelines for implementation, we only need to ensure that the scope of each phase/subphase stays manageable and split into logical groupings. 

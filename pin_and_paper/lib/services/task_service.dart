@@ -15,13 +15,25 @@ class TaskService {
       throw ArgumentError('Task title cannot be empty');
     }
 
+    final db = await _dbService.database;
+
+    // Phase 3.1: Calculate next position for top-level tasks
+    // Query max position where parent_id IS NULL
+    final result = await db.rawQuery('''
+      SELECT COALESCE(MAX(position), -1) as max_position
+      FROM ${AppConstants.tasksTable}
+      WHERE parent_id IS NULL
+    ''');
+    final maxPosition = result.first['max_position'] as int;
+    final nextPosition = maxPosition + 1;
+
     final task = Task(
       id: _generateId(),
       title: title.trim(),
       createdAt: DateTime.now(),
+      position: nextPosition, // Phase 3.1: Assign calculated position
     );
 
-    final db = await _dbService.database;
     await db.insert(
       AppConstants.tasksTable,
       task.toMap(),
@@ -40,6 +52,14 @@ class TaskService {
     final db = await _dbService.database;
     final List<Task> createdTasks = [];
 
+    // Phase 3.1: Get starting position for bulk insert
+    final result = await db.rawQuery('''
+      SELECT COALESCE(MAX(position), -1) as max_position
+      FROM ${AppConstants.tasksTable}
+      WHERE parent_id IS NULL
+    ''');
+    int nextPosition = (result.first['max_position'] as int) + 1;
+
     // Use a transaction for atomicity and performance
     // All tasks are created in one database operation instead of N operations
     await db.transaction((txn) async {
@@ -51,6 +71,7 @@ class TaskService {
           id: suggestion.id, // Reuse suggestion ID (already UUID from ClaudeService)
           title: suggestion.title,
           createdAt: DateTime.now(),
+          position: nextPosition++, // Phase 3.1: Assign and increment position
         );
 
         await txn.insert(
@@ -65,12 +86,16 @@ class TaskService {
     return createdTasks;
   }
 
-  // Get all tasks (ordered by creation date, newest first)
+  // Get all tasks (ordered by position)
+  // Phase 3.1: Orders by position instead of created_at
+  // Phase 3.2 will add hierarchical ordering (parent_id, position)
   Future<List<Task>> getAllTasks() async {
     final db = await _dbService.database;
     final List<Map<String, dynamic>> maps = await db.query(
       AppConstants.tasksTable,
-      orderBy: 'created_at DESC',
+      // Phase 3.1: Order by position (top-level tasks only for now)
+      // Phase 3.2 will add: ORDER BY parent_id IS NULL DESC, parent_id, position
+      orderBy: 'position ASC',
     );
 
     return maps.map((map) => Task.fromMap(map)).toList();
