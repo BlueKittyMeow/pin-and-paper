@@ -22,48 +22,36 @@ These bugs were fixed before Phase 3.2:
 4. ✅ **TaskService orders by created_at** (task_service.dart:68) - HIGH
    - Fixed: Changed to ORDER BY position ASC
 
+## Fixed in 754e072 ✅
+
+These HIGH priority bugs were fixed after Phase 3 review:
+
+5. ✅ **Draft update silently fails if deleted** (brain_dump_provider.dart:202)
+   - Fixed: Check rowsAffected, fallback to insert if 0 rows touched
+
+6. ✅ **Deleting active draft leaves stale ID** (brain_dump_provider.dart:253)
+   - Fixed: Reset _currentDraftId when deleting active draft
+
+7. ✅ **Loading draft creates duplicate** (drafts_list_screen.dart:85)
+   - Fixed: Call loadDraft() for single selection, clear() for multiple
+
+8. ✅ **Claude API deprecated** (claude_service.dart:10)
+   - Fixed: Updated to claude-3-5-sonnet-20241022 model and 2024-10-22 API
+
+9. ✅ **VPN treated as offline** (brain_dump_provider.dart:71)
+   - Fixed: Include vpn, other, bluetooth in connectivity check
+
+10. ✅ **No network timeout** (claude_service.dart:51)
+    - Fixed: Added 30s timeout to http.post
+
+11. ✅ **API usage logging crashes on missing tokens** (claude_service.dart:63)
+    - Fixed: Guard with null checks before logging
+
 ---
 
 ## High Priority - Should Fix Soon
 
-### Brain Dump / Draft Issues
-
-5. **Draft update silently fails if deleted** (brain_dump_provider.dart:197)
-   - Impact: HIGH
-   - Issue: Update affects 0 rows, no fallback to insert
-   - Fix: Check update result, fallback to insert if 0 rows touched
-
-6. **Deleting active draft leaves stale ID** (brain_dump_provider.dart:223)
-   - Impact: HIGH
-   - Issue: Subsequent saves fail silently
-   - Fix: Reset _currentDraftId when deleting active draft
-
-7. **Loading draft creates duplicate** (drafts_list_screen.dart:84)
-   - Impact: MEDIUM
-   - Issue: loadDraft never called, _currentDraftId stays null
-   - Fix: Call provider.loadDraft() before popping
-
-### API / Connectivity Issues
-
-8. **Claude API deprecated** (claude_service.dart:36)
-   - Impact: HIGH
-   - Issue: Using 2023-06-01 API + old model, will break
-   - Fix: Update to 2024-09-24 API + current model
-
-9. **VPN treated as offline** (brain_dump_provider.dart:69)
-   - Impact: HIGH
-   - Issue: ConnectivityResult.vpn not in allowlist
-   - Fix: Include vpn, other, bluetooth in connectivity check
-
-10. **No network timeout** (claude_service.dart:31)
-    - Impact: MEDIUM
-    - Issue: http.post hangs forever, _isProcessing never resets
-    - Fix: Add timeout (e.g., 10s)
-
-11. **API usage logging crashes on missing tokens** (claude_service.dart:52)
-    - Impact: MEDIUM
-    - Issue: decoded['usage'] assumed non-null
-    - Fix: Guard usage fields, default to 0 if missing
+No remaining HIGH priority bugs!
 
 ---
 
@@ -164,20 +152,19 @@ These bugs were fixed before Phase 3.2:
 ## Statistics
 
 **Total Bugs:** 25
-- **Fixed:** 4
-- **High:** 7
+- **Fixed:** 11 (4 in 47ef2d4, 7 in 754e072)
+- **High:** 0 (all fixed!)
 - **Medium:** 11
 - **Low:** 3
 
 **By Category:**
-- Brain Dump / Drafts: 6
-- API / Connectivity: 4
-- BuildContext / Async: 5
-- Settings / Preferences: 1
-- Performance: 1
-- Deprecations: 2
-- Code Quality: 3
-- Phase 3.1 Specific: 3
+- Brain Dump / Drafts: 3 remaining (3 fixed)
+- API / Connectivity: 0 remaining (4 fixed)
+- BuildContext / Async: 5 remaining
+- Settings / Preferences: 1 remaining
+- Performance: 1 remaining
+- Deprecations: 2 remaining
+- Code Quality: 2 remaining
 
 **Sources:**
 - Codex: 22 bugs
