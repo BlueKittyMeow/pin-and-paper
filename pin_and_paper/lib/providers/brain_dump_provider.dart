@@ -67,9 +67,13 @@ class BrainDumpProvider extends ChangeNotifier {
   // Check internet connectivity
   Future<void> checkConnectivity() async {
     final connectivityResult = await _connectivity.checkConnectivity();
+    // Bug fix: Include VPN, other, and bluetooth for tethering
     _hasInternet = connectivityResult.contains(ConnectivityResult.mobile) ||
                    connectivityResult.contains(ConnectivityResult.wifi) ||
-                   connectivityResult.contains(ConnectivityResult.ethernet);
+                   connectivityResult.contains(ConnectivityResult.ethernet) ||
+                   connectivityResult.contains(ConnectivityResult.vpn) ||
+                   connectivityResult.contains(ConnectivityResult.other) ||
+                   connectivityResult.contains(ConnectivityResult.bluetooth);
     notifyListeners();
   }
 
@@ -195,7 +199,7 @@ class BrainDumpProvider extends ChangeNotifier {
       );
     } else {
       // Update existing draft (auto-save scenario)
-      await db.update(
+      final rowsAffected = await db.update(
         AppConstants.brainDumpDraftsTable, // IMPLEMENTATION REMINDER FIX
         {
           'content': content,
@@ -205,6 +209,21 @@ class BrainDumpProvider extends ChangeNotifier {
         where: 'id = ?',
         whereArgs: [_currentDraftId],
       );
+
+      // Bug fix: If update affected 0 rows (draft was deleted), create new draft
+      if (rowsAffected == 0) {
+        _currentDraftId = _uuid.v4();
+        await db.insert(
+          AppConstants.brainDumpDraftsTable,
+          {
+            'id': _currentDraftId,
+            'content': content,
+            'created_at': now,
+            'last_modified': now,
+            'failed_reason': _errorMessage,
+          },
+        );
+      }
     }
   }
 
@@ -229,6 +248,12 @@ class BrainDumpProvider extends ChangeNotifier {
     );
     _drafts.removeWhere((draft) => draft.id == id);
     _selectedDraftIds.remove(id);
+
+    // Bug fix: If deleting the currently active draft, reset ID
+    if (_currentDraftId == id) {
+      _currentDraftId = null;
+    }
+
     notifyListeners();
   }
 

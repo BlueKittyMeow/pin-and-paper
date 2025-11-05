@@ -76,12 +76,24 @@ class _DraftsListScreenState extends State<DraftsListScreen> {
                       ElevatedButton(
                         onPressed: provider.isOverLimit
                             ? null
-                            : () {
+                            : () async {
                                 // Get combined text from provider
                                 final combinedText = provider.getCombinedDraftsText();
 
+                                // Bug fix: If single draft selected, load it (reuse ID for updates)
+                                // If multiple drafts, clear ID (create new combined draft)
+                                if (provider.selectedCount == 1) {
+                                  final selectedId = provider.selectedDraftIds.first;
+                                  await provider.loadDraft(selectedId, combinedText);
+                                } else {
+                                  // Multiple drafts merged - clear ID to create new draft
+                                  provider.clear();
+                                }
+
                                 // Return text to parent screen for controller
-                                Navigator.pop(context, combinedText);
+                                if (context.mounted) {
+                                  Navigator.pop(context, combinedText);
+                                }
                               },
                         child: Text(
                           provider.isOverLimit

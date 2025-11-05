@@ -6,7 +6,8 @@ import 'api_usage_service.dart'; // Phase 2 Stretch
 
 class ClaudeService {
   final String _baseUrl = 'https://api.anthropic.com/v1';
-  final String _model = 'claude-sonnet-4-5';  // Latest Sonnet
+  // Bug fix: Updated to current stable model (was claude-sonnet-4-5)
+  final String _model = 'claude-3-5-sonnet-20241022';
   final Uuid _uuid = const Uuid();
 
   // Estimate API cost before sending
@@ -28,12 +29,14 @@ class ClaudeService {
     final prompt = _buildPrompt(dump);
 
     try {
+      // Bug fix: Added timeout to prevent hanging forever
       final response = await http.post(
         Uri.parse('$_baseUrl/messages'),
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          // Bug fix: Updated API version (was 2023-06-01)
+          'anthropic-version': '2024-10-22',
         },
         body: jsonEncode({
           'model': _model,
@@ -45,18 +48,28 @@ class ClaudeService {
             }
           ],
         }),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw ClaudeApiException('Request timed out after 30 seconds', 408);
+        },
       );
 
       if (response.statusCode == 200) {
         // Phase 2 Stretch: Log API usage for cost tracking
         final decoded = jsonDecode(response.body);
 
-        await ApiUsageService().logUsage(
-          operationType: 'brain_dump',
-          inputTokens: decoded['usage']['input_tokens'] as int,
-          outputTokens: decoded['usage']['output_tokens'] as int,
-          model: _model,
-        );
+        // Bug fix: Guard against missing usage data (streaming/errors)
+        if (decoded['usage'] != null &&
+            decoded['usage']['input_tokens'] != null &&
+            decoded['usage']['output_tokens'] != null) {
+          await ApiUsageService().logUsage(
+            operationType: 'brain_dump',
+            inputTokens: decoded['usage']['input_tokens'] as int,
+            outputTokens: decoded['usage']['output_tokens'] as int,
+            model: _model,
+          );
+        }
 
         return _parseResponse(response.body);
       } else {
