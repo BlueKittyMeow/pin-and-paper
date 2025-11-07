@@ -93,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: Theme.of(context)
                                 .colorScheme
                                 .onSurface
-                                .withOpacity(0.5),
+                                .withValues(alpha: 0.5),
                           ),
                     ),
                   );
@@ -124,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       color: Theme.of(context)
                                           .colorScheme
                                           .onSurface
-                                          .withOpacity(0.5),
+                                          .withValues(alpha: 0.5),
                                     ),
                               ),
                             ),

@@ -24,10 +24,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool? _connectionValid; // null=unknown, true=valid, false=invalid
   String? _connectionMessage;
 
+  // Bug fix: Cache usage stats future to prevent re-running query on every rebuild
+  late Future<UsageStats> _usageStatsFuture;
+
   @override
   void initState() {
     super.initState();
     _loadApiKey();
+    _usageStatsFuture = _apiUsageService.getStats();
   }
 
   @override
@@ -182,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<int>(
-                            value: taskProvider.hideThresholdHours,
+                            initialValue: taskProvider.hideThresholdHours,
                             decoration: const InputDecoration(
                               border: OutlineInputBorder(),
                               contentPadding: EdgeInsets.symmetric(
@@ -226,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 16),
 
             FutureBuilder<UsageStats>(
-              future: _apiUsageService.getStats(),
+              future: _usageStatsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Card(

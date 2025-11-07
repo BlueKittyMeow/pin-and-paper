@@ -89,6 +89,7 @@ class BrainDumpProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _estimatedCost = 0.05; // Default fallback estimate
+      notifyListeners(); // Bug fix: Notify listeners on error path too
     }
   }
 
@@ -301,6 +302,15 @@ class BrainDumpProvider extends ChangeNotifier {
     _originalDumpText = null;
     _suggestions = [];
     notifyListeners();
+  }
+
+  // Clear all and delete active draft (used when user clicks "Clear" button)
+  Future<void> clearAndDeleteDraft() async {
+    // Delete the current draft if it exists
+    if (_currentDraftId != null) {
+      await deleteDraft(_currentDraftId!);
+    }
+    clear();
   }
 
   // Clear all (also resets draft ID for new session)

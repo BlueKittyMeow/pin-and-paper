@@ -19,7 +19,7 @@ class PinAndPaperApp extends StatelessWidget {
     // Order matters: SettingsProvider must be created before BrainDumpProvider
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => TaskProvider()..loadPreferences()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()..initialize()),
         ChangeNotifierProxyProvider<SettingsProvider, BrainDumpProvider>(
           create: (context) => BrainDumpProvider(

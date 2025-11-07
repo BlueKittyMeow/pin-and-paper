@@ -221,9 +221,12 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
       ),
       ),
     ).whenComplete(() {
-      setState(() {
-        _showOriginalText = false;
-      });
+      // Bug fix: Guard against setState after dispose
+      if (mounted) {
+        setState(() {
+          _showOriginalText = false;
+        });
+      }
     });
   }
 
@@ -253,10 +256,12 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
 
       // Navigate back to home
       if (context.mounted) {
+        // Bug fix: Capture messenger BEFORE popping (context becomes invalid after pop)
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.popUntil(context, (route) => route.isFirst);
 
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
+        // Show success message on root messenger
+        messenger.showSnackBar(
           SnackBar(content: Text('${approved.length} task${approved.length != 1 ? 's' : ''} added!')),
         );
       }

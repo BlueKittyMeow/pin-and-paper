@@ -33,8 +33,12 @@ class _SuccessAnimationState extends State<SuccessAnimation>
 
     _controller.forward();
 
-    // Navigate after animation
-    Future.delayed(const Duration(milliseconds: 1200), widget.onComplete);
+    // Navigate after animation (with mounted check to prevent firing after dispose)
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (mounted) {
+        widget.onComplete();
+      }
+    });
   }
 
   @override

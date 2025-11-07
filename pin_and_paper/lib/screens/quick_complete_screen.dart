@@ -53,15 +53,17 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    // Bug fix: Capture messenger BEFORE popping to prevent snackbar from vanishing
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+
+    messenger.showSnackBar(
       SnackBar(
         content: Text('✓ Completed: ${match.task.title}'),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 2),
       ),
     );
-
-    Navigator.pop(context);
   }
 
   // Batch complete selected tasks
@@ -75,15 +77,17 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    // Bug fix: Capture messenger BEFORE popping to prevent snackbar from vanishing
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+
+    messenger.showSnackBar(
       SnackBar(
         content: Text('✓ Completed ${_selectedTaskIds.length} task(s)'),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 2),
       ),
     );
-
-    Navigator.pop(context);
   }
 
   // Complete all matches
@@ -96,15 +100,17 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    // Bug fix: Capture messenger BEFORE popping to prevent snackbar from vanishing
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+
+    messenger.showSnackBar(
       SnackBar(
         content: Text('✓ Completed ${_matches.length} task(s)'),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 2),
       ),
     );
-
-    Navigator.pop(context);
   }
 
   String _getConfidenceLabel(double similarity) {

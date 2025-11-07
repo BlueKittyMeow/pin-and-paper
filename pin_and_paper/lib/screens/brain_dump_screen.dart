@@ -277,6 +277,8 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
 
   void _onSuccessComplete() {
     // Reset success state and navigate to preview
+    if (!mounted) return;
+
     setState(() {
       _showSuccess = false;
     });
@@ -319,11 +321,15 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
     );
   }
 
-  void _clearText() {
+  Future<void> _clearText() async {
+    final provider = context.read<BrainDumpProvider>();
+
     setState(() {
       _textController.clear();
     });
-    context.read<BrainDumpProvider>().clear();
+
+    // Clear and delete active draft (prevents stale drafts)
+    await provider.clearAndDeleteDraft();
   }
 
   Future<bool> _showExitConfirmation() async {
@@ -361,6 +367,8 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
   }
 
   Future<void> _saveDraft() async {
+    if (!mounted) return;
+
     final provider = context.read<BrainDumpProvider>();
     await provider.saveDraft(_textController.text);
     if (context.mounted) {
