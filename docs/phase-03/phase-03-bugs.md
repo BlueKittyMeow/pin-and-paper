@@ -47,6 +47,43 @@ These HIGH priority bugs were fixed after Phase 3 review:
 11. ✅ **API usage logging crashes on missing tokens** (claude_service.dart:63)
     - Fixed: Guard with null checks before logging
 
+## Fixed in eddf1cf ✅
+
+These MEDIUM priority bugs were fixed after Phase 3 review:
+
+12. ✅ **BuildContext reused after await** (brain_dump_screen.dart:278)
+    - Fixed: Add mounted checks to _onSuccessComplete and _saveDraft
+
+13. ✅ **Success animation fires after dispose** (success_animation.dart:37)
+    - Fixed: Guard Future.delayed callback with mounted check
+
+14. ✅ **Bottom sheet setState after dispose** (task_suggestion_preview_screen.dart:225)
+    - Fixed: Guard whenComplete setState with mounted check
+
+15. ✅ **Task suggestion snackbar after pop** (task_suggestion_preview_screen.dart:260)
+    - Fixed: Capture messenger before popUntil
+
+16. ✅ **Quick complete snackbars vanish** (quick_complete_screen.dart:57)
+    - Fixed: Capture messenger before pop (3 methods)
+
+17. ✅ **Clear button never flushes draft** (brain_dump_screen.dart:332)
+    - Fixed: Added clearAndDeleteDraft() method, call from _clearText
+
+18. ✅ **Cost estimate never updates on errors** (brain_dump_provider.dart:92)
+    - Fixed: Add notifyListeners() to catch block
+
+19. ✅ **Hide-completed preference never loads** (task_provider.dart:104)
+    - Fixed: Call loadPreferences() in main.dart provider initialization
+
+20. ✅ **Usage stats query re-runs on every rebuild** (settings_screen.dart:233)
+    - Fixed: Cache _usageStatsFuture in state, initialize in initState
+
+21. ✅ **Deprecated DropdownButtonFormField value** (settings_screen.dart:189)
+    - Fixed: Replace value with initialValue
+
+22. ✅ **Deprecated Color.withOpacity** (home_screen.dart:96, 127)
+    - Fixed: Replace withOpacity(x) with withValues(alpha: x)
+
 ---
 
 ## High Priority - Should Fix Soon
@@ -57,74 +94,11 @@ No remaining HIGH priority bugs!
 
 ## Medium Priority - Fix When Convenient
 
-### BuildContext / Async Issues
-
-12. **BuildContext reused after await** (brain_dump_screen.dart:86)
-    - Impact: MEDIUM
-    - Issue: Navigator/setState after await without mounted check
-    - Fix: Add `if (!context.mounted) return;` after awaits
-
-13. **Success animation fires after dispose** (success_animation.dart:24)
-    - Impact: MEDIUM
-    - Issue: Future.delayed callback not cancelled
-    - Fix: Cancel timer in dispose, guard with mounted check
-
-14. **Bottom sheet setState after dispose** (task_suggestion_preview_screen.dart:223)
-    - Impact: MEDIUM
-    - Issue: whenComplete callback runs after screen popped
-    - Fix: Wrap with `if (!mounted) return;` guard
-
-15. **Task suggestion snackbar after pop** (task_suggestion_preview_screen.dart:252)
-    - Impact: MEDIUM
-    - Issue: Navigator.popUntil then SnackBar on disposed context
-    - Fix: Capture messenger before popping
-
-16. **Quick complete snackbars vanish** (quick_complete_screen.dart:56)
-    - Impact: MEDIUM
-    - Issue: SnackBar shown then immediate pop
-    - Fix: Capture root messenger or pop first
-
-### Brain Dump / UI Issues
-
-17. **Clear button never flushes draft** (brain_dump_screen.dart:292)
-    - Impact: MEDIUM
-    - Issue: _clearText doesn't call deleteDraft, stale drafts linger
-    - Fix: Call provider.clear() and deleteDraft in _clearText
-
-18. **Cost estimate never updates on errors** (brain_dump_provider.dart:77)
-    - Impact: MEDIUM
-    - Issue: notifyListeners only on happy path
-    - Fix: Always notify after updating _estimatedCost
-
-### Settings / Preferences Issues
-
-19. **Hide-completed preference never loads** (task_provider.dart:104)
-    - Impact: MEDIUM
-    - Issue: loadPreferences() never called
-    - Fix: Call in main.dart or HomeScreen.initState
+No remaining MEDIUM priority bugs!
 
 ---
 
 ## Low Priority - Nice to Have
-
-### Performance Issues
-
-20. **Usage stats query re-runs on every rebuild** (settings_screen.dart:220)
-    - Impact: LOW
-    - Issue: FutureBuilder receives new future each rebuild
-    - Fix: Cache future in state, only refresh explicitly
-
-### Deprecation Warnings
-
-21. **Deprecated DropdownButtonFormField value** (settings_screen.dart:185)
-    - Impact: LOW
-    - Issue: Flutter 3.24 deprecates value parameter
-    - Fix: Use initialValue instead
-
-22. **Deprecated Color.withOpacity** (home_screen.dart:96)
-    - Impact: LOW
-    - Issue: Flutter 3.24 deprecates withOpacity
-    - Fix: Replace with .withValues(alpha: x)
 
 ---
 
@@ -152,23 +126,23 @@ No remaining HIGH priority bugs!
 ## Statistics
 
 **Total Bugs:** 25
-- **Fixed:** 11 (4 in 47ef2d4, 7 in 754e072)
+- **Fixed:** 22 (4 in 47ef2d4, 7 in 754e072, 11 in eddf1cf)
 - **High:** 0 (all fixed!)
-- **Medium:** 11
+- **Medium:** 0 (all fixed!)
 - **Low:** 3
 
 **By Category:**
-- Brain Dump / Drafts: 3 remaining (3 fixed)
-- API / Connectivity: 0 remaining (4 fixed)
-- BuildContext / Async: 5 remaining
-- Settings / Preferences: 1 remaining
-- Performance: 1 remaining
-- Deprecations: 2 remaining
-- Code Quality: 2 remaining
+- Brain Dump / Drafts: 5 fixed
+- API / Connectivity: 4 fixed
+- BuildContext / Async: 5 fixed
+- Settings / Preferences: 1 fixed
+- Performance: 1 fixed
+- Deprecations: 2 fixed
+- Code Quality: 3 remaining (Gemini-specific, LOW priority)
 
 **Sources:**
-- Codex: 22 bugs
-- Gemini: 3 bugs
+- Codex: 22 bugs (all fixed)
+- Gemini: 3 bugs (LOW priority remaining)
 
 ---
 
