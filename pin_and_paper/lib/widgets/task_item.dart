@@ -20,7 +20,7 @@ class TaskItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             offset: const Offset(0, 1),
             blurRadius: 2,
           ),
@@ -44,7 +44,7 @@ class TaskItem extends StatelessWidget {
                 ? TextDecoration.lineThrough
                 : TextDecoration.none,
             color: task.completed
-                ? Theme.of(context).colorScheme.onSurface.withOpacity(0.5)
+                ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)
                 : Theme.of(context).colorScheme.onSurface,
           ),
         ),

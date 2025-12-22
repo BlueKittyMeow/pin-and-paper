@@ -823,12 +823,12 @@ Phase 3.1 is **COMPLETE** with all deliverables met. The database migration is:
 
 ### Outstanding Work Before Phase 3.2
 
-**Critical bugs identified by Codex (HIGH priority):**
-1. Position backfill duplicate orders
-2. New tasks default to position 0
-3. Missing indexes in migration
+~~**Critical bugs identified by Codex (HIGH priority):**~~
+~~1. Position backfill duplicate orders~~
+~~2. New tasks default to position 0~~
+~~3. Missing indexes in migration~~
 
-**Recommendation:** Address these 3 bugs in a dedicated "Phase 3.1.1 Bug Fixes" commit before proceeding to Phase 3.2 hierarchical UI implementation.
+**✅ UPDATE:** All 3 critical bugs were fixed in commit `47ef2d4` (see bug-fixes-summary.md). No outstanding HIGH priority work remains before Phase 3.2.
 
 ### Foundation Quality
 

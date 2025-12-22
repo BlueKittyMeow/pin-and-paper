@@ -84,6 +84,12 @@ These MEDIUM priority bugs were fixed after Phase 3 review:
 22. ✅ **Deprecated Color.withOpacity** (home_screen.dart:96, 127)
     - Fixed: Replace withOpacity(x) with withValues(alpha: x)
 
+23. ✅ **Usage stats card never refreshes after reset** (settings_screen.dart:485)
+    - Fixed: Recompute _usageStatsFuture in setState after deleting data
+
+24. ✅ **Deprecated withOpacity in widgets** (quick_complete_screen.dart:236, task_input.dart:64, task_item.dart:23,47)
+    - Fixed: Replace all withOpacity(x) with withValues(alpha: x)
+
 ---
 
 ## High Priority - Should Fix Soon
@@ -106,17 +112,17 @@ No remaining MEDIUM priority bugs!
 
 ### Phase 3.1 Code Issues
 
-23. **UserSettings.copyWith allows nullable createdAt** (user_settings.dart:155)
-    - Impact: MEDIUM
+25. **UserSettings.copyWith allows nullable createdAt** (user_settings.dart:155)
+    - Impact: LOW
     - Issue: Constructor requires it, but copyWith allows null
     - Fix: Remove createdAt from copyWith parameters
 
-24. **Inconsistent databaseVersion constant** (constants.dart:5)
+26. **Inconsistent databaseVersion constant** (constants.dart:5)
     - Impact: LOW
     - Issue: Defined in AppConstants but hardcoded in _upgradeDB
     - Fix: Use AppConstants.databaseVersion everywhere
 
-25. **TaskProvider constructor allows nullable dependencies** (task_provider.dart:8)
+27. **TaskProvider constructor allows nullable dependencies** (task_provider.dart:8)
     - Impact: LOW
     - Issue: Nullable params with null-coalescing is misleading
     - Fix: Make params non-nullable with default instances
@@ -125,8 +131,8 @@ No remaining MEDIUM priority bugs!
 
 ## Statistics
 
-**Total Bugs:** 25
-- **Fixed:** 22 (4 in 47ef2d4, 7 in 754e072, 11 in eddf1cf)
+**Total Bugs:** 27
+- **Fixed:** 24 (4 in 47ef2d4, 7 in 754e072, 11 in eddf1cf, 2 in current commit)
 - **High:** 0 (all fixed!)
 - **Medium:** 0 (all fixed!)
 - **Low:** 3
@@ -135,13 +141,13 @@ No remaining MEDIUM priority bugs!
 - Brain Dump / Drafts: 5 fixed
 - API / Connectivity: 4 fixed
 - BuildContext / Async: 5 fixed
-- Settings / Preferences: 1 fixed
+- Settings / Preferences: 3 fixed (stats refresh, dropdown API, hide-completed)
 - Performance: 1 fixed
-- Deprecations: 2 fixed
+- Deprecations: 3 fixed (home_screen withOpacity, widgets withOpacity)
 - Code Quality: 3 remaining (Gemini-specific, LOW priority)
 
 **Sources:**
-- Codex: 22 bugs (all fixed)
+- Codex: 24 bugs (all fixed ✅)
 - Gemini: 3 bugs (LOW priority remaining)
 
 ---

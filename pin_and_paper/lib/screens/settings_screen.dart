@@ -481,7 +481,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (mounted) {
         setState(() {
-          // Trigger rebuild to refresh the stats
+          // Recompute future to refresh stats UI with cleared data
+          _usageStatsFuture = _apiUsageService.getStats();
         });
         _showSnackBar('Usage data reset successfully');
       }
