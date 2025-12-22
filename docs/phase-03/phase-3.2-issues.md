@@ -39,13 +39,29 @@ This document is for Phase 3.2-specific issues only.
 
 ## Open Issues
 
-*No issues yet - implementation just started*
+*No open issues - 1 issue found and resolved*
 
 ---
 
 ## Resolved Issues
 
-*None yet*
+### Issue #1: New tasks disappear after app restart (ordering mismatch) ✅
+**File:** pin_and_paper/lib/services/task_service.dart:99
+**Type:** Bug
+**Severity:** High
+**Found:** 2025-12-22
+**Resolved:** 2025-12-22
+
+**Resolution:**
+Changed `getAllTasks()` ordering from `ASC` to `DESC`:
+```dart
+orderBy: 'position DESC',  // Newest tasks (highest position) appear first
+```
+
+This ensures database query results match the in-memory ordering where new tasks are inserted at index 0. Now tasks consistently appear at the top of the list both during the session and after app restarts.
+
+**Testing:** All 23 unit tests pass ✅
+**Commit:** Pending
 
 ---
 

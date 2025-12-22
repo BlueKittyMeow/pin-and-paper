@@ -93,9 +93,10 @@ class TaskService {
     final db = await _dbService.database;
     final List<Map<String, dynamic>> maps = await db.query(
       AppConstants.tasksTable,
-      // Phase 3.1: Order by position (top-level tasks only for now)
-      // Phase 3.2 will add: ORDER BY parent_id IS NULL DESC, parent_id, position
-      orderBy: 'position ASC',
+      // Bug fix: DESC ordering - newest tasks (highest position) appear first
+      // This matches TaskProvider.createTask() which inserts at index 0
+      // Phase 3.2 will add: ORDER BY parent_id IS NULL DESC, parent_id, position DESC
+      orderBy: 'position DESC',
     );
 
     return maps.map((map) => Task.fromMap(map)).toList();
