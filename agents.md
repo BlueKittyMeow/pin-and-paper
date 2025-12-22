@@ -7,9 +7,23 @@
 - Gemini
 - BlueKitty (the human dev who is project manager)
 
-Each of you has individual .md files in the agents directory. When you learn something or find a better way to approach problem solving or want to record a reminder for yourself, add this to the file with your name on it. Important! Only ever touch your own file. 
+Each of you has individual .md files in the agents directory. When you learn something or find a better way to approach problem solving or want to record a reminder for yourself, add this to the file with your name on it. Important! Only ever touch your own file.
 
 When you make notes and suggestions in documentation, please sign your individual suggestions/notes with "- 'your name'"
+
+### Feedback & Review Formats
+
+For consistent team communication, use the standard formats in:
+- **`docs/templates/agent-feedback-guide.md`** - Detailed format reference for all feedback types
+- **`docs/templates/agent-prompts-cheatsheet.md`** - Quick copy-paste prompts for BlueKitty
+
+**Key formats:**
+1. **Bug findings** (codex-findings.md, gemini-findings.md): Issue title, File, Type, Found, Description, Suggested Fix, Impact
+2. **Pre-implementation reviews**: Severity (CRITICAL/HIGH/MEDIUM/LOW), Category, Location, Issue, Fix, Impact
+3. **Linting reports**: Numbered list grouped by file with lint rule names
+4. **Quick feedback**: Bullet points with severity prefix and agent attribution
+
+See the templates for examples and copy-paste blocks!
 
 Since we are a team of ai and a coffee powered human, we don't need to worry about unrealistic timelines for implementation, we only need to ensure that the scope of each phase/subphase stays manageable and split into logical groupings. 
 
