@@ -35,8 +35,7 @@ class ClaudeService {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          // Bug fix: Updated API version (was 2023-06-01)
-          'anthropic-version': '2024-10-22',
+          'anthropic-version': '2023-06-01',
         },
         body: jsonEncode({
           'model': _model,
