@@ -81,6 +81,29 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  // Phase 3.2: Refresh TreeController roots with visible tasks
+  // Respects hideOldCompleted setting for filtering
+  void _refreshTreeController() {
+    // Get root-level tasks (parentId == null)
+    final rootTasks = _tasks.where((t) => t.parentId == null);
+
+    // Apply visibility filtering (hide old completed tasks if enabled)
+    final visibleRoots = _hideOldCompleted
+        ? rootTasks.where((t) {
+            // Show active tasks
+            if (!t.completed) return true;
+
+            // Show recently completed tasks
+            if (t.completedAt == null) return false;
+            final hoursSinceCompletion = DateTime.now().difference(t.completedAt!).inHours;
+            return hoursSinceCompletion < _hideThresholdHours;
+          })
+        : rootTasks;
+
+    _treeController.roots = visibleRoots;
+    _treeController.rebuild();
+  }
+
   // Phase 2 Stretch: Categorize tasks after loading (called once per load, not per build)
   void _categorizeTasks() {
     final now = DateTime.now();
@@ -120,9 +143,8 @@ class TaskProvider extends ChangeNotifier {
       _tasks = await _taskService.getTaskHierarchy();
       _categorizeTasks();  // Categorize once after load
 
-      // Phase 3.2: Refresh TreeController roots after loading
-      _treeController.roots = _tasks.where((t) => t.parentId == null);
-      _treeController.rebuild();
+      // Phase 3.2: Refresh TreeController with filtered visible tasks
+      _refreshTreeController();
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
       debugPrint(_errorMessage);
@@ -143,6 +165,7 @@ class TaskProvider extends ChangeNotifier {
   Future<void> setHideOldCompleted(bool value) async {
     _hideOldCompleted = value;
     await _preferencesService.setHideOldCompleted(value);
+    _refreshTreeController();  // Phase 3.2: Update visible tasks
     notifyListeners();
   }
 
@@ -151,6 +174,7 @@ class TaskProvider extends ChangeNotifier {
     _hideThresholdHours = hours;
     await _preferencesService.setHideThresholdHours(hours);
     _categorizeTasks();  // Re-categorize with new threshold
+    _refreshTreeController();  // Phase 3.2: Update visible tasks
     notifyListeners();
   }
 
@@ -164,6 +188,10 @@ class TaskProvider extends ChangeNotifier {
       final newTask = await _taskService.createTask(title);
       _tasks.insert(0, newTask); // Add to beginning of list
       _categorizeTasks(); // Keep derived task buckets in sync for UI
+
+      // Phase 3.2: Refresh TreeController with new task
+      _refreshTreeController();
+
       notifyListeners();
     } catch (e) {
       _errorMessage = 'Failed to create task: $e';
@@ -185,6 +213,10 @@ class TaskProvider extends ChangeNotifier {
       _tasks.insertAll(0, newTasks);
       // CRITICAL: Re-categorize to populate activeTasks, recentlyCompletedTasks, etc.
       _categorizeTasks();
+
+      // Phase 3.2: Refresh TreeController with new tasks
+      _refreshTreeController();
+
       // Single notify! Much better than N notifies for N tasks
       notifyListeners();
     } catch (e) {
@@ -206,6 +238,10 @@ class TaskProvider extends ChangeNotifier {
       if (index != -1) {
         _tasks[index] = updatedTask;
         _categorizeTasks();  // Phase 2 Stretch: Re-categorize after toggle
+
+        // Phase 3.2: Refresh TreeController to update visibility
+        _refreshTreeController();
+
         notifyListeners();
       }
     } catch (e) {
