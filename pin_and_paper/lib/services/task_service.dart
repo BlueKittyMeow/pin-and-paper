@@ -244,6 +244,28 @@ class TaskService {
     });
   }
 
+  // Phase 3.2: Count descendants of a task (children only, excluding task itself)
+  // Used for CASCADE delete confirmation dialogs
+  Future<int> countDescendants(String taskId) async {
+    final db = await _dbService.database;
+
+    final result = await db.rawQuery('''
+      WITH RECURSIVE descendants AS (
+        SELECT id FROM ${AppConstants.tasksTable}
+        WHERE parent_id = ?
+
+        UNION ALL
+
+        SELECT t.id
+        FROM ${AppConstants.tasksTable} t
+        INNER JOIN descendants d ON t.parent_id = d.id
+      )
+      SELECT COUNT(*) as count FROM descendants
+    ''', [taskId]);
+
+    return (result.first['count'] as int?) ?? 0;
+  }
+
   // Phase 3.2: Delete task and all its descendants
   // Returns count of deleted tasks
   Future<int> deleteTaskWithChildren(String taskId) async {

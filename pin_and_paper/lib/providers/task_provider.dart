@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/task.dart';
 import '../models/task_suggestion.dart'; // Phase 2
 import '../services/task_service.dart';
@@ -10,11 +11,22 @@ class TaskProvider extends ChangeNotifier {
 
   TaskProvider({TaskService? taskService, PreferencesService? preferencesService})
       : _taskService = taskService ?? TaskService(),
-        _preferencesService = preferencesService ?? PreferencesService();
+        _preferencesService = preferencesService ?? PreferencesService() {
+    // Phase 3.2: Initialize TreeController for hierarchical view
+    _treeController = TreeController<Task>(
+      roots: [],  // Start empty, populated in loadTasks
+      childrenProvider: (Task task) => _tasks.where((t) => t.parentId == task.id),
+      parentProvider: (Task task) => _findParent(task.parentId),
+    );
+  }
 
   List<Task> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Phase 3.2: Hierarchy state
+  bool _isReorderMode = false;
+  late TreeController<Task> _treeController;
 
   // Phase 2 Stretch: Hide completed tasks settings
   bool _hideOldCompleted = true;
@@ -29,6 +41,10 @@ class TaskProvider extends ChangeNotifier {
   List<Task> get tasks => _tasks;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  // Phase 3.2: Hierarchy getters
+  bool get isReorderMode => _isReorderMode;
+  TreeController<Task> get treeController => _treeController;
 
   List<Task> get incompleteTasks =>
       _tasks.where((task) => !task.completed).toList();
@@ -54,6 +70,16 @@ class TaskProvider extends ChangeNotifier {
 
   bool get hideOldCompleted => _hideOldCompleted;
   int get hideThresholdHours => _hideThresholdHours;
+
+  // Phase 3.2: Helper to find parent task by ID
+  Task? _findParent(String? parentId) {
+    if (parentId == null) return null;
+    try {
+      return _tasks.firstWhere((t) => t.id == parentId);
+    } catch (e) {
+      return null;
+    }
+  }
 
   // Phase 2 Stretch: Categorize tasks after loading (called once per load, not per build)
   void _categorizeTasks() {
@@ -82,15 +108,21 @@ class TaskProvider extends ChangeNotifier {
     }).toList();
   }
 
-  // Load all tasks from database
+  // Load all tasks from database with hierarchy
+  // Phase 3.2: Updated to use getTaskHierarchy() and refresh TreeController
   Future<void> loadTasks() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _tasks = await _taskService.getAllTasks();
+      // Phase 3.2: Load with hierarchy information (depth computed dynamically)
+      _tasks = await _taskService.getTaskHierarchy();
       _categorizeTasks();  // Categorize once after load
+
+      // Phase 3.2: Refresh TreeController roots after loading
+      _treeController.roots = _tasks.where((t) => t.parentId == null);
+      _treeController.rebuild();
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
       debugPrint(_errorMessage);
@@ -180,6 +212,115 @@ class TaskProvider extends ChangeNotifier {
       _errorMessage = 'Failed to update task: $e';
       debugPrint(_errorMessage);
       notifyListeners();
+    }
+  }
+
+  // ========== Phase 3.2: Hierarchy Methods ==========
+
+  /// Enter/exit reorder mode
+  void setReorderMode(bool enabled) {
+    _isReorderMode = enabled;
+    notifyListeners();
+  }
+
+  /// Toggle collapse/expand for a task node
+  void toggleCollapse(Task task) {
+    _treeController.toggleExpansion(task);
+  }
+
+  /// Move task to new parent (nest/unnest)
+  Future<void> changeTaskParent({
+    required String taskId,
+    String? newParentId,
+    required int newPosition,
+  }) async {
+    _errorMessage = null;
+
+    try {
+      final error = await _taskService.updateTaskParent(
+        taskId,
+        newParentId,
+        newPosition,
+      );
+
+      if (error != null) {
+        _errorMessage = error;
+        notifyListeners();
+        return;
+      }
+
+      // Reload tasks to reflect changes
+      await loadTasks();
+    } catch (e) {
+      _errorMessage = 'Failed to move task: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+    }
+  }
+
+  /// Handle tree drag-and-drop reordering
+  /// Reference: docs/phase-03/group1.md:1840-1905
+  /// NOTE: Detailed drop position logic (above/inside/below) will be implemented
+  /// in DragAndDropTaskTile widget based on hover zones
+  Future<void> onNodeAccepted({
+    required String draggedTaskId,
+    required String? newParentId,
+    required int newPosition,
+    int? newDepth,
+  }) async {
+    // Validate depth limit if provided (max 4 levels: 0, 1, 2, 3)
+    if (newDepth != null && newDepth >= 4) {
+      _errorMessage = 'Maximum nesting depth (4 levels) reached';
+      notifyListeners();
+      return;
+    }
+
+    // Use existing changeTaskParent (has cycle detection + sibling reindexing)
+    await changeTaskParent(
+      taskId: draggedTaskId,
+      newParentId: newParentId,
+      newPosition: newPosition,
+    );
+  }
+
+  /// Delete task with CASCADE confirmation
+  /// Returns true if deleted, false if cancelled or error
+  Future<bool> deleteTaskWithConfirmation(
+    String taskId,
+    Future<bool> Function(int) showConfirmation,
+  ) async {
+    _errorMessage = null;
+
+    try {
+      // Get child count for confirmation dialog
+      final childCount = await _taskService.countDescendants(taskId);
+
+      // Show confirmation if task has children
+      if (childCount > 0) {
+        final confirmed = await showConfirmation(childCount);
+        if (!confirmed) return false;
+      }
+
+      // Delete task and all descendants
+      final deletedCount = await _taskService.deleteTaskWithChildren(taskId);
+
+      // Remove from local state
+      _tasks.removeWhere((t) => t.id == taskId || t.parentId == taskId);
+      _categorizeTasks();
+
+      // Refresh TreeController
+      _treeController.roots = _tasks.where((t) => t.parentId == null);
+      _treeController.rebuild();
+
+      notifyListeners();
+
+      debugPrint('Deleted $deletedCount task(s)');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to delete task: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
     }
   }
 }
