@@ -3,6 +3,7 @@
 **Subphase:** 3.2
 **Status:** 🔄 IN PROGRESS
 **Started:** 2025-12-22
+**Updated:** 2025-12-22 (v2 - Incorporated Gemini/Codex review feedback)
 **Estimated Duration:** 3-5 days
 
 ---
@@ -10,9 +11,32 @@
 ## Quick Links
 
 - **Detailed Spec:** [group1.md](./group1.md) (Lines 726-844)
+- **Review Feedback:** [phase-3.2-review-v1.md](./phase-3.2-review-v1.md)
 - **Database Schema:** Already implemented in Phase 3.1 (parent_id, position columns)
 - **Bug Tracker:** [phase-03-bugs.md](./phase-03-bugs.md)
 - **Team Findings:** [codex-findings.md](./codex-findings.md), [gemini-findings.md](./gemini-findings.md)
+
+---
+
+## Review Feedback Incorporated (v2)
+
+This document has been updated to address feedback from Gemini and Codex:
+
+**✅ HIGH Priority (Addressed):**
+1. Added recursive CTE specification with exact reference to group1.md:1508-1578
+2. Expanded integration tests with 15+ specific scenarios
+3. Added sibling reindexing (`_reindexSiblings()`) to TaskService checklist
+4. Documented cycle detection (`_wouldCreateCycle()`) with error handling
+
+**✅ MEDIUM Priority (Addressed):**
+5. Added horizontal drag logic details (30/40/30 hover zones)
+6. Specified updateTaskParent validation rules explicitly
+7. Documented auto-complete enum values (prompt/always/never)
+8. Expanded test coverage (cycles, reindexing, preferences)
+
+**✅ LOW Priority (Addressed):**
+9. Clarified DragAndDropTaskTile wraps TaskItem widget
+10. Added future lazy-loading architectural note
 
 ---
 
@@ -51,7 +75,9 @@ Phase 3.2 implements hierarchical task organization with visual nesting and drag
 5. **Auto-Complete Children Prompt**
    - Dialog when parent completed
    - "Remember my choice" checkbox
-   - Store preference in user_settings
+   - Store preference in user_settings (auto_complete_children field)
+   - Valid values: `'prompt'` (ask each time), `'always'` (auto-complete), `'never'` (don't complete)
+   - Default: `'prompt'`
 
 6. **CASCADE Delete Protection**
    - Confirmation dialog: "Delete this task and its X subtasks?"
@@ -71,12 +97,22 @@ Phase 3.2 implements hierarchical task organization with visual nesting and drag
 ### Phase 3.2 Tasks
 
 #### TaskService - Hierarchical Queries
-- [ ] Implement `getTaskHierarchy()` - Load full task tree
+- [ ] Implement `getTaskHierarchy()` - Load full task tree using **recursive CTE**
+  - Reference: `docs/phase-03/group1.md:1508-1578` (exact query specification)
+  - Compute `depth` field dynamically (0-3)
+  - Enforce 4-level depth limit in WHERE clause
+  - Generate `sort_key` for hierarchical ordering (zero-padded)
 - [ ] Implement `getTaskWithChildren()` - Load single task + children
 - [ ] Implement `updateTaskPosition()` - Reorder within parent
-- [ ] Implement `updateTaskParent()` - Change nesting level (with validation)
+- [ ] Implement `updateTaskParent()` - Change nesting level with validation:
+  - **Cycle detection:** Use `_wouldCreateCycle()` helper (group1.md:1624-1688)
+  - **Depth validation:** Prevent exceeding 4 levels
+  - **Sibling reindexing:** Call `_reindexSiblings()` for source AND destination parents (group1.md:1693-1720)
+  - Return errors as Result/Either (don't throw)
+- [ ] Implement `_wouldCreateCycle()` - Cycle prevention helper
+- [ ] Implement `_reindexSiblings()` - Contiguous position numbering helper
 - [ ] Implement `deleteTaskWithChildren()` - CASCADE delete with count
-- [ ] Add 4-level depth validation
+- [ ] Add 4-level depth validation across all mutation operations
 
 #### TaskProvider - State Management
 - [ ] Add TreeController integration
@@ -93,12 +129,21 @@ Phase 3.2 implements hierarchical task organization with visual nesting and drag
 - [ ] Default collapsed state on launch
 
 #### DragAndDropTaskTile Widget
-- [ ] Create custom tile for tree view
-- [ ] Implement drag handles (visible in reorder mode)
-- [ ] Handle vertical drag (position change)
-- [ ] Handle horizontal drag (parent change)
-- [ ] Visual feedback during drag
-- [ ] Snap to valid drop targets
+- [ ] Create custom tile that **wraps TaskItem widget**
+  - DragAndDropTaskTile handles drag logic + affordances
+  - TaskItem remains unchanged for consistent rendering
+  - Promotes reusability and maintains single style source
+- [ ] Implement drag handles (visible in reorder mode only)
+- [ ] Handle vertical drag (position change within same parent)
+- [ ] Handle horizontal drag (parent change) with hover zones:
+  - **Top 30%:** Drop before target task (same level)
+  - **Middle 40%:** Drop as child of target task (indent)
+  - **Bottom 30%:** Drop after target task (same level)
+  - Visual "ghost indent" indicator shows drop location
+  - Reference: See detailed UX spec in tree-drag-drop integration notes
+- [ ] Visual feedback during drag (highlight, ghost position)
+- [ ] Snap to valid drop targets (enforce depth limits)
+- [ ] Prevent invalid drops (cycles, depth violations)
 
 #### Context Menu
 - [ ] Implement long-press detection
@@ -109,16 +154,41 @@ Phase 3.2 implements hierarchical task organization with visual nesting and drag
 - [ ] Wire up to TaskService methods
 
 #### Testing
-- [ ] Unit tests: Hierarchical query logic
-- [ ] Unit tests: Position management
-- [ ] Unit tests: Depth validation
-- [ ] Widget tests: TreeView rendering
-- [ ] Widget tests: Reorder mode UI
-- [ ] Widget tests: Context menu
-- [ ] Integration test: Create nested tasks
-- [ ] Integration test: Reorder tasks
-- [ ] Integration test: Delete parent with children
-- [ ] Integration test: Auto-complete children flow
+
+**Unit Tests:**
+- [ ] Hierarchical query logic (recursive CTE)
+- [ ] Position management (reindexing)
+- [ ] Depth validation (4-level limit)
+- [ ] Cycle detection (`_wouldCreateCycle()`)
+- [ ] Auto-complete preference persistence (prompt/always/never)
+
+**Widget Tests:**
+- [ ] TreeView rendering with nested data
+- [ ] Reorder mode UI (toggle, drag handles)
+- [ ] Context menu display and actions
+- [ ] Visual depth indicators (indentation)
+
+**Integration Tests - Reordering:**
+- [ ] Drag subtask to root level (outdent)
+- [ ] Drag root task to become subtask (indent)
+- [ ] Reorder parent task with children (children move together)
+- [ ] Move task from one parent to another
+- [ ] Verify positions are contiguous after moves (sibling reindexing)
+
+**Integration Tests - Depth & Cycles:**
+- [ ] Attempt to create 5th level of nesting (should fail/prevent)
+- [ ] Attempt to drag task under its own descendant (cycle prevention)
+- [ ] Verify depth calculation after complex moves
+
+**Integration Tests - Data Integrity:**
+- [ ] Reload from database after reorder, verify position/parent_id correctness
+- [ ] CASCADE delete with children, verify count and removal
+- [ ] Auto-complete children flow with "remember choice" persistence
+
+**Integration Tests - Edge Cases:**
+- [ ] Move task between parents at different depths
+- [ ] Reorder when parent has no other children
+- [ ] Complete parent with nested descendants (auto-complete preference handling)
 
 ---
 
@@ -152,6 +222,53 @@ Phase 3.2 implements hierarchical task organization with visual nesting and drag
 - Cleaner initial view
 - User opens what they need
 - Performance: fewer widgets rendered
+
+### 5. Validation Strategy
+**Decision:** Explicit validation with user-friendly error messages
+**Cycle Prevention:**
+- Use `_wouldCreateCycle()` helper before ANY parent change
+- Traverse descendants recursively to detect if new parent is a descendant
+- Surface errors via SnackBar/Toast (don't throw exceptions)
+
+**Depth Enforcement:**
+- Check depth before moving tasks
+- Prevent operations that would exceed 4 levels
+- Show clear error: "Cannot nest deeper than 4 levels"
+
+**Sibling Reindexing:**
+- Always run `_reindexSiblings()` after moves
+- Ensures contiguous position values (0, 1, 2, 3...)
+- Runs for BOTH source and destination parent lists
+
+### 6. Future Lazy-Loading Consideration
+**Out of scope for Phase 3.2, but architectural note:**
+- Current implementation loads full tree on launch
+- For very large task lists (100+ tasks), consider lazy-loading
+- `flutter_fancy_tree_view2`'s TreeController supports async `childrenProvider`
+- Future optimization: Load only root tasks initially, fetch children on expand
+- Design with this in mind: keep `getTaskHierarchy()` separate from `getChildren(parentId)`
+
+---
+
+## Key Implementation References
+
+**From group1.md (Detailed Spec):**
+
+| Component | Lines | Description |
+|-----------|-------|-------------|
+| Recursive CTE Query | 1508-1578 | `getAllTasksHierarchical()` - Full hierarchical query with depth calculation |
+| Cycle Detection | 1624-1688 | `_wouldCreateCycle()` - Prevents task becoming its own descendant |
+| Sibling Reindexing | 1693-1720 | `_reindexSiblings()` - Ensures contiguous position values after moves |
+| Update Task Parent | 1323-1344 | `updateTaskParent()` - Main parent-change method with validation |
+| Auto-Complete Settings | Lines TBD | `auto_complete_children` field in UserSettings |
+| Drag-Drop UX | Tree integration notes | 30/40/30 hover zones, ghost indicators |
+
+**Error Handling Strategy:**
+- Validation errors return `Result<T, Error>` or similar pattern
+- Never throw exceptions for user actions (cycle/depth violations)
+- Surface errors via SnackBar with clear messages
+- Example: "Cannot create circular task dependencies"
+- Example: "Maximum nesting depth (4 levels) reached"
 
 ---
 
