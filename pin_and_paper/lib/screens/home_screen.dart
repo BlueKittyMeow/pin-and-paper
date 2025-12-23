@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
+import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../widgets/task_input.dart';
 import '../widgets/task_item.dart';
@@ -33,6 +35,20 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
         actions: [
+          // Phase 3.2: Reorder mode toggle
+          Consumer<TaskProvider>(
+            builder: (context, taskProvider, _) {
+              return IconButton(
+                icon: Icon(
+                  taskProvider.isReorderMode ? Icons.check : Icons.reorder,
+                ),
+                tooltip: taskProvider.isReorderMode ? 'Done' : 'Reorder Tasks',
+                onPressed: () {
+                  taskProvider.setReorderMode(!taskProvider.isReorderMode);
+                },
+              );
+            },
+          ),
           // Phase 2: Brain Dump button
           IconButton(
             icon: const Icon(Icons.auto_awesome),
@@ -80,11 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Phase 2 Stretch: Check if there are any visible tasks
-                final hasActiveTasks = taskProvider.activeTasks.isNotEmpty;
-                final hasRecentlyCompleted = taskProvider.recentlyCompletedTasks.isNotEmpty;
-
-                if (!hasActiveTasks && !hasRecentlyCompleted) {
+                // Phase 3.2: Check if there are any root tasks
+                if (taskProvider.treeController.roots.isEmpty) {
                   return Center(
                     child: Text(
                       'No tasks yet.\nAdd one above!',
@@ -99,48 +112,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Phase 2 Stretch: Render active tasks + separator + recently completed tasks
-                return ListView(
+                // Phase 3.2: Hierarchical tree view using AnimatedTreeView
+                return AnimatedTreeView<Task>(
+                  treeController: taskProvider.treeController,
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    // Active tasks (normal opacity, no strikethrough)
-                    ...taskProvider.activeTasks.map((task) => TaskItem(task: task)),
-
-                    // Separator and recently completed tasks
-                    if (hasRecentlyCompleted) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16.0,
-                          vertical: 16.0,
-                        ),
-                        child: Row(
-                          children: [
-                            const Expanded(child: Divider()),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                              child: Text(
-                                'Recently Completed',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.5),
-                                    ),
-                              ),
-                            ),
-                            const Expanded(child: Divider()),
-                          ],
-                        ),
-                      ),
-                      // Recently completed tasks (reduced opacity + strikethrough)
-                      ...taskProvider.recentlyCompletedTasks.map(
-                        (task) => Opacity(
-                          opacity: 0.5,
-                          child: TaskItem(task: task),
-                        ),
-                      ),
-                    ],
-                  ],
+                  nodeBuilder: (context, TreeEntry<Task> entry) {
+                    return TaskItem(
+                      key: ValueKey(entry.node.id),
+                      task: entry.node,
+                      depth: entry.node.depth,
+                      hasChildren: entry.hasChildren,
+                      isExpanded: entry.isExpanded,
+                      onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
+                      isReorderMode: taskProvider.isReorderMode,
+                    );
+                  },
                 );
               },
             ),
