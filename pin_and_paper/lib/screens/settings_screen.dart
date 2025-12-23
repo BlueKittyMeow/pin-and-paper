@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/settings_provider.dart';
 import '../providers/task_provider.dart';
 import '../services/settings_service.dart';
@@ -306,6 +308,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               },
             ),
+            const SizedBox(height: 32),
+
+            // App Info Section
+            Text(
+              'App Info',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  );
+                }
+
+                final info = snapshot.data!;
+                final dbVersion = AppConstants.databaseVersion;
+
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatRow(
+                          'Version:',
+                          'v${info.version}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStatRow(
+                          'Build:',
+                          '#${info.buildNumber}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStatRow(
+                          'Database:',
+                          'v$dbVersion',
+                        ),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () => _copyDebugInfo(info, dbVersion),
+                          icon: const Icon(Icons.copy),
+                          label: const Text('Copy Debug Info'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -490,6 +548,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         _showSnackBar('Failed to reset usage data: $e', isError: true);
       }
+    }
+  }
+
+  Future<void> _copyDebugInfo(PackageInfo info, int dbVersion) async {
+    final debugInfo = '''
+Pin and Paper Debug Info
+========================
+App Version: ${info.version}
+Build Number: ${info.buildNumber}
+Database Version: $dbVersion
+Package Name: ${info.packageName}
+========================
+''';
+
+    await Clipboard.setData(ClipboardData(text: debugInfo));
+    if (mounted) {
+      _showSnackBar('Debug info copied to clipboard');
     }
   }
 }

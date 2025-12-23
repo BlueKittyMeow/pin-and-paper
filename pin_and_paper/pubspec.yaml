@@ -1,7 +1,10 @@
 name: pin_and_paper
 description: ADHD-friendly task management with beautiful aesthetic
 publish_to: 'none'
-version: 0.1.0+1
+# Version format: MAJOR.MINOR.PATCH+BUILD
+# 0.3.1 = Phase 3.1 complete (database v4)
+# +1 = Build number (increment with each build)
+version: 0.3.1+1
 
 environment:
   sdk: '>=3.5.0 <4.0.0'  # Supports Flutter 3.24+ (Dart 3.5+) through current stable
@@ -22,6 +25,7 @@ dependencies:
   intl: ^0.19.0
   path: ^1.9.1
   clock: ^1.1.0  # Phase 3: Testable timestamps
+  package_info_plus: ^8.1.0  # App version info
 
   # Phase 3: Tree view for hierarchical tasks
   flutter_fancy_tree_view2: ^1.6.2  # Phase 3.2: Drag-and-drop tree view
