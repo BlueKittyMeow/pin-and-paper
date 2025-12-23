@@ -6,8 +6,8 @@ import 'api_usage_service.dart'; // Phase 2 Stretch
 
 class ClaudeService {
   final String _baseUrl = 'https://api.anthropic.com/v1';
-  // Bug fix: Updated to current stable model (was claude-sonnet-4-5)
-  final String _model = 'claude-3-5-sonnet-20241022';
+  // Claude Sonnet 4.5 - best model for real-world agents and coding
+  final String _model = 'claude-sonnet-4-5';
   final Uuid _uuid = const Uuid();
 
   // Estimate API cost before sending
