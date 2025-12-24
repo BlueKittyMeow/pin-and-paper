@@ -337,18 +337,12 @@ class TaskProvider extends ChangeNotifier {
         if (!confirmed) return false;
       }
 
-      // Delete task and all descendants
+      // Delete task and all descendants from database
       final deletedCount = await _taskService.deleteTaskWithChildren(taskId);
 
-      // Remove from local state
-      _tasks.removeWhere((t) => t.id == taskId || t.parentId == taskId);
-      _categorizeTasks();
-
-      // Refresh TreeController
-      _treeController.roots = _tasks.where((t) => t.parentId == null);
-      _treeController.rebuild();
-
-      notifyListeners();
+      // CRITICAL: Reload all tasks from database to ensure consistency
+      // This is safer than trying to manually remove all descendants from _tasks
+      await loadTasks();
 
       debugPrint('Deleted $deletedCount task(s)');
       return true;
