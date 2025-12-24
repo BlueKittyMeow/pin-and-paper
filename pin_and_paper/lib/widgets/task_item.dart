@@ -55,17 +55,7 @@ class TaskItem extends StatelessWidget {
     final effectiveDepth = depth ?? task.depth;
     final leftMargin = 16.0 + (effectiveDepth * 24.0); // 24px per level
 
-    return GestureDetector(
-      // Phase 3.2: Long-press to show context menu
-      onLongPressStart: (details) {
-        TaskContextMenu.show(
-          context: context,
-          task: task,
-          position: details.globalPosition,
-          onDelete: () => _handleDelete(context),
-        );
-      },
-      child: Container(
+    final taskContainer = Container(
       margin: EdgeInsets.only(
         left: leftMargin,
         right: 16,
@@ -133,7 +123,25 @@ class TaskItem extends StatelessWidget {
             ? const Icon(Icons.drag_handle, color: Colors.grey)
             : null,
       ),
-      ),
+    );
+
+    // Only enable context menu (long-press) when NOT in reorder mode
+    // In reorder mode, TreeDraggable handles the long-press for dragging
+    if (isReorderMode) {
+      return taskContainer;
+    }
+
+    return GestureDetector(
+      // Phase 3.2: Long-press to show context menu (disabled in reorder mode)
+      onLongPressStart: (details) {
+        TaskContextMenu.show(
+          context: context,
+          task: task,
+          position: details.globalPosition,
+          onDelete: () => _handleDelete(context),
+        );
+      },
+      child: taskContainer,
     );
   }
 }
