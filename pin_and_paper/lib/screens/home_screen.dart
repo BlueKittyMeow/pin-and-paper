@@ -5,6 +5,7 @@ import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../widgets/task_input.dart';
 import '../widgets/task_item.dart';
+import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2
 import 'brain_dump_screen.dart'; // Phase 2
 import 'settings_screen.dart'; // Phase 2
 import 'quick_complete_screen.dart'; // Phase 2 Stretch
@@ -117,6 +118,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   treeController: taskProvider.treeController,
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   nodeBuilder: (context, TreeEntry<Task> entry) {
+                    // Use drag-and-drop tile in reorder mode, normal tile otherwise
+                    if (taskProvider.isReorderMode) {
+                      return DragAndDropTaskTile(
+                        key: ValueKey(entry.node.id),
+                        entry: entry,
+                        onNodeAccepted: taskProvider.onNodeAccepted,
+                        onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
+                        longPressDelay: Theme.of(context).platform == TargetPlatform.iOS ||
+                                Theme.of(context).platform == TargetPlatform.android
+                            ? const Duration(milliseconds: 500)
+                            : null,
+                      );
+                    }
+
                     return TaskItem(
                       key: ValueKey(entry.node.id),
                       task: entry.node,
@@ -124,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       hasChildren: entry.hasChildren,
                       isExpanded: entry.isExpanded,
                       onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
-                      isReorderMode: taskProvider.isReorderMode,
+                      isReorderMode: false,
                     );
                   },
                 );

@@ -4,6 +4,7 @@ import '../models/task.dart';
 import '../models/task_suggestion.dart'; // Phase 2
 import '../services/task_service.dart';
 import '../services/preferences_service.dart'; // Phase 2 Stretch
+import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
 
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService;
@@ -295,17 +296,42 @@ class TaskProvider extends ChangeNotifier {
   }
 
   /// Handle tree drag-and-drop reordering
+  /// Takes TreeDragAndDropDetails and uses mapDropPosition extension
   /// Reference: docs/phase-03/group1.md:1840-1905
-  /// NOTE: Detailed drop position logic (above/inside/below) will be implemented
-  /// in DragAndDropTaskTile widget based on hover zones
-  Future<void> onNodeAccepted({
-    required String draggedTaskId,
-    required String? newParentId,
-    required int newPosition,
-    int? newDepth,
-  }) async {
-    // Validate depth limit if provided (max 4 levels: 0, 1, 2, 3)
-    if (newDepth != null && newDepth >= 4) {
+  Future<void> onNodeAccepted(TreeDragAndDropDetails<Task> details) async {
+    String? newParentId;
+    int newPosition = 0;
+    int newDepth = 0;
+
+    // Determine drop location based on hover zone (30/40/30 split)
+    // Uses extension from drag_and_drop_task_tile.dart
+    details.mapDropPosition(
+      whenAbove: () {
+        // Insert as previous sibling of target
+        newParentId = details.targetNode.parentId;
+        newPosition = details.targetNode.position;
+        newDepth = details.targetNode.depth;
+      },
+      whenInside: () {
+        // Insert as last child of target
+        newParentId = details.targetNode.id;
+        final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
+        newPosition = siblings.length;
+        newDepth = details.targetNode.depth + 1;
+
+        // Auto-expand target to show new child
+        _treeController.setExpansionState(details.targetNode, true);
+      },
+      whenBelow: () {
+        // Insert as next sibling of target
+        newParentId = details.targetNode.parentId;
+        newPosition = details.targetNode.position + 1;
+        newDepth = details.targetNode.depth;
+      },
+    );
+
+    // Validate depth limit (max 4 levels: 0, 1, 2, 3)
+    if (newDepth >= 4) {
       _errorMessage = 'Maximum nesting depth (4 levels) reached';
       notifyListeners();
       return;
@@ -313,7 +339,7 @@ class TaskProvider extends ChangeNotifier {
 
     // Use existing changeTaskParent (has cycle detection + sibling reindexing)
     await changeTaskParent(
-      taskId: draggedTaskId,
+      taskId: details.draggedNode.id,
       newParentId: newParentId,
       newPosition: newPosition,
     );
