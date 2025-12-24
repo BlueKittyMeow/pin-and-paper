@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../providers/task_provider.dart';
+import 'task_context_menu.dart';
 
 class TaskItem extends StatelessWidget {
   final Task task;
@@ -23,13 +24,48 @@ class TaskItem extends StatelessWidget {
     this.isReorderMode = false,
   });
 
+  // Phase 3.2: Handle task deletion with confirmation
+  Future<void> _handleDelete(BuildContext context) async {
+    final taskProvider = context.read<TaskProvider>();
+
+    // Show confirmation dialog (callback expects childCount parameter)
+    final deleted = await taskProvider.deleteTaskWithConfirmation(
+      task.id,
+      (childCount) => DeleteTaskDialog.show(
+        context: context,
+        task: task,
+        childCount: childCount,
+      ),
+    );
+
+    // Show feedback if deleted
+    if (deleted && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deleted "${task.title}"'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Phase 3.2: Calculate indentation based on depth
     final effectiveDepth = depth ?? task.depth;
     final leftMargin = 16.0 + (effectiveDepth * 24.0); // 24px per level
 
-    return Container(
+    return GestureDetector(
+      // Phase 3.2: Long-press to show context menu
+      onLongPressStart: (details) {
+        TaskContextMenu.show(
+          context: context,
+          task: task,
+          position: details.globalPosition,
+          onDelete: () => _handleDelete(context),
+        );
+      },
+      child: Container(
       margin: EdgeInsets.only(
         left: leftMargin,
         right: 16,
@@ -96,6 +132,7 @@ class TaskItem extends StatelessWidget {
         trailing: isReorderMode
             ? const Icon(Icons.drag_handle, color: Colors.grey)
             : null,
+      ),
       ),
     );
   }
