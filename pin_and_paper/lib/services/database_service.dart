@@ -17,6 +17,26 @@ class DatabaseService {
     return _database!;
   }
 
+  /// Set a test database (for testing only)
+  ///
+  /// This allows tests to inject an in-memory database created with
+  /// sqflite_common_ffi, avoiding the need for path_provider.
+  @visibleForTesting
+  static void setTestDatabase(Database testDb) {
+    _database = testDb;
+  }
+
+  /// Close and reset the database (for testing only)
+  ///
+  /// This allows tests to clean up and start fresh between test cases.
+  @visibleForTesting
+  static Future<void> resetDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+  }
+
   Future<Database> _initDB() async {
     final docDir = await getApplicationDocumentsDirectory();
     final path = join(docDir.path, AppConstants.databaseName);
@@ -67,6 +87,9 @@ class DatabaseService {
         -- Phase 3.1: Notification support
         notification_type TEXT DEFAULT 'use_global',
         notification_time INTEGER,
+
+        -- Phase 3.3: Soft delete
+        deleted_at INTEGER DEFAULT NULL,
 
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
       )
@@ -220,6 +243,15 @@ class DatabaseService {
       CREATE INDEX idx_tasks_completed ON ${AppConstants.tasksTable}(completed, completed_at)
     ''');
 
+    await db.execute('''
+      CREATE INDEX idx_tasks_deleted_at ON ${AppConstants.tasksTable}(deleted_at)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_tasks_active ON ${AppConstants.tasksTable}(deleted_at, completed, created_at DESC)
+        WHERE deleted_at IS NULL
+    ''');
+
     // Task images indexes
     await db.execute('''
       CREATE INDEX idx_task_images_task ON ${AppConstants.taskImagesTable}(task_id, position)
@@ -337,6 +369,11 @@ class DatabaseService {
     // Migrate from version 3 to 4: Phase 3 - Task nesting, dates, user settings
     if (oldVersion < 4) {
       await _migrateToV4(db);
+    }
+
+    // Migrate from version 4 to 5: Phase 3.3 - Soft delete (Recently Deleted)
+    if (oldVersion < 5) {
+      await _migrateToV5(db);
     }
   }
 
@@ -614,6 +651,50 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v4 successfully');
+  }
+
+  /// Phase 3.3 Migration: v4 → v5
+  ///
+  /// Adds:
+  /// - Soft delete support (deleted_at timestamp column)
+  /// - Index on deleted_at for query performance
+  /// - Partial index for active tasks (deleted_at IS NULL)
+  ///
+  /// All existing tasks remain active (deleted_at = NULL by default)
+  Future<void> _migrateToV5(Database db) async {
+    // Wrap entire migration in a transaction for atomicity
+    await db.transaction((txn) async {
+      // ===========================================
+      // 1. ADD DELETED_AT COLUMN
+      // ===========================================
+
+      // Add deleted_at column to tasks table
+      // DEFAULT NULL means all existing tasks are NOT deleted
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.tasksTable}
+        ADD COLUMN deleted_at INTEGER DEFAULT NULL
+      ''');
+
+      // ===========================================
+      // 2. CREATE INDEXES
+      // ===========================================
+
+      // General index for deleted_at queries
+      await txn.execute('''
+        CREATE INDEX idx_tasks_deleted_at
+        ON ${AppConstants.tasksTable}(deleted_at)
+      ''');
+
+      // Partial index for active tasks (most common query pattern)
+      // Covers queries filtering WHERE deleted_at IS NULL
+      await txn.execute('''
+        CREATE INDEX idx_tasks_active
+        ON ${AppConstants.tasksTable}(deleted_at, completed, created_at DESC)
+        WHERE deleted_at IS NULL
+      ''');
+    });
+
+    debugPrint('✅ Database migrated to v5 successfully');
   }
 
   Future<void> close() async {

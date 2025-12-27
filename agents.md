@@ -1,5 +1,10 @@
 # Pin and Paper
 
+# Codex Instructions
+
+- Use standard shell commands (cat, ls, head, grep) for file operations
+- Do not use Python for simple file reading tasks
+
 ## Team Members
 
 - Claude

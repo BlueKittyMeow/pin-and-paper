@@ -8,6 +8,7 @@ import '../services/settings_service.dart';
 import '../services/api_usage_service.dart';
 import '../services/database_service.dart';
 import '../utils/constants.dart';
+import 'recently_deleted_screen.dart'; // Phase 3.3
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -221,6 +222,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 );
               },
+            ),
+            const SizedBox(height: 32),
+
+            // Data Management Section (Phase 3.3)
+            Text(
+              'Data Management',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(
+                      Icons.restore_from_trash,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text('Recently Deleted'),
+                    subtitle: const Text('View and restore deleted tasks'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RecentlyDeletedScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 32),
 

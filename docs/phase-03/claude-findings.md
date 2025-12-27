@@ -1,43 +1,38 @@
-# Claude Findings - Phase 3
+# Claude Findings - Phase 3.3
 
-**Phase:** 3
-**Started:** 2025-10-30
+**Phase:** 3.3 (Recently Deleted / Soft Delete)
+**Started:** 2025-12-27
 **Status:** Active
 
 ---
 
 ## Instructions
 
-This document tracks self-review notes, potential improvements, and architectural considerations discovered during Phase 3 implementation.
+This document tracks bugs, issues, and improvements found during Phase 3.3 implementation.
 
 **Format for each finding:**
+
 ```markdown
 ## Issue: [Brief Title]
 **File:** path/to/file.dart:line
-**Type:** [Bug / Performance / Architecture / Documentation / Code Quality]
+**Type:** [Bug / Performance / Architecture / Documentation]
 **Found:** [DATE]
 
 **Description:**
-[What could be improved]
+[What's wrong]
 
 **Suggested Fix:**
-[How to address it]
+[How to fix]
 
 **Impact:** [High / Medium / Low]
-**Priority:** [Now / Later / Backlog]
+
+**Status:** [Open / In Progress / Fixed / Won't Fix]
 ```
 
----
-
-## Finding Log
-
-(Findings added below as discovered during implementation)
+I'll add self-review findings here as I discover them during implementation.
 
 ---
 
-## Notes
+## Findings
 
-- This is for Claude's self-review while implementing
-- Separate from Codex/Gemini findings (they focus on bug hunting)
-- Can include refactoring ideas, code smells, documentation gaps
-- Not all findings need immediate action - some are "nice to have"
+[Findings added below as discovered]
