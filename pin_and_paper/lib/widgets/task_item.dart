@@ -13,6 +13,7 @@ class TaskItem extends StatelessWidget {
   final bool? isExpanded;
   final VoidCallback? onToggleCollapse;
   final bool isReorderMode;
+  final String? breadcrumb; // Phase 3.2: Optional breadcrumb for completed tasks
 
   const TaskItem({
     super.key,
@@ -22,6 +23,7 @@ class TaskItem extends StatelessWidget {
     this.isExpanded,
     this.onToggleCollapse,
     this.isReorderMode = false,
+    this.breadcrumb,
   });
 
   // Phase 3.2: Handle task deletion with confirmation
@@ -73,55 +75,80 @@ class TaskItem extends StatelessWidget {
           ),
         ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 4,
-        ),
-        // Phase 3.2: Expand/collapse button for tasks with children
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (hasChildren == true)
-              IconButton(
-                icon: Icon(
-                  isExpanded == true
-                      ? Icons.keyboard_arrow_down
-                      : Icons.keyboard_arrow_right,
-                  size: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Phase 3.2: Show breadcrumb if provided
+          if (breadcrumb != null)
+            Padding(
+              padding: const EdgeInsets.only(
+                left: 12,
+                right: 12,
+                top: 8,
+              ),
+              child: Text(
+                breadcrumb!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
-                onPressed: onToggleCollapse,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 24,
-                  minHeight: 24,
-                ),
-              )
-            else
-              const SizedBox(width: 24), // Spacer for alignment
-            Checkbox(
-              value: task.completed,
-              onChanged: (_) {
-                context.read<TaskProvider>().toggleTaskCompletion(task);
-              },
+                softWrap: true,
+                overflow: TextOverflow.visible,
+              ),
             ),
-          ],
-        ),
-        title: Text(
-          task.title,
-          style: TextStyle(
-            decoration: task.completed
-                ? TextDecoration.lineThrough
-                : TextDecoration.none,
-            color: task.completed
-                ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)
-                : Theme.of(context).colorScheme.onSurface,
+          ListTile(
+            contentPadding: EdgeInsets.only(
+              left: 12,
+              right: 12,
+              top: breadcrumb != null ? 0 : 4,
+              bottom: 4,
+            ),
+            // Phase 3.2: Expand/collapse button for tasks with children
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasChildren == true)
+                  IconButton(
+                    icon: Icon(
+                      isExpanded == true
+                          ? Icons.keyboard_arrow_down
+                          : Icons.keyboard_arrow_right,
+                      size: 20,
+                    ),
+                    onPressed: onToggleCollapse,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
+                  )
+                else
+                  const SizedBox(width: 24), // Spacer for alignment
+                Checkbox(
+                  value: task.completed,
+                  onChanged: (_) {
+                    context.read<TaskProvider>().toggleTaskCompletion(task);
+                  },
+                ),
+              ],
+            ),
+            title: Text(
+              task.title,
+              style: TextStyle(
+                decoration: task.completed
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
+                color: task.completed
+                    ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            // Phase 3.2: Drag handle in reorder mode
+            trailing: isReorderMode
+                ? const Icon(Icons.drag_handle, color: Colors.grey)
+                : null,
           ),
-        ),
-        // Phase 3.2: Drag handle in reorder mode
-        trailing: isReorderMode
-            ? const Icon(Icons.drag_handle, color: Colors.grey)
-            : null,
+        ],
       ),
     );
 

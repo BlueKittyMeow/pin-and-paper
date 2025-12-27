@@ -97,8 +97,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Phase 3.2: Check if there are any root tasks
-                if (taskProvider.treeController.roots.isEmpty) {
+                // Phase 3.2: Check if there are any tasks at all
+                final hasActiveTasks = taskProvider.treeController.roots.isNotEmpty;
+                final completedTasks = taskProvider.visibleCompletedTasks;
+                final hasRecentlyCompleted = completedTasks.isNotEmpty;
+
+                if (!hasActiveTasks && !hasRecentlyCompleted) {
                   return Center(
                     child: Text(
                       'No tasks yet.\nAdd one above!',
@@ -113,35 +117,64 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Phase 3.2: Hierarchical tree view using AnimatedTreeView
-                return AnimatedTreeView<Task>(
-                  treeController: taskProvider.treeController,
+                // Phase 3.2: Show active tasks and recently completed in separate sections
+                return ListView(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  nodeBuilder: (context, TreeEntry<Task> entry) {
-                    // Use drag-and-drop tile in reorder mode, normal tile otherwise
-                    if (taskProvider.isReorderMode) {
-                      return DragAndDropTaskTile(
-                        key: ValueKey(entry.node.id),
-                        entry: entry,
-                        onNodeAccepted: taskProvider.onNodeAccepted,
-                        onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
-                        longPressDelay: Theme.of(context).platform == TargetPlatform.iOS ||
-                                Theme.of(context).platform == TargetPlatform.android
-                            ? const Duration(milliseconds: 500)
-                            : null,
-                      );
-                    }
+                  children: [
+                    // Active tasks tree
+                    if (hasActiveTasks)
+                      AnimatedTreeView<Task>(
+                        treeController: taskProvider.treeController,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        nodeBuilder: (context, TreeEntry<Task> entry) {
+                          // Use drag-and-drop tile in reorder mode, normal tile otherwise
+                          if (taskProvider.isReorderMode) {
+                            return DragAndDropTaskTile(
+                              key: ValueKey(entry.node.id),
+                              entry: entry,
+                              onNodeAccepted: taskProvider.onNodeAccepted,
+                              onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
+                              longPressDelay: Theme.of(context).platform == TargetPlatform.iOS ||
+                                      Theme.of(context).platform == TargetPlatform.android
+                                  ? const Duration(milliseconds: 500)
+                                  : null,
+                            );
+                          }
 
-                    return TaskItem(
-                      key: ValueKey(entry.node.id),
-                      task: entry.node,
-                      depth: entry.node.depth,
-                      hasChildren: entry.hasChildren,
-                      isExpanded: entry.isExpanded,
-                      onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
-                      isReorderMode: false,
-                    );
-                  },
+                          return TaskItem(
+                            key: ValueKey(entry.node.id),
+                            task: entry.node,
+                            depth: entry.node.depth,
+                            hasChildren: entry.hasChildren,
+                            isExpanded: entry.isExpanded,
+                            onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
+                            isReorderMode: false,
+                          );
+                        },
+                      ),
+
+                    // Divider between active and completed
+                    if (hasRecentlyCompleted) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Divider(),
+                      ),
+
+                      // Recently completed tasks (flat list with breadcrumbs)
+                      ...completedTasks.map((task) {
+                        final breadcrumb = taskProvider.getBreadcrumb(task);
+                        return TaskItem(
+                          key: ValueKey(task.id),
+                          task: task,
+                          depth: 0, // Flat list, no indentation
+                          hasChildren: false, // No expand/collapse in completed section
+                          isReorderMode: false,
+                          breadcrumb: breadcrumb,
+                        );
+                      }),
+                    ],
+                  ],
                 );
               },
             ),

@@ -82,27 +82,65 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  // Phase 3.2: Refresh TreeController roots with visible tasks
-  // Respects hideOldCompleted setting for filtering
+  // Phase 3.2: Check if a task has any incomplete descendants
+  bool _hasIncompleteDescendants(Task task) {
+    final children = _tasks.where((t) => t.parentId == task.id);
+    for (final child in children) {
+      if (!child.completed) return true;
+      if (_hasIncompleteDescendants(child)) return true;
+    }
+    return false;
+  }
+
+  // Phase 3.2: Build breadcrumb path for a task (root > parent > grandparent)
+  String? getBreadcrumb(Task task) {
+    if (task.parentId == null) return null; // No breadcrumb for root tasks
+
+    List<String> path = [];
+    String? currentParentId = task.parentId;
+
+    while (currentParentId != null) {
+      final parent = _findParent(currentParentId);
+      if (parent == null) break;
+      path.insert(0, parent.title); // Insert at beginning to build path from root
+      currentParentId = parent.parentId;
+    }
+
+    return path.isEmpty ? null : path.join(' > ');
+  }
+
+  // Phase 3.2: Refresh TreeController with active tasks
+  // Active = incomplete OR (completed but has incomplete descendants)
   void _refreshTreeController() {
-    // Get root-level tasks (parentId == null)
-    final rootTasks = _tasks.where((t) => t.parentId == null);
-
-    // Apply visibility filtering (hide old completed tasks if enabled)
-    final visibleRoots = _hideOldCompleted
-        ? rootTasks.where((t) {
-            // Show active tasks
-            if (!t.completed) return true;
-
-            // Show recently completed tasks
-            if (t.completedAt == null) return false;
-            final hoursSinceCompletion = DateTime.now().difference(t.completedAt!).inHours;
-            return hoursSinceCompletion < _hideThresholdHours;
-          })
-        : rootTasks;
-
-    _treeController.roots = visibleRoots;
+    final activeRoots = _tasks.where((t) {
+      if (t.parentId != null) return false; // Only roots
+      if (!t.completed) return true; // Incomplete tasks always active
+      return _hasIncompleteDescendants(t); // Completed with incomplete children
+    });
+    _treeController.roots = activeRoots;
     _treeController.rebuild();
+  }
+
+  // Phase 3.2: Get ALL visible completed tasks (with breadcrumbs for nested tasks)
+  // Only show tasks where task AND all descendants are complete
+  List<Task> get visibleCompletedTasks {
+    final fullyCompletedTasks = _tasks.where((t) {
+      if (!t.completed) return false; // Must be completed
+      if (_hasIncompleteDescendants(t)) return false; // Must have all descendants complete
+      return true;
+    });
+
+    if (!_hideOldCompleted) {
+      // If not hiding old completed, show all fully completed tasks
+      return fullyCompletedTasks.toList();
+    }
+
+    // Show only recently completed tasks (within threshold)
+    return fullyCompletedTasks.where((t) {
+      if (t.completedAt == null) return false;
+      final hoursSinceCompletion = DateTime.now().difference(t.completedAt!).inHours;
+      return hoursSinceCompletion < _hideThresholdHours;
+    }).toList();
   }
 
   // Phase 2 Stretch: Categorize tasks after loading (called once per load, not per build)
@@ -309,7 +347,11 @@ class TaskProvider extends ChangeNotifier {
       whenAbove: () {
         // Insert as previous sibling of target
         newParentId = details.targetNode.parentId;
-        newPosition = details.targetNode.position;
+
+        // CRITICAL: Calculate actual index in current sibling list, not stored position
+        final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
+        final targetIndex = siblings.indexWhere((t) => t.id == details.targetNode.id);
+        newPosition = targetIndex >= 0 ? targetIndex : 0;
         newDepth = details.targetNode.depth;
       },
       whenInside: () {
@@ -325,7 +367,11 @@ class TaskProvider extends ChangeNotifier {
       whenBelow: () {
         // Insert as next sibling of target
         newParentId = details.targetNode.parentId;
-        newPosition = details.targetNode.position + 1;
+
+        // CRITICAL: Calculate actual index in current sibling list, not stored position
+        final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
+        final targetIndex = siblings.indexWhere((t) => t.id == details.targetNode.id);
+        newPosition = targetIndex >= 0 ? targetIndex + 1 : 0;
         newDepth = details.targetNode.depth;
       },
     );
