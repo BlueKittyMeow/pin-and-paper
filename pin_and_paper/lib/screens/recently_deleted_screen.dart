@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../services/task_service.dart';
+import '../providers/task_provider.dart';
 import '../widgets/task_context_menu.dart'; // For confirmation dialogs
 
 /// Screen showing soft-deleted tasks that can be restored or permanently deleted
@@ -50,16 +52,109 @@ class _RecentlyDeletedScreenState extends State<RecentlyDeletedScreen> {
 
   Future<void> _restoreTask(Task task) async {
     try {
+      // Count how many other tasks will be restored along with this one
+      final ancestorCount = await _taskService.countDeletedAncestors(task.id);
+      final descendantCount = await _taskService.countDeletedDescendants(task.id);
+
+      // Show confirmation if restoring will affect other tasks
+      if (ancestorCount > 0 || descendantCount > 0) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Restore Task?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Are you sure you want to restore:'),
+                const SizedBox(height: 8),
+                Text(
+                  '"${task.title}"',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'This will also restore:',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (ancestorCount > 0) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          '• $ancestorCount parent task${ancestorCount == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                      if (descendantCount > 0) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          '• $descendantCount subtask${descendantCount == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                ),
+                child: const Text('Restore'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmed != true) return;
+      }
+
       await _taskService.restoreTask(task.id);
 
       if (mounted) {
+        // CRITICAL: Trigger TaskProvider to reload so restored tasks appear in main list
+        context.read<TaskProvider>().loadTasks();
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Restored "${task.title}"'),
             backgroundColor: Colors.green,
           ),
         );
-        // Reload to update the list
+        // Reload to update the deleted tasks list
         await _loadDeletedTasks();
       }
     } catch (e) {

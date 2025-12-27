@@ -138,7 +138,7 @@ class DeleteTaskDialog extends StatelessWidget {
                     child: Text(
                       'This will also move $childCount subtask${childCount == 1 ? '' : 's'} to trash',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                        color: Theme.of(context).colorScheme.onErrorContainer,
                         fontWeight: FontWeight.w500,
                       ),
                     ),

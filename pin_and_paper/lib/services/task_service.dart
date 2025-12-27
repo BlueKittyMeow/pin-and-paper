@@ -420,7 +420,23 @@ class TaskService {
     final db = await _dbService.database;
 
     return await db.transaction((txn) async {
-      // Get all descendant IDs using recursive query
+      // CRITICAL: Get all ANCESTORS (parents up to root) first
+      // This ensures the entire path from root to this task is visible
+      final ancestors = await txn.rawQuery('''
+        WITH RECURSIVE ancestors AS (
+          SELECT id, parent_id FROM ${AppConstants.tasksTable}
+          WHERE id = ?
+
+          UNION ALL
+
+          SELECT t.id, t.parent_id
+          FROM ${AppConstants.tasksTable} t
+          INNER JOIN ancestors a ON t.id = a.parent_id
+        )
+        SELECT id FROM ancestors
+      ''', [taskId]);
+
+      // Get all DESCENDANTS (children down)
       final descendants = await txn.rawQuery('''
         WITH RECURSIVE descendants AS (
           SELECT id FROM ${AppConstants.tasksTable}
@@ -435,9 +451,12 @@ class TaskService {
         SELECT id FROM descendants
       ''', [taskId]);
 
-      final idsToRestore = descendants.map((row) => row['id'] as String).toList();
+      // Combine ancestors + descendants (using Set to avoid duplicates)
+      final ancestorIds = ancestors.map((row) => row['id'] as String).toSet();
+      final descendantIds = descendants.map((row) => row['id'] as String).toSet();
+      final idsToRestore = {...ancestorIds, ...descendantIds}.toList();
 
-      // Clear deleted_at for all descendants
+      // Clear deleted_at for entire tree path (ancestors + self + descendants)
       if (idsToRestore.isNotEmpty) {
         await txn.update(
           AppConstants.tasksTable,
@@ -449,6 +468,52 @@ class TaskService {
 
       return idsToRestore.length;
     });
+  }
+
+  /// Count how many deleted ancestors (parents) will also be restored
+  /// Used for restore confirmation dialog
+  Future<int> countDeletedAncestors(String taskId) async {
+    final db = await _dbService.database;
+
+    final result = await db.rawQuery('''
+      WITH RECURSIVE ancestors AS (
+        SELECT id, parent_id FROM ${AppConstants.tasksTable}
+        WHERE id = ?
+
+        UNION ALL
+
+        SELECT t.id, t.parent_id
+        FROM ${AppConstants.tasksTable} t
+        INNER JOIN ancestors a ON t.id = a.parent_id
+        WHERE t.deleted_at IS NOT NULL
+      )
+      SELECT COUNT(*) - 1 as count FROM ancestors
+    ''', [taskId]);
+
+    return (result.first['count'] as int?) ?? 0;
+  }
+
+  /// Count how many deleted descendants (children) will also be restored
+  /// Used for restore confirmation dialog
+  Future<int> countDeletedDescendants(String taskId) async {
+    final db = await _dbService.database;
+
+    final result = await db.rawQuery('''
+      WITH RECURSIVE descendants AS (
+        SELECT id FROM ${AppConstants.tasksTable}
+        WHERE parent_id = ?
+
+        UNION ALL
+
+        SELECT t.id
+        FROM ${AppConstants.tasksTable} t
+        INNER JOIN descendants d ON t.parent_id = d.id
+        WHERE t.deleted_at IS NOT NULL
+      )
+      SELECT COUNT(*) as count FROM descendants
+    ''', [taskId]);
+
+    return (result.first['count'] as int?) ?? 0;
   }
 
   /// Permanently delete a soft-deleted task and all its descendants
