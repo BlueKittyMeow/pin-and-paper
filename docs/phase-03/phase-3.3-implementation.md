@@ -96,8 +96,7 @@ This feature addresses a critical UX need for users with ADHD who may accidental
 - [ ] Verify index performance
 
 #### TaskService - Soft Delete Methods
-- [ ] Implement `softDeleteTask(taskId)` with CASCADE to children
-- [ ] Implement `softDeleteTaskWithChildren(taskId)` (explicit variant)
+- [ ] Implement `softDeleteTask(taskId)` with CASCADE to children (always cascades)
 - [ ] Implement `restoreTask(taskId)` with CASCADE to children
 - [ ] Implement `permanentlyDeleteTask(taskId)` (hard delete)
 - [ ] Implement `getRecentlyDeletedTasks()` (ordered by deleted_at DESC)
@@ -150,9 +149,9 @@ This feature addresses a critical UX need for users with ADHD who may accidental
 #### Automatic Cleanup
 - [ ] Add cleanup call in `main.dart` on app launch
 - [ ] Implement background/async cleanup (non-blocking)
+- [ ] Use hardcoded 30-day threshold for cleanup
 - [ ] Log cleanup results for debugging
-- [ ] Add user setting: cleanup threshold (default 30 days)
-- [ ] Consider: Show notification if tasks were auto-deleted
+- [ ] Show snackbar notification if tasks were auto-deleted (count > 0)
 
 #### Testing
 - [ ] Unit tests: Soft delete with CASCADE
@@ -281,7 +280,6 @@ CREATE TABLE tasks (
 - `lib/widgets/deleted_task_item.dart` - Task card with restore/delete buttons
 - `lib/widgets/empty_trash_dialog.dart` - Confirmation dialog for empty trash
 - `lib/widgets/permanent_delete_dialog.dart` - Confirmation for hard delete
-- `test/services/task_service_soft_delete_test.dart` - Unit tests for soft delete
 - `test/screens/recently_deleted_screen_test.dart` - Widget tests
 - `test/integration/recently_deleted_flow_test.dart` - Integration tests
 
@@ -295,7 +293,7 @@ CREATE TABLE tasks (
 - `lib/main.dart` - Add cleanup call on app launch
 
 ### Test Files
-- `test/services/task_service_test.dart` - Add soft delete test cases
+- `test/services/task_service_test.dart` - Add new `group('soft delete', ...)` with comprehensive test cases
 - `test/services/database_service_test.dart` - Test migration v4 → v5
 
 ---
@@ -324,7 +322,7 @@ User taps "Move to Trash"
   ↓
 Task(s) soft deleted (deleted_at = NOW())
   ↓
-Snackbar: "Moved to Recently Deleted" with "UNDO" button
+Snackbar: "Moved to Recently Deleted"
   ↓
 Task disappears from main view
 ```
@@ -386,9 +384,9 @@ App launch triggers cleanup (async, non-blocking)
   ↓
 Query: DELETE FROM tasks WHERE deleted_at < (NOW() - 30 days)
   ↓
-If tasks deleted: Log count for debugging
+Log cleanup results for debugging
   ↓
-Optional: Show notification "X old tasks auto-deleted"
+If count > 0: Show snackbar "Removed X old tasks from trash (>30 days)"
   ↓
 User continues using app normally
 ```
@@ -402,6 +400,11 @@ User continues using app normally
 - **Restoring parent:** All children get `deleted_at = NULL` together
 - **Partial restore not allowed:** Must restore entire subtree
 - **Display in Recently Deleted:** Show parent with breadcrumb context
+- **Restoring child task UX:** When user taps "Restore" on a child task, show dialog:
+  - Title: "Restore Task Tree"
+  - Message: "This will also restore '[Parent Task Name]' and all of its subtasks. Continue?"
+  - Buttons: "Cancel" (default), "Restore" (primary)
+  - This makes the CASCADE behavior explicit and prevents surprise
 
 ### 2. Task with Due Dates
 - **Soft deleted tasks don't trigger notifications**
