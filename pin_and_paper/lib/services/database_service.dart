@@ -17,6 +17,26 @@ class DatabaseService {
     return _database!;
   }
 
+  /// Set a test database (for testing only)
+  ///
+  /// This allows tests to inject an in-memory database created with
+  /// sqflite_common_ffi, avoiding the need for path_provider.
+  @visibleForTesting
+  static void setTestDatabase(Database testDb) {
+    _database = testDb;
+  }
+
+  /// Close and reset the database (for testing only)
+  ///
+  /// This allows tests to clean up and start fresh between test cases.
+  @visibleForTesting
+  static Future<void> resetDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+  }
+
   Future<Database> _initDB() async {
     final docDir = await getApplicationDocumentsDirectory();
     final path = join(docDir.path, AppConstants.databaseName);

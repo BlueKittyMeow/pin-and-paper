@@ -223,22 +223,56 @@ class TaskService {
         return 'Maximum nesting depth (4 levels) reached';
       }
 
-      // 4. Move task to new parent with new position
-      await txn.update(
-        AppConstants.tasksTable,
-        {
-          'parent_id': newParentId,
-          'position': newPosition,
-        },
-        where: 'id = ?',
-        whereArgs: [taskId],
-      );
+      // 4. Handle position conflicts when moving tasks
+      if (oldParentId == newParentId) {
+        // Moving within same parent - avoid position conflicts
+        // Step 1: Temporarily remove task from sibling list
+        await txn.update(
+          AppConstants.tasksTable,
+          {'position': -1},
+          where: 'id = ?',
+          whereArgs: [taskId],
+        );
 
-      // 5. Reindex siblings in SOURCE list (old parent)
-      await _reindexSiblings(oldParentId, txn);
+        // Step 2: Reindex remaining siblings to close gap
+        await _reindexSiblings(newParentId, txn, excludeTaskId: taskId);
 
-      // 6. Reindex siblings in DESTINATION list (new parent)
-      await _reindexSiblings(newParentId, txn);
+        // Step 3: Shift siblings at >= newPosition up by 1 to make space
+        await txn.rawUpdate('''
+          UPDATE ${AppConstants.tasksTable}
+          SET position = position + 1
+          WHERE ${newParentId == null ? 'parent_id IS NULL' : 'parent_id = ?'}
+            AND position >= ?
+        ''', newParentId == null ? [newPosition] : [newParentId, newPosition]);
+
+        // Step 4: Insert task at desired position
+        await txn.update(
+          AppConstants.tasksTable,
+          {
+            'parent_id': newParentId,
+            'position': newPosition,
+          },
+          where: 'id = ?',
+          whereArgs: [taskId],
+        );
+      } else {
+        // Moving to different parent - simpler case
+        await txn.update(
+          AppConstants.tasksTable,
+          {
+            'parent_id': newParentId,
+            'position': newPosition,
+          },
+          where: 'id = ?',
+          whereArgs: [taskId],
+        );
+
+        // Reindex siblings in SOURCE list (old parent)
+        await _reindexSiblings(oldParentId, txn);
+
+        // Reindex siblings in DESTINATION list (new parent)
+        await _reindexSiblings(newParentId, txn);
+      }
 
       return null;  // Success
     });
@@ -333,11 +367,24 @@ class TaskService {
 
   // Phase 3.2: Reindex siblings under a parent to maintain sequential positions
   // Reference: docs/phase-03/group1.md:1693-1710
-  Future<void> _reindexSiblings(String? parentId, Transaction txn) async {
+  Future<void> _reindexSiblings(
+    String? parentId,
+    Transaction txn, {
+    String? excludeTaskId,
+  }) async {
+    // Build where clause to optionally exclude a task
+    String whereClause = parentId == null ? 'parent_id IS NULL' : 'parent_id = ?';
+    List<dynamic>? whereArgs = parentId == null ? null : [parentId];
+
+    if (excludeTaskId != null) {
+      whereClause += ' AND id != ?';
+      whereArgs = [...?whereArgs, excludeTaskId];
+    }
+
     final siblings = await txn.query(
       AppConstants.tasksTable,
-      where: parentId == null ? 'parent_id IS NULL' : 'parent_id = ?',
-      whereArgs: parentId == null ? null : [parentId],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'position ASC',
     );
 

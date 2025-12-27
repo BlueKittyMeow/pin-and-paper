@@ -1,27 +1,33 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pin_and_paper/models/task.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/services/database_service.dart';
+import '../helpers/test_database_helper.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  // Initialize sqflite_common_ffi once for all tests
+  setUpAll(() {
+    TestDatabaseHelper.initialize();
+  });
 
   late TaskService taskService;
+  late Database testDb;
 
   setUp(() async {
-    // Initialize database
-    await DatabaseService.instance.database;
-    taskService = TaskService();
+    // Create a fresh test database for each test
+    testDb = await TestDatabaseHelper.createTestDatabase();
 
-    // Clean database before each test
-    final db = await DatabaseService.instance.database;
-    await db.delete('tasks');
+    // Inject the test database into DatabaseService
+    DatabaseService.setTestDatabase(testDb);
+
+    // Create TaskService (it will use the injected test database)
+    taskService = TaskService();
   });
 
   tearDown() async {
-    // Clean up database after each test
-    final db = await DatabaseService.instance.database;
-    await db.delete('tasks');
+    // Clean up after each test - close the database to destroy in-memory data
+    await TestDatabaseHelper.closeDatabase();
+    await DatabaseService.resetDatabase();
   }
 
   group('TaskService - Hierarchical Query Methods', () {
@@ -32,10 +38,14 @@ void main() {
       final grandchild = await taskService.createTask('Grandchild Task');
 
       // Nest child under root
-      await taskService.updateTaskParent(child.id, root.id, 0);
-      // Nest grandchild under child
-      await taskService.updateTaskParent(grandchild.id, child.id, 0);
+      final error1 = await taskService.updateTaskParent(child.id, root.id, 0);
+      expect(error1, isNull, reason: 'Should successfully nest child under root');
 
+      // Nest grandchild under child
+      final error2 = await taskService.updateTaskParent(grandchild.id, child.id, 0);
+      expect(error2, isNull, reason: 'Should successfully nest grandchild under child');
+
+      // Get hierarchy
       final tasks = await taskService.getTaskHierarchy();
 
       // Find each task in the result
@@ -43,9 +53,10 @@ void main() {
       final childResult = tasks.firstWhere((t) => t.id == child.id);
       final grandchildResult = tasks.firstWhere((t) => t.id == grandchild.id);
 
-      expect(rootResult.depth, 0);
-      expect(childResult.depth, 1);
-      expect(grandchildResult.depth, 2);
+      // Verify depths
+      expect(rootResult.depth, 0, reason: 'Root task should have depth 0');
+      expect(childResult.depth, 1, reason: 'Child task should have depth 1');
+      expect(grandchildResult.depth, 2, reason: 'Grandchild task should have depth 2');
     });
 
     test('getTaskWithChildren() fetches direct children only', () async {
@@ -62,10 +73,10 @@ void main() {
       final children = await taskService.getTaskWithChildren(parent.id);
 
       // Should return only direct children (not grandchildren)
-      expect(children.length, 2);
-      expect(children.any((t) => t.id == child1.id), true);
-      expect(children.any((t) => t.id == child2.id), true);
-      expect(children.any((t) => t.id == grandchild.id), false);
+      expect(children.length, 2, reason: 'Parent should have 2 direct children');
+      expect(children.any((t) => t.id == child1.id), true, reason: 'Child1 should be included');
+      expect(children.any((t) => t.id == child2.id), true, reason: 'Child2 should be included');
+      expect(children.any((t) => t.id == grandchild.id), false, reason: 'Grandchild should NOT be included');
     });
 
     test('getTaskWithChildren() returns empty list if no children', () async {
@@ -73,7 +84,7 @@ void main() {
 
       final result = await taskService.getTaskWithChildren(task.id);
 
-      expect(result.isEmpty, true);
+      expect(result.isEmpty, true, reason: 'Childless task should return empty list');
     });
 
     test('countDescendants() returns accurate count', () async {
@@ -89,7 +100,7 @@ void main() {
 
       final count = await taskService.countDescendants(parent.id);
 
-      expect(count, 3); // 2 children + 1 grandchild
+      expect(count, 3, reason: 'Parent should have 3 descendants (2 children + 1 grandchild)');
     });
 
     test('countDescendants() returns 0 for childless tasks', () async {
@@ -97,7 +108,7 @@ void main() {
 
       final count = await taskService.countDescendants(task.id);
 
-      expect(count, 0);
+      expect(count, 0, reason: 'Childless task should have 0 descendants');
     });
   });
 
@@ -110,15 +121,15 @@ void main() {
       // Nest TaskB under TaskA
       final error = await taskService.updateTaskParent(taskB.id, taskA.id, 0);
 
-      expect(error, null);
+      expect(error, isNull, reason: 'Nesting should succeed without error');
 
       // Verify the change
       final tasks = await taskService.getTaskHierarchy();
       final updatedB = tasks.firstWhere((t) => t.id == taskB.id);
 
-      expect(updatedB.parentId, taskA.id);
-      expect(updatedB.position, 0);
-      expect(updatedB.depth, 1);
+      expect(updatedB.parentId, taskA.id, reason: 'TaskB should have TaskA as parent');
+      expect(updatedB.position, 0, reason: 'TaskB should be at position 0');
+      expect(updatedB.depth, 1, reason: 'TaskB should have depth 1');
     });
 
     test('updateTaskParent() successfully unnests task', () async {
@@ -131,14 +142,14 @@ void main() {
       // Unnest child (make it root)
       final error = await taskService.updateTaskParent(child.id, null, 0);
 
-      expect(error, null);
+      expect(error, isNull, reason: 'Unnesting should succeed without error');
 
       // Verify the change
       final tasks = await taskService.getTaskHierarchy();
       final updatedChild = tasks.firstWhere((t) => t.id == child.id);
 
-      expect(updatedChild.parentId, null);
-      expect(updatedChild.depth, 0);
+      expect(updatedChild.parentId, isNull, reason: 'Child should have no parent');
+      expect(updatedChild.depth, 0, reason: 'Child should have depth 0');
     });
 
     test('updateTaskParent() prevents circular reference', () async {
@@ -151,19 +162,19 @@ void main() {
       // Try to make parent a child of child (circular)
       final error = await taskService.updateTaskParent(parent.id, child.id, 0);
 
-      expect(error, isNotNull);
-      expect(error!.contains('circular'), true);
+      expect(error, isNotNull, reason: 'Circular reference should be prevented');
+      expect(error!.toLowerCase().contains('circular'), true, reason: 'Error should mention circular dependency');
 
       // Verify nothing changed
       final tasks = await taskService.getTaskHierarchy();
       final unchangedParent = tasks.firstWhere((t) => t.id == parent.id);
 
-      expect(unchangedParent.parentId, null);
-      expect(unchangedParent.depth, 0);
+      expect(unchangedParent.parentId, isNull, reason: 'Parent should still be root');
+      expect(unchangedParent.depth, 0, reason: 'Parent should still have depth 0');
     });
 
     test('updateTaskParent() enforces max depth limit', () async {
-      // Create 4-level hierarchy (max allowed)
+      // Create 4-level hierarchy (max allowed: depths 0, 1, 2, 3)
       final level0 = await taskService.createTask('Level 0');
       final level1 = await taskService.createTask('Level 1');
       final level2 = await taskService.createTask('Level 2');
@@ -174,18 +185,18 @@ void main() {
       await taskService.updateTaskParent(level2.id, level1.id, 0);
       await taskService.updateTaskParent(level3.id, level2.id, 0);
 
-      // Try to create level 5 (should fail)
+      // Try to create level 5 (depth 4) - should fail
       final error = await taskService.updateTaskParent(level4.id, level3.id, 0);
 
-      expect(error, isNotNull);
-      expect(error!.contains('depth'), true);
+      expect(error, isNotNull, reason: 'Exceeding max depth should be prevented');
+      expect(error!.toLowerCase().contains('depth'), true, reason: 'Error should mention depth limit');
 
       // Verify level4 remains a root task
       final tasks = await taskService.getTaskHierarchy();
       final unchangedLevel4 = tasks.firstWhere((t) => t.id == level4.id);
 
-      expect(unchangedLevel4.parentId, null);
-      expect(unchangedLevel4.depth, 0);
+      expect(unchangedLevel4.parentId, isNull, reason: 'Level4 should still be root');
+      expect(unchangedLevel4.depth, 0, reason: 'Level4 should still have depth 0');
     });
   });
 
@@ -204,11 +215,11 @@ void main() {
       // Delete parent (should delete all 4 tasks)
       final deletedCount = await taskService.deleteTaskWithChildren(parent.id);
 
-      expect(deletedCount, 4);
+      expect(deletedCount, 4, reason: 'Should delete parent + 2 children + 1 grandchild = 4 tasks');
 
       // Verify all are deleted
       final remainingTasks = await taskService.getAllTasks();
-      expect(remainingTasks.isEmpty, true);
+      expect(remainingTasks.isEmpty, true, reason: 'All tasks should be deleted');
     });
 
     test('deleteTaskWithChildren() deletes single task with no children', () async {
@@ -216,10 +227,10 @@ void main() {
 
       final deletedCount = await taskService.deleteTaskWithChildren(task.id);
 
-      expect(deletedCount, 1);
+      expect(deletedCount, 1, reason: 'Should delete exactly 1 task');
 
       final remainingTasks = await taskService.getAllTasks();
-      expect(remainingTasks.isEmpty, true);
+      expect(remainingTasks.isEmpty, true, reason: 'Task should be deleted');
     });
 
     test('deleteTaskWithChildren() does not affect unrelated tasks', () async {
@@ -238,9 +249,9 @@ void main() {
 
       // Verify second hierarchy intact
       final remaining = await taskService.getAllTasks();
-      expect(remaining.length, 2);
-      expect(remaining.any((t) => t.id == parent2.id), true);
-      expect(remaining.any((t) => t.id == child2.id), true);
+      expect(remaining.length, 2, reason: 'Second hierarchy should remain (2 tasks)');
+      expect(remaining.any((t) => t.id == parent2.id), true, reason: 'Parent2 should still exist');
+      expect(remaining.any((t) => t.id == child2.id), true, reason: 'Child2 should still exist');
     });
   });
 
@@ -252,8 +263,8 @@ void main() {
 
       final tasks = await taskService.getTaskHierarchy();
 
-      expect(tasks.length, 3);
-      expect(tasks.where((t) => t.depth == 0).length, 3);
+      expect(tasks.length, 3, reason: 'Should have 3 root tasks');
+      expect(tasks.where((t) => t.depth == 0).length, 3, reason: 'All should have depth 0');
       expect(tasks.any((t) => t.id == root1.id), true);
       expect(tasks.any((t) => t.id == root2.id), true);
       expect(tasks.any((t) => t.id == root3.id), true);
@@ -274,13 +285,13 @@ void main() {
       // Move Child from Root1 to Root2 (grandchild should follow)
       await taskService.updateTaskParent(child.id, root2.id, 0);
 
-      // Verify depths updated
+      // Verify depths updated correctly
       final tasks = await taskService.getTaskHierarchy();
       final updatedChild = tasks.firstWhere((t) => t.id == child.id);
       final updatedGrandchild = tasks.firstWhere((t) => t.id == grandchild.id);
 
-      expect(updatedChild.depth, 1);
-      expect(updatedGrandchild.depth, 2);
+      expect(updatedChild.depth, 1, reason: 'Child should now have depth 1 (under Root2)');
+      expect(updatedGrandchild.depth, 2, reason: 'Grandchild depth should update recursively to 2');
     });
 
     test('Sibling reordering with multiple tasks', () async {
@@ -294,7 +305,7 @@ void main() {
       await taskService.updateTaskParent(child2.id, parent.id, 1);
       await taskService.updateTaskParent(child3.id, parent.id, 2);
 
-      // Move Child3 to position 0
+      // Move Child3 to position 0 (should push others down)
       await taskService.updateTaskParent(child3.id, parent.id, 0);
 
       // Verify all siblings reindexed correctly
@@ -303,9 +314,9 @@ void main() {
       final updated2 = tasks.firstWhere((t) => t.id == child2.id);
       final updated3 = tasks.firstWhere((t) => t.id == child3.id);
 
-      expect(updated3.position, 0);
-      expect(updated1.position, 1);
-      expect(updated2.position, 2);
+      expect(updated3.position, 0, reason: 'Child3 should be at position 0');
+      expect(updated1.position, 1, reason: 'Child1 should be pushed to position 1');
+      expect(updated2.position, 2, reason: 'Child2 should be pushed to position 2');
     });
   });
 }
