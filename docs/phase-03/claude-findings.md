@@ -257,6 +257,182 @@ Excellent catch on the data type bug. This would have broken everything. The per
 
 ---
 
+## Pre-Implementation Review: Codex Feedback Analysis
+
+**Reviewed:** 2025-12-27
+**Source:** `codex-findings.md`
+
+Codex conducted an architectural review of the implementation plan and identified 4 critical issues, including one that Gemini missed: the context menu widget structure doesn't match my proposed code.
+
+### BUG-3.4-006: Context Menu Widget Structure Mismatch (HIGH) ✅ ACCEPTED
+
+**Severity:** HIGH
+**Component:** UI Widget (TaskContextMenu)
+**Status:** PRE-IMPLEMENTATION (architectural mismatch)
+
+**Codex's Finding:**
+The implementation plan shows a bottom sheet (`showModalBottomSheet`) approach, but the actual `TaskContextMenu` widget (lines 6-84 in task_context_menu.dart) uses `showMenu` with a `PopupMenuItem` wrapper.
+
+**Verification:**
+Confirmed by reviewing `lib/widgets/task_context_menu.dart`:
+- Line 59-83: Static `show()` method uses `showMenu()`
+- Line 74-80: Wraps widget in `PopupMenuItem`
+- Line 32-52: Widget builds a `Column` with `ListTile` children
+- Current structure: 1 ListTile for "Move to Trash"
+
+**Claude's Analysis:**
+Codex is absolutely right. I wrote example code for a bottom sheet pattern that doesn't exist in our codebase. The actual implementation needs to:
+1. Add an `onEdit` callback parameter to `TaskContextMenu` widget
+2. Add "Edit" `ListTile` to the `Column` (BEFORE the Delete tile)
+3. Pass callback through the static `show()` method
+
+**Correct Implementation Pattern:**
+```dart
+// Widget parameters
+class TaskContextMenu extends StatelessWidget {
+  final Task task;
+  final VoidCallback? onDelete;
+  final VoidCallback? onEdit; // ADD THIS
+
+  // In build() - add to Column children BEFORE delete tile
+  children: [
+    // Edit option (NEW)
+    ListTile(
+      leading: Icon(Icons.edit_outlined),
+      title: const Text('Edit'),
+      onTap: () {
+        Navigator.pop(context);
+        onEdit?.call();
+      },
+    ),
+    // Delete option (existing)
+    ListTile(/* ... */),
+  ],
+
+  // In static show() method - add parameter
+  static Future<void> show({
+    required BuildContext context,
+    required Task task,
+    required Offset position,
+    VoidCallback? onDelete,
+    VoidCallback? onEdit, // ADD THIS
+  }) async {
+    await showMenu(/* ... */);
+  }
+}
+```
+
+**Why This Matters:**
+Following the existing pattern ensures consistency with the rest of the codebase and leverages the tested `showMenu` positioning logic.
+
+**Status:** Must fix implementation plan to match existing widget architecture
+
+---
+
+### BUG-3.4-007: Tree State Collapse Issue (HIGH) ✅ ACCEPTED (Enhanced)
+
+**Severity:** HIGH
+**Component:** TaskProvider + TreeController interaction
+**Status:** PRE-IMPLEMENTATION (UX regression risk)
+
+**Codex's Finding:**
+Similar to Gemini's BUG-3.4-002, but Codex adds critical Phase 3.2 context: calling `loadTasks()` recreates the `TreeController` roots, **collapsing all expanded branches**. This means editing a task would collapse the user's view of the task tree.
+
+**Claude's Analysis:**
+This is an **enhancement** of Gemini's performance finding. Codex correctly identified the UX regression: imagine a user expands 5 nested levels, edits a deep subtask title, and suddenly the entire tree collapses. That's terrible UX!
+
+**Solution (from Gemini, validated by Codex):**
+Use in-memory update with `copyWith()` to avoid recreating the tree. The TreeController state is preserved because we're not calling `loadTasks()`.
+
+**Status:** Already covered by BUG-3.4-002, but Codex clarified the UX impact
+
+---
+
+### BUG-3.4-008: Insufficient Widget Test Coverage (MEDIUM) ✅ ACCEPTED
+
+**Severity:** MEDIUM
+**Component:** Test Plan
+**Status:** PRE-IMPLEMENTATION (incomplete test strategy)
+
+**Codex's Finding:**
+The test plan focuses heavily on unit tests for `TaskService.updateTaskTitle()` but lacks widget/integration tests for the riskiest code paths:
+- Dialog validation feedback
+- SnackBar messaging
+- Provider interaction
+- Context menu → dialog → save flow
+
+**Claude's Analysis:**
+Codex is right. The unit tests will catch service-layer bugs, but most bugs in UI features come from the widget layer: wrong callbacks, missing mounted checks, improper dialog dismissal, etc.
+
+**Missing Test Coverage:**
+```dart
+// Need widget test like this:
+testWidgets('Edit dialog updates task title', (tester) async {
+  // Render task list with Provider
+  // Long-press to open context menu
+  // Tap "Edit" option
+  // Enter new title
+  // Press Save
+  // Verify provider.updateTaskTitle() was called
+  // Verify task title updated in UI
+  // Verify SnackBar shown
+});
+```
+
+**Action Required:**
+Add widget/integration test section to `phase-3.4-test-plan.md` covering:
+1. Context menu opens on long-press
+2. Edit option triggers dialog
+3. Dialog pre-populates current title
+4. Save button updates task
+5. UI reflects change immediately
+6. SnackBar confirmation shown
+
+**Status:** Must enhance test plan with widget-level tests
+
+---
+
+### BUG-3.4-009: Task ID Type Mismatch (CRITICAL) ✅ DUPLICATE
+
+**Severity:** CRITICAL
+**Component:** All layers
+**Status:** DUPLICATE of BUG-3.4-001 (Gemini's finding)
+
+**Codex's Finding:**
+Same as Gemini: implementation plan uses `int taskId` but schema uses `String id`.
+
+**Claude's Analysis:**
+Both reviewers independently caught this critical bug. High confidence this is a real issue.
+
+**Status:** Already tracked as BUG-3.4-001
+
+---
+
+## Summary of Pre-Implementation Review
+
+### Bugs Found by Both Reviewers (High Confidence)
+- **BUG-3.4-001** (CRITICAL): Wrong data type - `int` vs `String` (Gemini + Codex)
+- **BUG-3.4-002/007** (HIGH): Inefficient reload + tree collapse (Gemini + Codex)
+
+### Bugs Found by Gemini Only
+- **BUG-3.4-003** (MEDIUM): Redundant database query
+- **BUG-3.4-004** (MEDIUM): Flawed trim logic in UI
+
+### Bugs Found by Codex Only
+- **BUG-3.4-006** (HIGH): Context menu widget structure mismatch
+- **BUG-3.4-008** (MEDIUM): Insufficient widget test coverage
+
+### Total Pre-Implementation Issues
+- **1 CRITICAL** (would not compile)
+- **3 HIGH** (major performance/UX issues)
+- **3 MEDIUM** (quality/testing issues)
+- **1 LOW** (outdated concern - rejected)
+
+**Combined Review Grade: A+**
+Gemini and Codex together caught 7 real bugs before a single line of code was written. This saved hours of debugging and rework. The complementary nature of their reviews (Gemini focused on performance, Codex on architecture) demonstrates the value of multi-reviewer analysis.
+
+---
+
 ## Implementation Bugs
 
 *Will be updated during coding phase*
