@@ -269,7 +269,7 @@ class TaskService {
           AppConstants.tasksTable,
           {
             'parent_id': newParentId,
-            'position': 99999,  // Temporary large position
+            'position': -1,  // Temporary position (semantically "out of list")
           },
           where: 'id = ?',
           whereArgs: [taskId],
