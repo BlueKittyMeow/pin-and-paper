@@ -1,8 +1,15 @@
 # Phase 3.4: Task Editing - Test Plan
 
 **Phase:** 3.4 - Task Editing
-**Status:** 🔜 Planning
+**Status:** ✅ UPDATED (Post-Review)
 **Created:** 2025-12-27
+**Last Updated:** 2025-12-27
+
+> **⚠️ UPDATED AFTER GEMINI/CODEX REVIEW**
+>
+> - Fixed: All test cases now use `String taskId` (not `int`)
+> - Added: Widget test section per Codex feedback
+> - Enhanced: More comprehensive coverage
 
 ---
 
@@ -90,7 +97,7 @@ test('updateTaskTitle() rejects whitespace-only title', () async {
 test('updateTaskTitle() throws on non-existent task', () async {
   // Act & Assert
   expect(
-    () => taskService.updateTaskTitle(99999, 'New Title'),
+    () => taskService.updateTaskTitle('non-existent-uuid', 'New Title'),
     throwsA(isA<Exception>()),
   );
 });
