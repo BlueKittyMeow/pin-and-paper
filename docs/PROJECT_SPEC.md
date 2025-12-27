@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
-**Version:** 3.0 (Fully Consolidated)
-**Last Updated:** 2025-10-28
+**Version:** 3.3 (Phase 3 Complete)
+**Last Updated:** 2025-12-27
 **Primary Device:** Samsung Galaxy S21 Ultra
-**Current Phase:** Phase 3 (Planning)
+**Current Phase:** Phase 3 Complete - Ready for Phase 4
 
 ---
 
@@ -28,7 +28,10 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 1:** Ultra-Minimal MVP - Complete (Oct 25, 2025)
 ✅ **Phase 2:** Claude AI Integration - Complete (Oct 27, 2025)
 ✅ **Phase 2 Stretch Goals:** Complete (Oct 28, 2025)
-🔜 **Phase 3:** Mobile Polish & Voice Input - Planning
+✅ **Phase 3.1:** Task Nesting (Subtasks) - Complete (Dec 2025)
+✅ **Phase 3.2:** Hierarchical Display & Drag/Drop - Complete (Dec 2025)
+✅ **Phase 3.3:** Recently Deleted (Soft Delete) - Complete (Dec 27, 2025)
+🔜 **Phase 3+:** Tags, Search, Due Dates, Voice Input - Planned
 
 ---
 

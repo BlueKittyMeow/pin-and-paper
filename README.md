@@ -109,7 +109,7 @@ Data Layer (SQLite)
 - SQLite persistence
 - Basic Witchy Flatlay colors
 
-### Phase 2: Claude AI Integration ✅ **COMPLETE** *← We are here*
+### Phase 2: Claude AI Integration ✅ **COMPLETE**
 - "Brain Dump" free-form text area
 - "Claude, Help Me" button
 - AI extracts and organizes tasks from chaotic text
@@ -118,12 +118,14 @@ Data Layer (SQLite)
 - Draft persistence (never lose your thoughts)
 - Cost estimation (~$0.01 per brain dump)
 
-### Phase 3: Core Productivity
-- Tags with filtering
-- Search
-- Due dates with notifications
-- Task nesting (subtasks)
-- Voice input
+### Phase 3: Core Productivity ✅ **COMPLETE** *← We are here*
+- ✅ **Phase 3.1:** Task nesting (subtasks) with 4-level hierarchy
+- ✅ **Phase 3.2:** Hierarchical display with drag & drop reordering
+- ✅ **Phase 3.3:** Recently Deleted (soft delete with 30-day recovery)
+- 🔜 Tags with filtering
+- 🔜 Search
+- 🔜 Due dates with notifications
+- 🔜 Voice input
 
 ### Phase 4: Spatial Workspace
 - Bounded canvas (pan/zoom)
