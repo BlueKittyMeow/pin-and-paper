@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 4; // Phase 3: Task nesting, dates, user settings
+  static const int databaseVersion = 5; // Phase 3.3: Soft delete (Recently Deleted)
 
   // Table names
   static const String tasksTable = 'tasks';
