@@ -568,4 +568,157 @@ void main() {
       expect(countAfter, 1, reason: 'Should only count active descendants');
     });
   });
+
+  group('TaskService - Ancestor Restore (Regression Tests)', () {
+    test('restoreTask() on deep child restores entire ancestor chain', () async {
+      // Regression test for Bug #3: Restoring child without parent shows nothing
+      // Create 3-level hierarchy: Root → Parent → Child
+      final root = await taskService.createTask('Root');
+      final parent = await taskService.createTask('Parent');
+      final child = await taskService.createTask('Child');
+
+      await taskService.updateTaskParent(parent.id, root.id, 0);
+      await taskService.updateTaskParent(child.id, parent.id, 0);
+
+      // Soft delete entire chain
+      await taskService.softDeleteTask(root.id);
+
+      // Verify all are deleted
+      final activeBefore = await taskService.getAllTasks();
+      expect(activeBefore.length, 0, reason: 'All tasks should be deleted');
+
+      final deletedBefore = await taskService.getRecentlyDeletedTasks();
+      expect(deletedBefore.length, 3, reason: 'All 3 tasks in trash');
+
+      // CRITICAL: Restore only the grandchild
+      final restoredCount = await taskService.restoreTask(child.id);
+
+      // Verify ALL ancestors were also restored
+      final activeAfter = await taskService.getAllTasks();
+      expect(activeAfter.length, 3, reason: 'All 3 tasks should be restored');
+
+      final activeIds = activeAfter.map((t) => t.id).toSet();
+      expect(activeIds.contains(root.id), true, reason: 'Root should be restored');
+      expect(activeIds.contains(parent.id), true, reason: 'Parent should be restored');
+      expect(activeIds.contains(child.id), true, reason: 'Child should be restored');
+
+      // Verify none remain in trash
+      final deletedAfter = await taskService.getRecentlyDeletedTasks();
+      expect(deletedAfter.length, 0, reason: 'Trash should be empty');
+
+      expect(restoredCount, greaterThanOrEqualTo(3),
+          reason: 'Should restore at least child + parent + root');
+    });
+
+    test('restoreTask() on middle task restores ancestors AND descendants', () async {
+      // Create 3-level hierarchy: Root → Middle → Leaf
+      final root = await taskService.createTask('Root');
+      final middle = await taskService.createTask('Middle');
+      final leaf = await taskService.createTask('Leaf');
+
+      await taskService.updateTaskParent(middle.id, root.id, 0);
+      await taskService.updateTaskParent(leaf.id, middle.id, 0);
+
+      // Delete entire chain
+      await taskService.softDeleteTask(root.id);
+
+      // Restore middle task
+      await taskService.restoreTask(middle.id);
+
+      // Verify all 3 are restored (ancestors UP + descendants DOWN)
+      final activeAfter = await taskService.getAllTasks();
+      expect(activeAfter.length, 3, reason: 'Root + Middle + Leaf should all be restored');
+
+      final activeIds = activeAfter.map((t) => t.id).toSet();
+      expect(activeIds.contains(root.id), true);
+      expect(activeIds.contains(middle.id), true);
+      expect(activeIds.contains(leaf.id), true);
+    });
+  });
+
+  group('TaskService - Auto-Cleanup', () {
+    test('cleanupExpiredDeletedTasks() removes tasks older than 30 days', () async {
+      // Create test tasks
+      final oldTask = await taskService.createTask('Old Task');
+      final recentTask = await taskService.createTask('Recent Task');
+
+      // Soft delete both
+      await taskService.softDeleteTask(oldTask.id);
+      await taskService.softDeleteTask(recentTask.id);
+
+      // Manually age the old task's deleted_at timestamp to 31 days ago
+      final thirtyOneDaysAgo =
+          DateTime.now().subtract(const Duration(days: 31)).millisecondsSinceEpoch;
+
+      await testDb.rawUpdate(
+        'UPDATE tasks SET deleted_at = ? WHERE id = ?',
+        [thirtyOneDaysAgo, oldTask.id],
+      );
+
+      // Verify both tasks are in trash
+      final deletedBefore = await taskService.getRecentlyDeletedTasks();
+      expect(deletedBefore.length, 2, reason: 'Both tasks should be in trash');
+
+      // Run cleanup (should remove task > 30 days old)
+      final cleanedCount = await taskService.cleanupExpiredDeletedTasks();
+
+      expect(cleanedCount, 1, reason: 'Should remove exactly 1 expired task');
+
+      // Verify only recent task remains
+      final deletedAfter = await taskService.getRecentlyDeletedTasks();
+      expect(deletedAfter.length, 1, reason: 'Only recent task should remain');
+      expect(deletedAfter.first.id, recentTask.id,
+          reason: 'Recent task should be the one remaining');
+
+      // Verify old task is permanently gone (not in active OR deleted)
+      final allTasks = await testDb.query('tasks');
+      final taskIds = allTasks.map((t) => t['id'] as String).toSet();
+      expect(taskIds.contains(oldTask.id), false,
+          reason: 'Old task should be permanently deleted');
+      expect(taskIds.contains(recentTask.id), true,
+          reason: 'Recent task should still exist');
+    });
+
+    test('cleanupExpiredDeletedTasks() returns 0 when no expired tasks', () async {
+      final task = await taskService.createTask('Recent Task');
+      await taskService.softDeleteTask(task.id);
+
+      // Run cleanup (no tasks are old enough)
+      final cleanedCount = await taskService.cleanupExpiredDeletedTasks();
+
+      expect(cleanedCount, 0, reason: 'No tasks should be cleaned');
+
+      // Verify task still exists
+      final deleted = await taskService.getRecentlyDeletedTasks();
+      expect(deleted.length, 1, reason: 'Recent task should remain');
+    });
+
+    test('cleanupExpiredDeletedTasks() cascades to expired descendants', () async {
+      // Create hierarchy
+      final root = await taskService.createTask('Old Root');
+      final child = await taskService.createTask('Old Child');
+      await taskService.updateTaskParent(child.id, root.id, 0);
+
+      // Delete hierarchy
+      await taskService.softDeleteTask(root.id);
+
+      // Age both to > 30 days
+      final thirtyOneDaysAgo =
+          DateTime.now().subtract(const Duration(days: 31)).millisecondsSinceEpoch;
+
+      await testDb.rawUpdate(
+        'UPDATE tasks SET deleted_at = ? WHERE deleted_at IS NOT NULL',
+        [thirtyOneDaysAgo],
+      );
+
+      // Run cleanup
+      final cleanedCount = await taskService.cleanupExpiredDeletedTasks();
+
+      expect(cleanedCount, 2, reason: 'Should remove both root and child');
+
+      // Verify both are permanently gone
+      final allTasks = await testDb.query('tasks');
+      expect(allTasks.length, 0, reason: 'All tasks should be permanently deleted');
+    });
+  });
 }

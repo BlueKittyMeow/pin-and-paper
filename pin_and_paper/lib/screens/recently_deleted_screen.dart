@@ -252,6 +252,75 @@ class _RecentlyDeletedScreenState extends State<RecentlyDeletedScreen> {
     }
   }
 
+  /// Handle empty trash action with confirmation
+  Future<void> _handleEmptyTrash() async {
+    final taskProvider = context.read<TaskProvider>();
+
+    // Use TaskProvider's emptyTrash method which handles confirmation
+    final emptied = await taskProvider.emptyTrash(
+      (count) => showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Empty Trash?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Permanently delete $count task${count == 1 ? '' : 's'}?'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'This action cannot be undone!',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: const Text('Empty Trash'),
+            ),
+          ],
+        ),
+      ).then((value) => value ?? false),
+    );
+
+    // Show feedback and reload
+    if (emptied && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Trash emptied'),
+        ),
+      );
+      // Reload to update the list (should now be empty)
+      await _loadDeletedTasks();
+    }
+  }
+
   /// Convert deletion timestamp to relative time string
   String _getRelativeTime(DateTime deletedAt) {
     final now = DateTime.now();
@@ -279,6 +348,15 @@ class _RecentlyDeletedScreenState extends State<RecentlyDeletedScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recently Deleted'),
+        actions: [
+          // Empty Trash button - only show when there are deleted tasks
+          if (_deletedTasks.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete_sweep),
+              tooltip: 'Empty Trash',
+              onPressed: _handleEmptyTrash,
+            ),
+        ],
       ),
       body: Column(
         children: [

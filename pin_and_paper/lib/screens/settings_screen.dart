@@ -242,7 +242,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     title: const Text('Recently Deleted'),
                     subtitle: const Text('View and restore deleted tasks'),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: FutureBuilder<int>(
+                      future: context.read<TaskProvider>().getRecentlyDeletedCount(),
+                      builder: (context, snapshot) {
+                        final count = snapshot.data ?? 0;
+                        return Badge(
+                          isLabelVisible: count > 0,
+                          label: Text('$count'),
+                          child: const Icon(Icons.chevron_right),
+                        );
+                      },
+                    ),
                     onTap: () {
                       Navigator.push(
                         context,
