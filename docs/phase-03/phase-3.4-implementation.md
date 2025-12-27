@@ -1,9 +1,20 @@
 # Phase 3.4: Task Editing - Implementation Plan
 
-**Status:** 🔜 Planning
+**Status:** ✅ REVIEWED & CORRECTED (Ready for Implementation)
 **Created:** 2025-12-27
+**Last Updated:** 2025-12-27 (Post-Review)
 **Branch:** phase-3.4
 **Priority:** HIGH (Missing core feature)
+
+> **📋 PRE-IMPLEMENTATION REVIEW COMPLETE**
+>
+> This plan was reviewed by Gemini and Codex and **7 critical bugs were caught** before any code was written:
+> - 1 CRITICAL bug (wrong data type - would not compile)
+> - 3 HIGH priority bugs (performance, UX, architecture)
+> - 3 MEDIUM priority bugs (optimization, validation, testing)
+>
+> All issues have been corrected in this document. See `claude-findings.md` for detailed analysis.
+> **Review Grade: A+** (saved hours of debugging!)
 
 ---
 
@@ -135,6 +146,17 @@ Database Layer (SQLite)
 
 ### Code Changes Required
 
+> **⚠️ UPDATED AFTER GEMINI/CODEX REVIEW (2025-12-27)**
+>
+> The original plan had several critical bugs caught during pre-implementation review:
+> - ❌ Used `int taskId` instead of `String taskId` (CRITICAL - would not compile)
+> - ❌ Called `loadTasks()` after update (HIGH - performance + tree collapse)
+> - ❌ Redundant database query (MEDIUM - wasteful)
+> - ❌ Wrong widget pattern (HIGH - doesn't match existing code)
+>
+> All code below has been corrected based on review feedback.
+> See `claude-findings.md` for full analysis.
+
 #### 1. TaskService Layer
 **File:** `lib/services/task_service.dart`
 
@@ -142,35 +164,40 @@ Add method:
 ```dart
 /// Updates the title of an existing task
 /// Returns the updated Task object
-Future<Task> updateTaskTitle(int taskId, String newTitle) async {
+///
+/// OPTIMIZED: Fetch-first approach to avoid redundant query (Gemini feedback)
+Future<Task> updateTaskTitle(String taskId, String newTitle) async {
   final db = await DatabaseService.instance.database;
+  final trimmedTitle = newTitle.trim();
 
   // Validate title
-  final trimmedTitle = newTitle.trim();
   if (trimmedTitle.isEmpty) {
     throw ArgumentError('Task title cannot be empty');
   }
 
-  // Update database
-  final rowsAffected = await db.update(
+  // Fetch the original task first to have all its data
+  final maps = await db.query(
+    AppConstants.tasksTable,
+    where: 'id = ?',
+    whereArgs: [taskId],
+  );
+
+  if (maps.isEmpty) {
+    throw Exception('Task not found: $taskId');
+  }
+
+  final originalTask = Task.fromMap(maps.first);
+
+  // Perform the update
+  await db.update(
     AppConstants.tasksTable,
     {'title': trimmedTitle},
     where: 'id = ?',
     whereArgs: [taskId],
   );
 
-  if (rowsAffected == 0) {
-    throw Exception('Task not found: $taskId');
-  }
-
-  // Fetch and return updated task
-  final tasks = await db.query(
-    AppConstants.tasksTable,
-    where: 'id = ?',
-    whereArgs: [taskId],
-  );
-
-  return Task.fromMap(tasks.first);
+  // Return updated copy (leverages existing copyWith method)
+  return originalTask.copyWith(title: trimmedTitle);
 }
 ```
 
@@ -180,10 +207,23 @@ Future<Task> updateTaskTitle(int taskId, String newTitle) async {
 Add method:
 ```dart
 /// Updates a task's title
-Future<void> updateTaskTitle(int taskId, String newTitle) async {
+///
+/// OPTIMIZED: In-memory update to avoid:
+/// - Full database reload (Gemini feedback - performance)
+/// - TreeController collapse (Codex feedback - UX regression)
+Future<void> updateTaskTitle(String taskId, String newTitle) async {
   try {
-    await _taskService.updateTaskTitle(taskId, newTitle);
-    await loadTasks(); // Reload to reflect changes
+    final updatedTask = await _taskService.updateTaskTitle(taskId, newTitle);
+
+    // Find and update the task in-memory
+    final index = _tasks.indexWhere((task) => task.id == taskId);
+    if (index != -1) {
+      _tasks[index] = updatedTask;
+      notifyListeners();
+    } else {
+      // Fallback: reload if task not found (shouldn't happen)
+      await loadTasks();
+    }
   } catch (e) {
     debugPrint('Error updating task title: $e');
     rethrow; // Let UI handle error display
@@ -194,48 +234,118 @@ Future<void> updateTaskTitle(int taskId, String newTitle) async {
 #### 3. Context Menu Widget
 **File:** `lib/widgets/task_context_menu.dart`
 
-Current structure:
+**CORRECTED:** Match existing `showMenu` pattern (Codex feedback - architectural consistency)
+
+Current widget structure (lines 6-56):
 ```dart
-showModalBottomSheet(
-  context: context,
-  builder: (context) => Column(
-    children: [
-      ListTile(
-        leading: Icon(Icons.delete),
-        title: Text('Delete'),
-        onTap: () => _handleDelete(),
-      ),
-    ],
-  ),
-);
+class TaskContextMenu extends StatelessWidget {
+  final Task task;
+  final VoidCallback? onDelete;
+
+  // ... builds Column with ListTile children
+}
 ```
 
-Updated structure:
+**Changes needed:**
+
+1. **Add `onEdit` callback parameter:**
 ```dart
-showModalBottomSheet(
-  context: context,
-  builder: (context) => Column(
-    children: [
-      ListTile(
-        leading: Icon(Icons.edit_outlined),
-        title: Text('Edit'),
-        onTap: () {
-          Navigator.pop(context); // Close menu
-          _showEditDialog(context, task);
-        },
-      ),
-      ListTile(
-        leading: Icon(Icons.delete_outline),
-        title: Text('Delete'),
-        onTap: () => _handleDelete(),
-      ),
-    ],
-  ),
-);
+class TaskContextMenu extends StatelessWidget {
+  final Task task;
+  final VoidCallback? onDelete;
+  final VoidCallback? onEdit; // ADD THIS
+
+  const TaskContextMenu({
+    super.key,
+    required this.task,
+    this.onDelete,
+    this.onEdit, // ADD THIS
+  });
 ```
 
-Add edit dialog method:
+2. **Add "Edit" ListTile to Column (BEFORE delete tile):**
 ```dart
+@override
+Widget build(BuildContext context) {
+  return Material(
+    color: Colors.transparent,
+    child: Container(
+      decoration: BoxDecoration(/* ... */),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // NEW: Edit option (add BEFORE delete)
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit'),
+            onTap: () {
+              Navigator.pop(context);
+              onEdit?.call();
+            },
+          ),
+
+          // EXISTING: Delete option
+          ListTile(
+            leading: Icon(
+              Icons.delete_outline,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            title: Text(
+              'Move to Trash',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              onDelete?.call();
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+```
+
+3. **Update static `show()` method to accept `onEdit` parameter:**
+```dart
+static Future<void> show({
+  required BuildContext context,
+  required Task task,
+  required Offset position,
+  VoidCallback? onDelete,
+  VoidCallback? onEdit, // ADD THIS
+}) async {
+  await showMenu(
+    context: context,
+    position: RelativeRect.fromLTRB(
+      position.dx,
+      position.dy,
+      position.dx,
+      position.dy,
+    ),
+    items: [
+      PopupMenuItem(
+        padding: EdgeInsets.zero,
+        child: TaskContextMenu(
+          task: task,
+          onDelete: onDelete,
+          onEdit: onEdit, // PASS IT THROUGH
+        ),
+      ),
+    ],
+  );
+}
+```
+
+#### 4. Edit Dialog Implementation
+**File:** Where task list is rendered (e.g., `lib/screens/home_screen.dart` or tree view)
+
+**Add edit dialog helper function:**
+```dart
+/// Shows edit dialog for a task
+/// SIMPLIFIED: Validation moved to service layer (Gemini feedback)
 Future<void> _showEditDialog(BuildContext context, Task task) async {
   final controller = TextEditingController(text: task.title);
 
@@ -271,7 +381,8 @@ Future<void> _showEditDialog(BuildContext context, Task task) async {
     ),
   );
 
-  if (result != null && result.trim().isNotEmpty && result != task.title) {
+  // Service layer handles validation and trimming
+  if (result != null) {
     try {
       await context.read<TaskProvider>().updateTaskTitle(task.id, result);
 
@@ -299,6 +410,18 @@ Future<void> _showEditDialog(BuildContext context, Task task) async {
 }
 ```
 
+**Wire up to context menu:**
+```dart
+// When showing context menu (on long-press)
+await TaskContextMenu.show(
+  context: context,
+  task: task,
+  position: position,
+  onDelete: () => _handleDelete(task),
+  onEdit: () => _showEditDialog(context, task), // ADD THIS
+);
+```
+
 ---
 
 ## Implementation Checklist
@@ -324,6 +447,12 @@ Future<void> _showEditDialog(BuildContext context, Task task) async {
 - [ ] Write unit tests for `updateTaskTitle()`
 - [ ] Test validation logic (empty title rejection)
 - [ ] Test error handling (non-existent task ID)
+- [ ] **NEW:** Write widget tests for UI layer (Codex feedback)
+  - [ ] Context menu shows Edit option
+  - [ ] Edit dialog pre-populates title
+  - [ ] Save button updates task
+  - [ ] Cancel button preserves original
+  - [ ] SnackBar shows on success/error
 - [ ] Manual testing on Linux
 - [ ] Manual testing on Android (if available)
 - [ ] Test with subtasks (ensure editing parent/child works)
@@ -340,16 +469,57 @@ Future<void> _showEditDialog(BuildContext context, Task task) async {
 
 ## Testing Strategy
 
-### Unit Tests
+### Unit Tests (Service Layer)
 **File:** `test/services/task_service_edit_test.dart`
 
 Test cases:
-1. `updateTaskTitle() updates task successfully`
+1. `updateTaskTitle() updates task successfully` (String ID)
 2. `updateTaskTitle() rejects empty title`
 3. `updateTaskTitle() rejects whitespace-only title`
 4. `updateTaskTitle() throws on non-existent task`
 5. `updateTaskTitle() trims whitespace from title`
 6. `updateTaskTitle() returns updated Task object`
+7. `updateTaskTitle() preserves other task fields`
+8. `updateTaskTitle() handles special characters`
+
+### Widget Tests (UI Layer) - NEW per Codex Feedback
+**File:** `test/widgets/task_edit_widget_test.dart`
+
+**Rationale:** Unit tests only cover service layer. Most bugs in UI features come from widget layer: wrong callbacks, missing mounted checks, improper dialog dismissal. (Codex feedback)
+
+Test cases:
+1. **Context menu displays Edit option**
+   - Render task list
+   - Long-press task
+   - Verify context menu shows "Edit" above "Delete"
+
+2. **Edit dialog opens with pre-populated title**
+   - Tap Edit option
+   - Verify dialog appears
+   - Verify TextField contains current task title
+   - Verify text is selected
+
+3. **Save button updates task**
+   - Open edit dialog
+   - Enter new title
+   - Tap Save
+   - Verify `provider.updateTaskTitle()` called with correct args
+   - Verify dialog dismisses
+   - Verify SnackBar shows "Task updated"
+
+4. **Cancel preserves original title**
+   - Open edit dialog
+   - Change title
+   - Tap Cancel
+   - Verify task title unchanged
+   - Verify no provider calls made
+
+5. **Empty title shows error**
+   - Open edit dialog
+   - Clear text
+   - Tap Save
+   - Verify error SnackBar shown
+   - Verify task unchanged
 
 ### Manual Testing Scenarios
 1. Edit root-level task
