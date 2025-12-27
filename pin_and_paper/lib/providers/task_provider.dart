@@ -391,8 +391,9 @@ class TaskProvider extends ChangeNotifier {
     );
   }
 
-  /// Delete task with CASCADE confirmation
-  /// Returns true if deleted, false if cancelled or error
+  /// Soft delete task with CASCADE confirmation (Phase 3.3)
+  /// Moves task to "Recently Deleted" instead of permanently deleting
+  /// Returns true if soft-deleted, false if cancelled or error
   Future<bool> deleteTaskWithConfirmation(
     String taskId,
     Future<bool> Function(int) showConfirmation,
@@ -409,20 +410,129 @@ class TaskProvider extends ChangeNotifier {
         if (!confirmed) return false;
       }
 
-      // Delete task and all descendants from database
-      final deletedCount = await _taskService.deleteTaskWithChildren(taskId);
+      // Soft delete task and all descendants (Phase 3.3)
+      final deletedCount = await _taskService.softDeleteTask(taskId);
 
       // CRITICAL: Reload all tasks from database to ensure consistency
       // This is safer than trying to manually remove all descendants from _tasks
       await loadTasks();
 
-      debugPrint('Deleted $deletedCount task(s)');
+      debugPrint('Soft-deleted $deletedCount task(s)');
       return true;
     } catch (e) {
-      _errorMessage = 'Failed to delete task: $e';
+      _errorMessage = 'Failed to soft delete task: $e';
       debugPrint(_errorMessage);
       notifyListeners();
       return false;
+    }
+  }
+
+  // ============================================
+  // PHASE 3.3: RECENTLY DELETED METHODS
+  // ============================================
+
+  /// Restore a soft-deleted task and all its descendants
+  /// Returns true if restored, false if error
+  Future<bool> restoreTask(String taskId) async {
+    _errorMessage = null;
+
+    try {
+      final restoredCount = await _taskService.restoreTask(taskId);
+
+      // Reload tasks to show restored tasks
+      await loadTasks();
+
+      debugPrint('Restored $restoredCount task(s)');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to restore task: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Permanently delete a soft-deleted task with confirmation
+  /// Returns true if permanently deleted, false if cancelled or error
+  Future<bool> permanentlyDeleteTask(
+    String taskId,
+    Future<bool> Function() showConfirmation,
+  ) async {
+    _errorMessage = null;
+
+    try {
+      // Always show confirmation for permanent delete
+      final confirmed = await showConfirmation();
+      if (!confirmed) return false;
+
+      // Permanent delete (hard delete)
+      final deletedCount = await _taskService.permanentlyDeleteTask(taskId);
+
+      // No need to reload main tasks since they're already filtered out
+      // But reload in case we're on the Recently Deleted screen
+      notifyListeners();
+
+      debugPrint('Permanently deleted $deletedCount task(s)');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to permanently delete task: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Empty trash - permanently delete all soft-deleted tasks
+  /// Returns true if emptied, false if cancelled or error
+  Future<bool> emptyTrash(
+    Future<bool> Function(int) showConfirmation,
+  ) async {
+    _errorMessage = null;
+
+    try {
+      // Get count of deleted tasks for confirmation
+      final deletedCount = await _taskService.countRecentlyDeletedTasks();
+
+      if (deletedCount == 0) {
+        return false; // Nothing to delete
+      }
+
+      // Show confirmation with count
+      final confirmed = await showConfirmation(deletedCount);
+      if (!confirmed) return false;
+
+      // Empty trash
+      final permanentlyDeletedCount = await _taskService.emptyTrash();
+
+      notifyListeners();
+
+      debugPrint('Emptied trash: $permanentlyDeletedCount task(s)');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to empty trash: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Get count of recently deleted tasks (for badge display)
+  Future<int> getRecentlyDeletedCount() async {
+    try {
+      return await _taskService.countRecentlyDeletedTasks();
+    } catch (e) {
+      debugPrint('Failed to get recently deleted count: $e');
+      return 0;
+    }
+  }
+
+  /// Get recently deleted tasks for Recently Deleted screen
+  Future<List<Task>> getRecentlyDeletedTasks() async {
+    try {
+      return await _taskService.getRecentlyDeletedTasks();
+    } catch (e) {
+      debugPrint('Failed to get recently deleted tasks: $e');
+      return [];
     }
   }
 }
