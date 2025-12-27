@@ -122,6 +122,7 @@ Data Layer (SQLite)
 - ✅ **Phase 3.1:** Task nesting (subtasks) with 4-level hierarchy
 - ✅ **Phase 3.2:** Hierarchical display with drag & drop reordering
 - ✅ **Phase 3.3:** Recently Deleted (soft delete with 30-day recovery)
+- 🔜 **Phase 3.4:** Task editing (edit task titles via context menu)
 - 🔜 Tags with filtering
 - 🔜 Search
 - 🔜 Due dates with notifications
