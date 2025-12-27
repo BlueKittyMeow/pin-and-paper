@@ -263,22 +263,39 @@ class TaskService {
           whereArgs: [taskId],
         );
       } else {
-        // Moving to different parent - simpler case
+        // Moving to different parent
+        // Step 1: Move task to new parent with temporary position to avoid conflicts
         await txn.update(
           AppConstants.tasksTable,
           {
             'parent_id': newParentId,
-            'position': newPosition,
+            'position': 99999,  // Temporary large position
           },
           where: 'id = ?',
           whereArgs: [taskId],
         );
 
-        // Reindex siblings in SOURCE list (old parent)
+        // Step 2: Reindex siblings in SOURCE list (closes gap left by moved task)
         await _reindexSiblings(oldParentId, txn);
 
-        // Reindex siblings in DESTINATION list (new parent)
-        await _reindexSiblings(newParentId, txn);
+        // Step 3: Shift siblings in DESTINATION list at >= newPosition up by 1
+        await txn.rawUpdate('''
+          UPDATE ${AppConstants.tasksTable}
+          SET position = position + 1
+          WHERE ${newParentId == null ? 'parent_id IS NULL' : 'parent_id = ?'}
+            AND position >= ?
+            AND id != ?
+        ''', newParentId == null
+            ? [newPosition, taskId]
+            : [newParentId, newPosition, taskId]);
+
+        // Step 4: Insert task at desired position
+        await txn.update(
+          AppConstants.tasksTable,
+          {'position': newPosition},
+          where: 'id = ?',
+          whereArgs: [taskId],
+        );
       }
 
       return null;  // Success

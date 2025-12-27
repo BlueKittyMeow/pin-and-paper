@@ -58,7 +58,7 @@ class TestDatabaseHelper {
 
   /// Create test database schema (matches DatabaseService._createDB)
   static Future<void> _createTestDB(Database db, int version) async {
-    // Create tasks table with Phase 3.2 schema
+    // Create tasks table with Phase 3.3 schema (includes soft delete)
     await db.execute('''
       CREATE TABLE ${AppConstants.tasksTable} (
         id TEXT PRIMARY KEY,
@@ -74,6 +74,7 @@ class TestDatabaseHelper {
         start_date INTEGER,
         notification_type TEXT,
         notification_time INTEGER,
+        deleted_at INTEGER,
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable} (id) ON DELETE CASCADE
       )
     ''');
@@ -123,6 +124,16 @@ class TestDatabaseHelper {
 
     await db.execute('''
       CREATE INDEX idx_tasks_completed ON ${AppConstants.tasksTable}(completed)
+    ''');
+
+    // Phase 3.3: Soft delete indexes
+    await db.execute('''
+      CREATE INDEX idx_tasks_deleted_at ON ${AppConstants.tasksTable}(deleted_at)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_tasks_active ON ${AppConstants.tasksTable}(deleted_at, completed, created_at DESC)
+        WHERE deleted_at IS NULL
     ''');
   }
 

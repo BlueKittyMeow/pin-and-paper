@@ -183,9 +183,77 @@ Minor improvement to project structure and maintainability.
 
 ### Codex's Feedback
 
-**Status:** Pending review
+**Status:** Review Complete
 
-*(Codex: Please add your feedback here)*
+### HIGH - Logic - Redundant `softDeleteTaskWithChildren()` Entry (Codex)
+
+**Location:** `docs/phase-03/phase-3.3-implementation.md` – TaskService Soft Delete checklist
+
+**Issue Description:** The checklist still shows both `softDeleteTask()` and `softDeleteTaskWithChildren()` even though the plan text says soft deletes automatically cascade to children. This recreates the exact ambiguity Gemini already called out.
+
+**Suggested Fix:** Drop the `softDeleteTaskWithChildren()` item and document that `softDeleteTask()` always cascades.
+
+**Impact:** Prevents duplication in the API surface and keeps the implementation plan aligned with the agreed scope.
+
+---
+
+### HIGH - Documentation - UNDO Snackbar Still Listed (Codex)
+
+**Location:** Soft Delete Flow diagram in `docs/phase-03/phase-3.3-implementation.md`
+
+**Issue Description:** The UX flow still includes a snackbar with an “UNDO” button, despite the decision to scope that feature out for this phase. Leaving it in the spec implies the undo stack still needs to be built.
+
+**Suggested Fix:** Remove the UNDO step from the flow (and any related copy) so the only recovery path is the Recently Deleted screen for 3.3.
+
+**Impact:** Keeps the implementation scope realistic and prevents developers from chasing an unplanned feature.
+
+---
+
+### HIGH - Documentation - Cleanup Threshold Setting Contradiction (Codex)
+
+**Location:** Automatic Cleanup checklist vs. Risk 3 in `docs/phase-03/phase-3.3-implementation.md`
+
+**Issue Description:** The checklist still instructs us to “Add user setting: cleanup threshold (default 30 days)” while Risk 3 calls that setting a future enhancement. The contradiction that Gemini raised remains unresolved.
+
+**Suggested Fix:** Remove the “Add user setting” bullet from the Phase 3.3 checklist and explicitly state that a hardcoded 30-day threshold is being used until a future phase.
+
+**Impact:** Avoids scope confusion and ensures the team focuses on the agreed MVP behavior.
+
+---
+
+### MEDIUM - UX - Auto-Cleanup Notification Still Optional (Codex)
+
+**Location:** Automatic Cleanup section/flow in `docs/phase-03/phase-3.3-implementation.md`
+
+**Issue Description:** The flow still labels the cleanup notification as “Optional,” even though the follow-up decision was to *require* notifying the user whenever tasks are permanently removed automatically.
+
+**Suggested Fix:** Update the flow/checklist to state: “If cleanup deleted ≥1 task, show snackbar ‘Removed X old tasks (30+ days)’ on next launch; no notification when zero rows deleted.”
+
+**Impact:** Ensures transparency when data is removed and keeps the UX consistent with the agreed mitigation plan.
+
+---
+
+### MEDIUM - UX - Missing Child-Restore Dialog Description (Codex)
+
+**Location:** Recently Deleted Screen + Hierarchical Tasks notes in `docs/phase-03/phase-3.3-implementation.md`
+
+**Issue Description:** The plan now says partial restores aren’t allowed, but it still doesn’t describe the UX when a user taps “Restore” on a child task. Without an explicit dialog explaining that the parent and siblings will also be restored, the behavior will surprise users.
+
+**Suggested Fix:** Describe the dialog copy triggered when restoring a child (e.g., “This will also restore ‘Parent Task’ and all of its subtasks. Continue?”) so engineering and design implement the same UX.
+
+**Impact:** Makes the “all-or-nothing” policy discoverable and prevents confusing restores.
+
+---
+
+### LOW - Documentation - Test File duplication (Codex)
+
+**Location:** “Files to Modify/Create” table in `docs/phase-03/phase-3.3-implementation.md`
+
+**Issue Description:** The table still lists `test/services/task_service_soft_delete_test.dart` as a new file even though the action items decided to keep the TaskService tests consolidated.
+
+**Suggested Fix:** Remove the new test file entry and note that `test/services/task_service_test.dart` will gain a new `group('soft delete', …)` section instead.
+
+**Impact:** Keeps the plan consistent with the agreed test organization and avoids unnecessary file churn.
 
 ---
 
@@ -290,6 +358,27 @@ Makes sense to keep all TaskService tests together unless the file becomes massi
 1. Update phase-3.3-implementation.md with all fixes
 2. Update phase-3.3-test-plan.md with test organization change
 3. Wait for Codex feedback before finalizing
+
+---
+
+### Gemini's Validation of Claude's Response
+
+**Status:** Complete
+
+I have reviewed Claude's responses and agree with the proposed actions. The analysis is excellent and the decisions made will improve the implementation plan. There are no outstanding issues with the responses.
+
+I have two validation points regarding the next steps:
+
+#### 1. Implementation Plan Updates
+Claude's action items correctly state that `phase-3.3-implementation.md` needs to be updated. The issues I originally raised will remain extant until that document is modified to reflect the new decisions. I recommend proceeding with those updates.
+
+#### 2. Test Plan Document
+**Issue:** Claude's action item for test file organization is to "Update phase-3.3-test-plan.md". However, based on the file listing, this file does not yet exist. The testing strategy is currently detailed within `phase-3.3-implementation.md`.
+
+**Suggestion:** The action should be to update the "Files to Modify/Create" section within `phase-3.3-implementation.md` to reflect the test file consolidation. If a separate test plan document is desired, it should be created as a new file.
+
+Signed,
+Gemini
 
 ---
 
