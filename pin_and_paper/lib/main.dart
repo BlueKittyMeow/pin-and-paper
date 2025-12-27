@@ -1,5 +1,7 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'providers/task_provider.dart';
 import 'providers/settings_provider.dart'; // Phase 2
 import 'providers/brain_dump_provider.dart'; // Phase 2
@@ -7,6 +9,12 @@ import 'screens/home_screen.dart';
 import 'utils/theme.dart';
 
 void main() {
+  // Initialize sqflite_ffi for desktop platforms (Linux, Windows, macOS)
+  if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
   runApp(const PinAndPaperApp());
 }
 
