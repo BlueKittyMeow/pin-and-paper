@@ -23,6 +23,9 @@ class Task {
   final String notificationType; // 'use_global', 'custom', 'none'
   final DateTime? notificationTime; // Custom notification time
 
+  // Phase 3.3: Soft delete support
+  final DateTime? deletedAt; // NULL = active, non-NULL = soft-deleted
+
   Task({
     required this.id,
     required this.title,
@@ -39,6 +42,7 @@ class Task {
     this.startDate,
     this.notificationType = 'use_global',
     this.notificationTime,
+    this.deletedAt,
   });
 
   /// Serialize to database map
@@ -59,6 +63,7 @@ class Task {
       'start_date': startDate?.millisecondsSinceEpoch,
       'notification_type': notificationType,
       'notification_time': notificationTime?.millisecondsSinceEpoch,
+      'deleted_at': deletedAt?.millisecondsSinceEpoch,
     };
   }
 
@@ -94,6 +99,9 @@ class Task {
       notificationTime: map['notification_time'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['notification_time'] as int)
           : null,
+      deletedAt: map['deleted_at'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['deleted_at'] as int)
+          : null,
     );
   }
 
@@ -113,6 +121,7 @@ class Task {
     DateTime? startDate,
     String? notificationType,
     DateTime? notificationTime,
+    DateTime? deletedAt,
   }) {
     return Task(
       id: id ?? this.id,
@@ -129,6 +138,7 @@ class Task {
       startDate: startDate ?? this.startDate,
       notificationType: notificationType ?? this.notificationType,
       notificationTime: notificationTime ?? this.notificationTime,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 

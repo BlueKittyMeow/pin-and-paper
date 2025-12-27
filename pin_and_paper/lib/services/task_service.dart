@@ -482,27 +482,32 @@ class TaskService {
   Future<List<Task>> getRecentlyDeletedTasks() async {
     final db = await _dbService.database;
 
-    // Similar to getTaskHierarchy but filtering for deleted_at IS NOT NULL
+    // Get all deleted tasks with hierarchy information
+    // Base case: Deleted tasks whose parent is NULL or not deleted (roots in deleted view)
+    // Recursive case: Deleted children of deleted tasks
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       WITH RECURSIVE task_tree AS (
-        -- Base case: root-level deleted tasks
+        -- Base case: Deleted tasks that are "roots" in the deleted task hierarchy
+        -- (Either parent is NULL, or parent is NOT deleted)
         SELECT
-          *,
+          t.*,
           0 as depth,
-          printf('%05d', position) as sort_key
-        FROM ${AppConstants.tasksTable}
-        WHERE parent_id IS NULL AND deleted_at IS NOT NULL
+          printf('%05d', t.position) as sort_key
+        FROM ${AppConstants.tasksTable} t
+        LEFT JOIN ${AppConstants.tasksTable} p ON t.parent_id = p.id
+        WHERE t.deleted_at IS NOT NULL
+          AND (t.parent_id IS NULL OR p.deleted_at IS NULL)
 
         UNION ALL
 
-        -- Recursive case: children of deleted tasks
+        -- Recursive case: Deleted children of deleted tasks
         SELECT
           t.*,
           tt.depth + 1 as depth,
           tt.sort_key || '.' || printf('%05d', t.position) as sort_key
         FROM ${AppConstants.tasksTable} t
         INNER JOIN task_tree tt ON t.parent_id = tt.id
-        WHERE tt.depth < 3
+        WHERE tt.depth < 3 AND t.deleted_at IS NOT NULL
       )
       SELECT * FROM task_tree
       ORDER BY deleted_at DESC
