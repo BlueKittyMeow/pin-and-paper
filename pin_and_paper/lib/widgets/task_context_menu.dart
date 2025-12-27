@@ -32,14 +32,14 @@ class TaskContextMenu extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Delete option
+            // Delete option (Phase 3.3: Soft delete - "Move to Trash")
             ListTile(
               leading: Icon(
                 Icons.delete_outline,
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                'Delete Task',
+                'Move to Trash',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.error,
                 ),
@@ -84,6 +84,7 @@ class TaskContextMenu extends StatelessWidget {
 }
 
 /// Delete confirmation dialog with CASCADE warning
+/// Phase 3.3: Updated for soft delete ("Move to Trash" messaging)
 class DeleteTaskDialog extends StatelessWidget {
   final Task task;
   final int childCount;
@@ -99,16 +100,24 @@ class DeleteTaskDialog extends StatelessWidget {
     final hasChildren = childCount > 0;
 
     return AlertDialog(
-      title: const Text('Delete Task?'),
+      title: const Text('Move to Trash?'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Are you sure you want to delete:'),
+          Text('Are you sure you want to move this task to trash:'),
           const SizedBox(height: 8),
           Text(
             '"${task.title}"',
             style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'You can restore it within 30 days from Recently Deleted.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           if (hasChildren) ...[
             const SizedBox(height: 16),
@@ -127,7 +136,7 @@ class DeleteTaskDialog extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'This will also delete $childCount subtask${childCount == 1 ? '' : 's'}',
+                      'This will also move $childCount subtask${childCount == 1 ? '' : 's'} to trash',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                         fontWeight: FontWeight.w500,
@@ -150,7 +159,7 @@ class DeleteTaskDialog extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
-          child: const Text('Delete'),
+          child: const Text('Move to Trash'),
         ),
       ],
     );

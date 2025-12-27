@@ -560,6 +560,43 @@ class TaskService {
     });
   }
 
+  /// Clean up tasks deleted more than 30 days ago
+  ///
+  /// Automatically called on app launch (Phase 3.3).
+  /// Hard deletes tasks where deleted_at < (now - 30 days).
+  /// Returns count of permanently deleted tasks.
+  Future<int> cleanupExpiredDeletedTasks() async {
+    final db = await _dbService.database;
+
+    // Calculate cutoff timestamp (30 days ago)
+    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    final cutoffTimestamp = cutoff.millisecondsSinceEpoch;
+
+    return await db.transaction((txn) async {
+      // Get all expired soft-deleted task IDs
+      final expired = await txn.query(
+        AppConstants.tasksTable,
+        columns: ['id'],
+        where: 'deleted_at IS NOT NULL AND deleted_at < ?',
+        whereArgs: [cutoffTimestamp],
+      );
+
+      final idsToDelete = expired.map((row) => row['id'] as String).toList();
+
+      if (idsToDelete.isEmpty) return 0;
+
+      // Hard delete all expired tasks
+      // Foreign key CASCADE will handle children automatically
+      await txn.delete(
+        AppConstants.tasksTable,
+        where: 'id IN (${List.filled(idsToDelete.length, '?').join(',')})',
+        whereArgs: idsToDelete,
+      );
+
+      return idsToDelete.length;
+    });
+  }
+
   /// Cleanup old deleted tasks (automatic)
   ///
   /// Permanently deletes tasks that have been soft-deleted longer than [daysThreshold].
