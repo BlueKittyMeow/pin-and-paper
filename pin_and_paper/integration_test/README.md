@@ -24,27 +24,37 @@ Comprehensive integration tests for hierarchical task features including drag-an
 
 ## Running Integration Tests
 
-### Option 1: Simple execution (desktop/emulator)
+### Option 1: Using flutter drive (RECOMMENDED for devices)
 ```bash
-flutter test integration_test/phase_3_2_integration_test.dart
-```
-
-### Option 2: On real Android device
-```bash
-# Find your device ID
-flutter devices
-
-# Run on specific device
-flutter test integration_test/phase_3_2_integration_test.dart -d <device_id>
-```
-
-### Option 3: Using flutter drive (more control)
-```bash
+# Most reliable for real devices
 flutter drive \
   --driver=test_driver/integration_test.dart \
   --target=integration_test/phase_3_2_integration_test.dart \
   -d <device_id>
 ```
+
+### Option 2: On desktop/emulator
+```bash
+flutter test integration_test/phase_3_2_integration_test.dart
+```
+
+### Option 3: On real Android device via USB
+```bash
+# Find your device ID
+flutter devices
+
+# Connect via USB (more stable than WiFi)
+# Run on specific device
+flutter test integration_test/phase_3_2_integration_test.dart -d <device_id>
+```
+
+### Known Issues
+
+**WiFi Connection Timeout:**
+Integration tests may fail on Android devices over WiFi with `WebSocketChannelException`. This is a known Flutter limitation. Solutions:
+- Use USB connection instead of WiFi
+- Use `flutter drive` instead of `flutter test`
+- Run on emulator/desktop platform
 
 ## Test Philosophy
 
