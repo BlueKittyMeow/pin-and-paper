@@ -176,36 +176,39 @@ CREATE TABLE task_tags (
 
 ---
 
-## Open Questions
+## Design Decisions ✅ LOCKED IN
 
-### Design Decisions Needed
+All design questions have been answered by BlueKitty:
 
-**Question 1:** Tag creation flow
-- **Option A:** Two-step (name → color picker)
-- **Option B:** One-step (name with default color, edit later)
-- **Recommendation:** Option B (faster, less friction)
+**Decision 1: Tag Creation Flow**
+- ✅ **Two-step (name → color picker)** with smart default
+- Defaults to last used color for quick creation
+- Can skip color picker if happy with default
 
-**Question 2:** Where to put "Filter" button?
-- **Option A:** App bar (top right)
-- **Option B:** Floating action button
-- **Option C:** Bottom navigation bar
-- **Recommendation:** Option A (discoverable, standard pattern)
+**Decision 2: Filter Button Location**
+- ✅ **Top app bar** (next to search/menu)
+- Standard, discoverable pattern
 
-**Question 3:** Tag color palette
-- **Option A:** Fixed 12 colors (Material Design)
-- **Option B:** Full color picker
-- **Option C:** Both (12 presets + custom)
-- **Recommendation:** Option C (balance quick vs custom)
+**Decision 3: Tag Color Palette**
+- ✅ **Preset palette (12 colors) + full custom picker + user-saved palettes**
+- 12 Material Design preset colors
+- Full color picker for custom colors
+- Users can save their own custom palettes
 
-**Question 4:** Should child tasks show parent tags?
-- **Option A:** No (tags are per-task)
-- **Option B:** Yes (inherit from parent)
-- **Recommendation:** Option A (simpler, clearer)
+**Decision 4: Tag Display Limit**
+- ✅ **Show first 3 tags, click to expand**
+- Prevents visual clutter
+- Tap to show all tags
 
-**Question 5:** Soft delete for tags?
-- **Option A:** Hard delete (CASCADE removes associations)
-- **Option B:** Soft delete (mark deleted, hide from UI)
-- **Recommendation:** Option A (simpler, defer soft delete to Phase 4+)
+**Decision 5: Tag Deletion**
+- ✅ **Hybrid approach:**
+  - **Hard delete** if tag has zero task associations
+  - **Forced soft delete** if tag is used by any tasks (preserves associations)
+- Best of both worlds: clean unused tags, preserve data for used tags
+
+**Decision 6: Tag Inheritance from Parents**
+- ✅ **No inheritance** (each task has independent tags)
+- Tags are orthogonal to hierarchy
 
 ---
 
