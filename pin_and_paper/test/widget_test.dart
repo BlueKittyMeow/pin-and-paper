@@ -7,9 +7,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pin_and_paper/models/tag.dart';
 import 'package:pin_and_paper/models/task.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/screens/home_screen.dart';
+import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:provider/provider.dart';
 
@@ -33,6 +35,12 @@ class FakeTaskService extends TaskService {
     return List.from(_storage);
   }
 
+  // Phase 3.5 fix: TaskProvider uses getTaskHierarchy(), not getAllTasks()
+  @override
+  Future<List<Task>> getTaskHierarchy() async {
+    return List.from(_storage);
+  }
+
   @override
   Future<Task> toggleTaskCompletion(Task task) async {
     final index = _storage.indexWhere((element) => element.id == task.id);
@@ -50,13 +58,26 @@ class FakeTaskService extends TaskService {
   }
 }
 
+// Phase 3.5: Fake TagService for widget tests
+class FakeTagService extends TagService {
+  @override
+  Future<Map<String, List<Tag>>> getTagsForAllTasks(List<String> taskIds) async {
+    // Return empty tags for all tasks
+    return {};
+  }
+}
+
 void main() {
   testWidgets('task lifecycle flow: add, list, complete', (tester) async {
-    final fakeService = FakeTaskService();
+    final fakeTaskService = FakeTaskService();
+    final fakeTagService = FakeTagService();
 
     await tester.pumpWidget(
       ChangeNotifierProvider(
-        create: (_) => TaskProvider(taskService: fakeService),
+        create: (_) => TaskProvider(
+          taskService: fakeTaskService,
+          tagService: fakeTagService,
+        ),
         child: const MaterialApp(
           home: HomeScreen(),
         ),
