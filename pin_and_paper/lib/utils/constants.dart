@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 5; // Phase 3.3: Soft delete (Recently Deleted)
+  static const int databaseVersion = 6; // Phase 3.5: Tags (hybrid deletion)
 
   // Table names
   static const String tasksTable = 'tasks';

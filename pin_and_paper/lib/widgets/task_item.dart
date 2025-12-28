@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
+import '../models/tag.dart';
 import '../providers/task_provider.dart';
+import '../providers/tag_provider.dart';
 import 'task_context_menu.dart';
+import 'tag_picker_dialog.dart';
+import 'tag_chip.dart';
 
 class TaskItem extends StatelessWidget {
   final Task task;
@@ -14,6 +18,7 @@ class TaskItem extends StatelessWidget {
   final VoidCallback? onToggleCollapse;
   final bool isReorderMode;
   final String? breadcrumb; // Phase 3.2: Optional breadcrumb for completed tasks
+  final List<Tag>? tags; // Phase 3.5: Task tags
 
   const TaskItem({
     super.key,
@@ -24,6 +29,7 @@ class TaskItem extends StatelessWidget {
     this.onToggleCollapse,
     this.isReorderMode = false,
     this.breadcrumb,
+    this.tags, // Phase 3.5
   });
 
   // Phase 3.2: Handle task deletion with confirmation
@@ -124,6 +130,85 @@ class TaskItem extends StatelessWidget {
     });
   }
 
+  // Phase 3.5: Handle tag management
+  Future<void> _handleManageTags(BuildContext context) async {
+    final tagProvider = context.read<TagProvider>();
+
+    // Show tag picker dialog
+    final selectedTagIds = await TagPickerDialog.show(
+      context: context,
+      taskId: task.id,
+      currentTags: tags ?? [],
+    );
+
+    // User cancelled
+    if (selectedTagIds == null || !context.mounted) return;
+
+    // Codex review: Check return values to detect silent failures
+    bool allSucceeded = true;
+    String? failureReason;
+
+    try {
+      // Get current tag IDs
+      final currentTagIds = (tags ?? []).map((t) => t.id).toSet();
+      final newTagIds = selectedTagIds.toSet();
+
+      // Add new tags
+      for (final tagId in newTagIds.difference(currentTagIds)) {
+        final success = await tagProvider.addTagToTask(task.id, tagId);
+        if (!success) {
+          allSucceeded = false;
+          failureReason = tagProvider.errorMessage ?? 'Failed to add tag';
+          break;
+        }
+      }
+
+      // Remove removed tags (only if adds succeeded)
+      if (allSucceeded) {
+        for (final tagId in currentTagIds.difference(newTagIds)) {
+          final success = await tagProvider.removeTagFromTask(task.id, tagId);
+          if (!success) {
+            allSucceeded = false;
+            failureReason = tagProvider.errorMessage ?? 'Failed to remove tag';
+            break;
+          }
+        }
+      }
+
+      // Only reload and show success if all operations succeeded
+      if (allSucceeded && context.mounted) {
+        // Codex review: Use refreshTags() to avoid tree collapse
+        await context.read<TaskProvider>().refreshTags();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tags updated'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } else if (!allSucceeded && context.mounted) {
+        // Show specific failure message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(failureReason ?? 'Failed to update tags'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update tags: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Phase 3.2: Calculate indentation based on depth
@@ -221,6 +306,81 @@ class TaskItem extends StatelessWidget {
                 ? const Icon(Icons.drag_handle, color: Colors.grey)
                 : null,
           ),
+
+          // Phase 3.5: Display tags or "Add Tag" prompt
+          // Gemini review: Show "+ Add Tag" for discoverability when no tags exist
+          if (!isReorderMode && (tags == null || tags!.isEmpty || tags!.isNotEmpty))
+            Padding(
+              padding: const EdgeInsets.only(
+                left: 60, // Align with title (24px collapse + 24px checkbox + 12px padding)
+                right: 12,
+                bottom: 8,
+              ),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: tags == null || tags!.isEmpty
+                    ? [
+                        // Gemini review: Discoverability chip when no tags
+                        GestureDetector(
+                          onTap: () => _handleManageTags(context),
+                          child: Material(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.add,
+                                    size: 14,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Add Tag',
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ]
+                    : [
+                        // Show first 3 tags
+                        ...tags!.take(3).map((tag) {
+                          return CompactTagChip(tag: tag);
+                        }),
+                        // Show "+N more" chip if there are more than 3 tags
+                        if (tags!.length > 3)
+                          Material(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              child: Text(
+                                '+${tags!.length - 3} more',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+              ),
+            ),
         ],
       ),
     );
@@ -240,6 +400,7 @@ class TaskItem extends StatelessWidget {
           position: details.globalPosition,
           onDelete: () => _handleDelete(context),
           onEdit: () => _handleEdit(context), // Phase 3.4
+          onManageTags: () => _handleManageTags(context), // Phase 3.5
         );
       },
       child: taskContainer,

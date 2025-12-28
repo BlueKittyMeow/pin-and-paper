@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'providers/task_provider.dart';
+import 'providers/tag_provider.dart'; // Phase 3.5
 import 'providers/settings_provider.dart'; // Phase 2
 import 'providers/brain_dump_provider.dart'; // Phase 2
 import 'screens/home_screen.dart';
@@ -40,10 +41,12 @@ class PinAndPaperApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Phase 2: MultiProvider for multiple state management
+    // Phase 3.5: Added TagProvider for tag management
     // Order matters: SettingsProvider must be created before BrainDumpProvider
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => TaskProvider()..loadPreferences()),
+        ChangeNotifierProvider(create: (_) => TagProvider()), // Phase 3.5
         ChangeNotifierProvider(create: (_) => SettingsProvider()..initialize()),
         ChangeNotifierProxyProvider<SettingsProvider, BrainDumpProvider>(
           create: (context) => BrainDumpProvider(

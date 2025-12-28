@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/task.dart';
+import '../models/tag.dart'; // Phase 3.5
 import 'task_item.dart';
 
 /// Extension to detect drop position (above/inside/below) based on pointer offset
@@ -28,11 +29,13 @@ extension TaskDropPosition on TreeDragAndDropDetails<Task> {
 
 /// Draggable task tile for reordering in tree view
 /// Phase 3.2: Implements drag-and-drop with visual feedback
+/// Phase 3.5: Added tags parameter
 class DragAndDropTaskTile extends StatelessWidget {
   final TreeEntry<Task> entry;
   final TreeDragTargetNodeAccepted<Task> onNodeAccepted;
   final VoidCallback? onToggleCollapse;
   final Duration? longPressDelay;
+  final List<Tag>? tags; // Phase 3.5
 
   const DragAndDropTaskTile({
     super.key,
@@ -40,6 +43,7 @@ class DragAndDropTaskTile extends StatelessWidget {
     required this.onNodeAccepted,
     this.onToggleCollapse,
     this.longPressDelay,
+    this.tags, // Phase 3.5
   });
 
   @override
@@ -82,6 +86,7 @@ class DragAndDropTaskTile extends StatelessWidget {
                 isExpanded: entry.isExpanded,
                 onToggleCollapse: onToggleCollapse,
                 isReorderMode: true,
+                tags: tags, // Phase 3.5
               ),
             ),
           ),
@@ -102,6 +107,7 @@ class DragAndDropTaskTile extends StatelessWidget {
                   hasChildren: entry.hasChildren,
                   isExpanded: entry.isExpanded,
                   isReorderMode: true,
+                  tags: tags, // Phase 3.5
                 ),
               ),
             ),
@@ -117,6 +123,7 @@ class DragAndDropTaskTile extends StatelessWidget {
               isExpanded: entry.isExpanded,
               onToggleCollapse: onToggleCollapse,
               isReorderMode: true,
+              tags: tags, // Phase 3.5
             ),
           ),
         );

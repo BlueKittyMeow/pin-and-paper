@@ -113,6 +113,29 @@ class TestDatabaseHelper {
       )
     ''');
 
+    // Create tags table (Phase 3.5)
+    await db.execute('''
+      CREATE TABLE ${AppConstants.tagsTable} (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        color TEXT,
+        created_at INTEGER NOT NULL,
+        deleted_at INTEGER DEFAULT NULL
+      )
+    ''');
+
+    // Create task_tags junction table (Phase 3.5)
+    await db.execute('''
+      CREATE TABLE ${AppConstants.taskTagsTable} (
+        task_id TEXT NOT NULL,
+        tag_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (task_id, tag_id),
+        FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE,
+        FOREIGN KEY (tag_id) REFERENCES ${AppConstants.tagsTable}(id) ON DELETE CASCADE
+      )
+    ''');
+
     // Create indexes for performance
     await db.execute('''
       CREATE INDEX idx_tasks_parent_id ON ${AppConstants.tasksTable}(parent_id)
@@ -135,6 +158,23 @@ class TestDatabaseHelper {
       CREATE INDEX idx_tasks_active ON ${AppConstants.tasksTable}(deleted_at, completed, created_at DESC)
         WHERE deleted_at IS NULL
     ''');
+
+    // Phase 3.5: Tag indexes
+    await db.execute('''
+      CREATE INDEX idx_tags_name ON ${AppConstants.tagsTable}(name)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_tags_deleted_at ON ${AppConstants.tagsTable}(deleted_at)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_task_tags_tag ON ${AppConstants.taskTagsTable}(tag_id)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_task_tags_task ON ${AppConstants.taskTagsTable}(task_id)
+    ''');
   }
 
   /// Close the test database
@@ -147,6 +187,9 @@ class TestDatabaseHelper {
 
   /// Clear all data from the test database (for test cleanup)
   static Future<void> clearAllData(Database db) async {
+    // Clear junction table first (foreign key constraints)
+    await db.delete(AppConstants.taskTagsTable);
+    await db.delete(AppConstants.tagsTable);
     await db.delete(AppConstants.tasksTable);
     await db.delete(AppConstants.brainDumpDraftsTable);
     await db.delete(AppConstants.apiUsageLogTable);

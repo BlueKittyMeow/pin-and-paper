@@ -70,6 +70,29 @@ This document tracks implementation decisions, learnings, and technical notes fr
 - Subsequent tags: Default to last color, can override
 - Best of both: quick for repeated use, customizable when needed
 
+### Decision 5: Vertical Slice Implementation Approach
+**Date:** 2025-12-28
+**Context:** Gemini identified that bottom-up approach delays UX validation until Day 5
+
+**Options Considered:**
+1. Bottom-up (foundation → service → provider → UI)
+2. Vertical slices (complete user journeys incrementally)
+
+**Chosen:** Vertical slices
+
+**Rationale:**
+- UX validation by Day 2 (not Day 5!)
+- Can test complete "create tag" journey early
+- Iterate based on real user experience
+- Each slice delivers independent value
+- Critical features (rename, autocomplete) available sooner
+- Aligns with agile/iterative development best practices
+
+**Impact:**
+- Same 6-7 day timeline, better risk management
+- 4 vertical slices instead of 7 horizontal phases
+- Explicit UX checkpoints after each slice
+
 ---
 
 ## Technical Learnings
@@ -91,7 +114,8 @@ This document tracks implementation decisions, learnings, and technical notes fr
 
 ## Feedback Integration
 
-### Codex's Feedback
+### Codex's Feedback - Round 1 (Initial Review)
+**Date:** 2025-12-27
 Status: ✅ All issues addressed (see codex-issues-response.md)
 
 **CRITICAL - N+1 Tag Loading + Assignment Bug:**
@@ -126,7 +150,44 @@ Status: ✅ All issues addressed (see codex-issues-response.md)
   - Proper index usage (idx_task_tags_tag)
   - OR and AND variants documented
 
-### Gemini's Feedback
+---
+
+### Codex's Feedback - Round 2 (Blocker Review)
+**Date:** 2025-12-28
+Status: ✅ Both blockers RESOLVED
+
+**BLOCKER A: Filter Clearing Doesn't Restore Full List** ⚠️
+- **Issue:** `_applyTagFilters()` returns early when filters cleared, but `_tasks` stays filtered
+- **Impact:** Users stuck with filtered view until app restart - CRITICAL UX bug
+- **Root Cause:** While code DID call `loadTasks()`, clarity was needed
+- **Fix:** Added explicit debug logging and comments to make reload path bulletproof
+- **Verification:** Debug prints confirm "Filters cleared - reloading full task list" path
+
+**BLOCKER B: Depth Preservation in Filter Queries** ⚠️
+- **Issue:** Filtering queries return tasks with `depth=0`, collapsing tree view
+- **Impact:** All filtered tasks render as root nodes - tree hierarchy lost
+- **Root Cause:** Queries used `SELECT t.* FROM tasks` without recursive CTE
+- **Fix:** Both `getTasksForTags()` and `getTasksForTagsAND()` now include full CTE
+- **CTE Logic:**
+  ```sql
+  WITH RECURSIVE task_tree AS (
+    SELECT *, 0 as depth FROM tasks WHERE parent_id IS NULL
+    UNION ALL
+    SELECT t.*, tt.depth + 1 FROM tasks t JOIN task_tree tt ON t.parent_id = tt.id
+  )
+  SELECT DISTINCT task_tree.* FROM task_tree
+  JOIN task_tags ON task_tree.id = task_tags.task_id
+  WHERE ...
+  ```
+- **Result:** Filtered tasks preserve full hierarchy (depth, parent_id, position)
+
+**Additional Notes:**
+- ✅ SQLite ~999 parameter limit documented for `IN()` queries
+- ⚠️ Consider batching if >900 tasks (unlikely but noted)
+- ✅ `removeTagFromTask()` confirmed present (was added after Gemini feedback)
+- ✅ `getTagsForAllTasks()` includes parameter limit warning
+
+### Gemini's Feedback - Round 1 (Plan Review)
 Status: ✅ All issues addressed
 
 **CRITICAL - Contradictory Scope:**
@@ -150,6 +211,50 @@ Status: ✅ All issues addressed
 - ✅ Added empty states to 3.5a scope
 - Tag Management: "No tags created yet..."
 - Tag Picker: "No existing tags" message
+
+---
+
+### Gemini's Feedback - Round 2 (Implementation Strategy UX Review)
+**Date:** 2025-12-28
+Status: ✅ All issues addressed
+
+**CRITICAL - Implementation Order Not Ideal:**
+- ✅ Restructured for vertical slices (complete user journeys)
+- Old: Foundation → Service → Provider → UI (big bang)
+- New: Slice 1 (Create) → Slice 2 (Manage) → Slice 3 (Filter) → Slice 4 (Polish)
+- UX validation now by Day 2 (not Day 5!)
+
+**CRITICAL - Missing Feature: Remove Tag from Task:**
+- ✅ Added to implementation spec (Task #15, Day 3)
+- ✅ Added to corrections doc (section 1b)
+- ✅ Long-press tag chip → "Remove tag" option
+- ✅ Test coverage planned
+
+**HIGH - Tag Renaming/Autocomplete Too Late:**
+- ✅ Moved from Day 4 to Day 2
+- Now part of Vertical Slice 1 (Create & Display)
+- Essential for ADHD-friendly "forgiving" and "zero friction" principles
+
+**MEDIUM - Empty States as Polish:**
+- ✅ Integrated into each vertical slice
+- Task 7: Tag picker empty state (Day 2)
+- Task 14: Tag management empty state (Day 3)
+- Task 20: Filter empty state (Day 4)
+- Task 25: Filtered results empty state (Day 5)
+
+**MEDIUM - TagPickerDialog Too Large:**
+- ✅ Broken down into smaller tasks
+- Task 7: TagPickerDialog create journey (2 hours)
+- Task 8: Color picker (45 min)
+- More manageable, testable increments
+
+**HIGH - No UX Validation Checkpoints:**
+- ✅ Added explicit UX checkpoints after each slice
+- After Slice 1 (Day 2): "Zero → Aha Moment"
+- After Slice 2 (Day 3): "Forgiving Design"
+- After Slice 3 (Day 5): "Filter Interaction"
+- After Slice 4 (Day 7): "Production Quality"
+- Each with "If broken: can't ship" criteria
 
 ---
 
