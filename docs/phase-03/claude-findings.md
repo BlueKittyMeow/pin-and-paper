@@ -92,7 +92,39 @@ This document tracks implementation decisions, learnings, and technical notes fr
 ## Feedback Integration
 
 ### Codex's Feedback
-Status: Awaiting review
+Status: ✅ All issues addressed (see codex-issues-response.md)
+
+**CRITICAL - N+1 Tag Loading + Assignment Bug:**
+- ✅ Fixed with single JOIN query (`getTagsForAllTasks`)
+- Performance: 500 tasks = 2 queries (was 500 queries)
+- 250x reduction in database calls
+
+**CRITICAL - Tree Filtering Architecture:**
+- ✅ Filter `_tasks` before categorization
+- _refreshTreeController() called after filtering
+- Main tree view now correctly shows filtered tasks
+
+**MEDIUM - Listener Lifecycle Leak:**
+- ✅ Added removeListener() in dispose()
+- ✅ Handle provider swapping correctly
+- No memory leaks
+
+**MEDIUM - Hide-Completed + Tag Filters:**
+- ✅ Tag filters override hide-completed setting
+- Rationale: User explicitly filtered, show ALL matching tasks
+- Clear filter → hide-completed resumes
+
+**HIGH - Custom Palette Scope Creep:**
+- ✅ Deferred tag_palettes table to Phase 3.5c
+- Keeps preset colors + custom picker
+- Removes incomplete feature from MVP
+
+**CRITICAL - Filtering SQL Undefined:**
+- ✅ Specified all SQL queries with:
+  - Soft-delete exclusions (tasks.deleted_at IS NULL)
+  - Depth/parent data included
+  - Proper index usage (idx_task_tags_tag)
+  - OR and AND variants documented
 
 ### Gemini's Feedback
 Status: ✅ All issues addressed
