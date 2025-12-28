@@ -139,6 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       Theme.of(context).platform == TargetPlatform.android
                                   ? const Duration(milliseconds: 500)
                                   : null,
+                              tags: taskProvider.getTagsForTask(entry.node.id), // Phase 3.5
                             );
                           }
 
@@ -150,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             isExpanded: entry.isExpanded,
                             onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
                             isReorderMode: false,
+                            tags: taskProvider.getTagsForTask(entry.node.id), // Phase 3.5
                           );
                         },
                       ),
@@ -171,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           hasChildren: false, // No expand/collapse in completed section
                           isReorderMode: false,
                           breadcrumb: breadcrumb,
+                          tags: taskProvider.getTagsForTask(task.id), // Phase 3.5
                         );
                       }),
                     ],

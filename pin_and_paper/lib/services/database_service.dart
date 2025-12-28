@@ -180,13 +180,14 @@ class DatabaseService {
       )
     ''');
 
-    // Tags for #tags (Phase 5 - future-proofing)
+    // Tags for #tags (Phase 3.5 - active)
     await db.execute('''
       CREATE TABLE ${AppConstants.tagsTable} (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
         color TEXT,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        deleted_at INTEGER DEFAULT NULL
       )
     ''');
 
@@ -268,6 +269,10 @@ class DatabaseService {
 
     await db.execute('''
       CREATE INDEX idx_tags_name ON ${AppConstants.tagsTable}(name)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_tags_deleted_at ON ${AppConstants.tagsTable}(deleted_at)
     ''');
 
     // Junction table indexes (bidirectional lookups)
@@ -374,6 +379,11 @@ class DatabaseService {
     // Migrate from version 4 to 5: Phase 3.3 - Soft delete (Recently Deleted)
     if (oldVersion < 5) {
       await _migrateToV5(db);
+    }
+
+    // Migrate from version 5 to 6: Phase 3.5 - Tags (hybrid deletion)
+    if (oldVersion < 6) {
+      await _migrateToV6(db);
     }
   }
 
@@ -695,6 +705,188 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v5 successfully');
+  }
+
+  /// Phase 3.5 Migration: v5 → v6
+  ///
+  /// Adds:
+  /// - Soft delete support for tags (deleted_at timestamp column)
+  /// - Case-insensitive tag names (COLLATE NOCASE on name column)
+  /// - Index on deleted_at for tag queries
+  ///
+  /// Fixes:
+  /// - v4 migration created tags table WITHOUT COLLATE NOCASE
+  /// - Must recreate table to add column collation (SQLite limitation)
+  /// - Deduplicates tags with different cases (e.g., "Work" and "work")
+  ///
+  /// Deduplication Logic:
+  /// - Groups tags by lowercase name
+  /// - Keeps first tag in each group (preserves original casing)
+  /// - Merges all task associations to the kept tag
+  /// - Logs warning for merged tags
+  ///
+  /// Enables hybrid deletion:
+  /// - Unused tags: hard delete (CASCADE removes from DB)
+  /// - Used tags: soft delete (marked deleted_at, preserved for data integrity)
+  ///
+  /// All existing tags remain active (deleted_at = NULL by default)
+  Future<void> _migrateToV6(Database db) async {
+    // Wrap entire migration in a transaction for atomicity
+    await db.transaction((txn) async {
+      // ===========================================
+      // 1. SAVE EXISTING DATA
+      // ===========================================
+
+      // Save all existing tags
+      final tagsData = await txn.query(AppConstants.tagsTable);
+
+      // Save all task-tag associations
+      final taskTagsData = await txn.query(AppConstants.taskTagsTable);
+
+      debugPrint('📦 Saved ${tagsData.length} tags and ${taskTagsData.length} tag associations');
+
+      // ===========================================
+      // 2. DROP TABLES (task_tags first to remove foreign key dependency)
+      // ===========================================
+
+      // Drop task_tags first (has foreign key to tags)
+      await txn.execute('DROP TABLE ${AppConstants.taskTagsTable}');
+
+      // Drop tags table (will recreate with correct schema)
+      await txn.execute('DROP TABLE ${AppConstants.tagsTable}');
+
+      // ===========================================
+      // 3. RECREATE TAGS TABLE WITH CORRECT SCHEMA
+      // ===========================================
+
+      // Create tags table with:
+      // - COLLATE NOCASE on name (case-insensitive uniqueness)
+      // - deleted_at column (soft delete support)
+      await txn.execute('''
+        CREATE TABLE ${AppConstants.tagsTable} (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+          color TEXT,
+          created_at INTEGER NOT NULL,
+          deleted_at INTEGER DEFAULT NULL
+        )
+      ''');
+
+      // ===========================================
+      // 4. RESTORE TAGS DATA (with deduplication)
+      // ===========================================
+
+      // Group tags by lowercase name to detect duplicates
+      // This handles users who created "Work" and "work" in v4 (case-sensitive)
+      final tagsByLowerName = <String, List<Map<String, dynamic>>>{};
+      for (var row in tagsData) {
+        final lowerName = (row['name'] as String).toLowerCase();
+        tagsByLowerName.putIfAbsent(lowerName, () => []).add(row);
+      }
+
+      // Deduplicate and restore tags
+      final idMapping = <String, String>{}; // old tag ID → kept tag ID
+      int mergedCount = 0;
+
+      for (var entry in tagsByLowerName.entries) {
+        final duplicates = entry.value;
+
+        if (duplicates.length > 1) {
+          // Multiple tags with same name (different case) - merge them
+          mergedCount += duplicates.length - 1;
+          final names = duplicates.map((d) => d['name']).join('", "');
+          debugPrint('⚠️  Merging ${duplicates.length} duplicate tags: "$names"');
+        }
+
+        // Keep first tag (preserves original casing), map all others to it
+        final kept = duplicates.first;
+        await txn.insert(AppConstants.tagsTable, {
+          'id': kept['id'],
+          'name': kept['name'], // Keep original casing of first tag
+          'color': kept['color'],
+          'created_at': kept['created_at'],
+          'deleted_at': null, // All existing tags are active
+        });
+
+        // Map all duplicate IDs to the kept ID
+        for (var dup in duplicates) {
+          idMapping[dup['id'] as String] = kept['id'] as String;
+        }
+      }
+
+      if (mergedCount > 0) {
+        debugPrint('✅ Restored ${tagsByLowerName.length} unique tags (merged $mergedCount duplicates)');
+      } else {
+        debugPrint('✅ Restored ${tagsByLowerName.length} tags with case-insensitive names');
+      }
+
+      // ===========================================
+      // 5. RECREATE TASK_TAGS TABLE WITH FOREIGN KEYS
+      // ===========================================
+
+      await txn.execute('''
+        CREATE TABLE ${AppConstants.taskTagsTable} (
+          task_id TEXT NOT NULL,
+          tag_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (task_id, tag_id),
+          FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE,
+          FOREIGN KEY (tag_id) REFERENCES ${AppConstants.tagsTable}(id) ON DELETE CASCADE
+        )
+      ''');
+
+      // ===========================================
+      // 6. RESTORE TASK_TAGS DATA (with ID remapping)
+      // ===========================================
+
+      // Use mapped IDs to consolidate associations after tag merging
+      for (var row in taskTagsData) {
+        final oldTagId = row['tag_id'] as String;
+        final keptTagId = idMapping[oldTagId] ?? oldTagId; // Use mapped ID if tag was merged
+
+        await txn.insert(
+          AppConstants.taskTagsTable,
+          {
+            'task_id': row['task_id'],
+            'tag_id': keptTagId, // Use the kept tag ID (handles merged tags)
+            'created_at': row['created_at'],
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore, // Ignore duplicate associations after merging
+        );
+      }
+
+      debugPrint('✅ Restored ${taskTagsData.length} tag associations');
+
+      // ===========================================
+      // 7. RECREATE ALL INDEXES
+      // ===========================================
+
+      // Tag indexes
+      await txn.execute('''
+        CREATE INDEX idx_tags_name
+        ON ${AppConstants.tagsTable}(name)
+      ''');
+
+      await txn.execute('''
+        CREATE INDEX idx_tags_deleted_at
+        ON ${AppConstants.tagsTable}(deleted_at)
+      ''');
+
+      // Task-tag junction table indexes (bidirectional lookups)
+      await txn.execute('''
+        CREATE INDEX idx_task_tags_tag
+        ON ${AppConstants.taskTagsTable}(tag_id)
+      ''');
+
+      await txn.execute('''
+        CREATE INDEX idx_task_tags_task
+        ON ${AppConstants.taskTagsTable}(task_id)
+      ''');
+
+      debugPrint('✅ Recreated all tag indexes');
+    });
+
+    debugPrint('✅ Database migrated to v6 successfully (case-insensitive tags + soft delete)');
   }
 
   Future<void> close() async {

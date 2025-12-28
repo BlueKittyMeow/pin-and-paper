@@ -1,18 +1,25 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/task.dart';
+import '../models/tag.dart'; // Phase 3.5
 import '../models/task_suggestion.dart'; // Phase 2
 import '../services/task_service.dart';
+import '../services/tag_service.dart'; // Phase 3.5
 import '../services/preferences_service.dart'; // Phase 2 Stretch
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
 
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService;
   final PreferencesService _preferencesService;
+  final TagService _tagService; // Phase 3.5
 
-  TaskProvider({TaskService? taskService, PreferencesService? preferencesService})
-      : _taskService = taskService ?? TaskService(),
-        _preferencesService = preferencesService ?? PreferencesService() {
+  TaskProvider({
+    TaskService? taskService,
+    PreferencesService? preferencesService,
+    TagService? tagService, // Phase 3.5
+  })  : _taskService = taskService ?? TaskService(),
+        _preferencesService = preferencesService ?? PreferencesService(),
+        _tagService = tagService ?? TagService() { // Phase 3.5
     // Phase 3.2: Initialize TreeController for hierarchical view
     _treeController = TreeController<Task>(
       roots: [],  // Start empty, populated in loadTasks
@@ -24,6 +31,12 @@ class TaskProvider extends ChangeNotifier {
   List<Task> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Phase 3.5: Tag storage (loaded with tasks)
+  Map<String, List<Tag>> _taskTags = {};
+
+  // Phase 3.5: Codex review - reentrant guard for loadTasks()
+  Future<void>? _loadTasksFuture;
 
   // Phase 3.2: Hierarchy state
   bool _isReorderMode = false;
@@ -71,6 +84,11 @@ class TaskProvider extends ChangeNotifier {
 
   bool get hideOldCompleted => _hideOldCompleted;
   int get hideThresholdHours => _hideThresholdHours;
+
+  // Phase 3.5: Get tags for a specific task
+  List<Tag> getTagsForTask(String taskId) {
+    return _taskTags[taskId] ?? [];
+  }
 
   // Phase 3.2: Helper to find parent task by ID
   Task? _findParent(String? parentId) {
@@ -172,7 +190,23 @@ class TaskProvider extends ChangeNotifier {
 
   // Load all tasks from database with hierarchy
   // Phase 3.2: Updated to use getTaskHierarchy() and refresh TreeController
+  // Phase 3.5: Updated to batch-load tags for all tasks
+  // Codex review: Added reentrant guard to prevent race conditions
   Future<void> loadTasks() async {
+    // Return existing future if load already in progress
+    if (_loadTasksFuture != null) {
+      return _loadTasksFuture!;
+    }
+
+    _loadTasksFuture = _performLoadTasks();
+    try {
+      await _loadTasksFuture;
+    } finally {
+      _loadTasksFuture = null;
+    }
+  }
+
+  Future<void> _performLoadTasks() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -182,6 +216,10 @@ class TaskProvider extends ChangeNotifier {
       _tasks = await _taskService.getTaskHierarchy();
       _categorizeTasks();  // Categorize once after load
 
+      // Phase 3.5: Batch-load all tags for these tasks
+      final taskIds = _tasks.map((t) => t.id).toList();
+      _taskTags = await _tagService.getTagsForAllTasks(taskIds);
+
       // Phase 3.2: Refresh TreeController with filtered visible tasks
       _refreshTreeController();
     } catch (e) {
@@ -190,6 +228,22 @@ class TaskProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Refresh only tag data without reloading tasks or resetting tree state
+  ///
+  /// Phase 3.5: Codex review - avoid tree collapse when editing tags
+  /// Use this instead of loadTasks() when only tag associations changed
+  /// Preserves tree expansion state and avoids full reload
+  Future<void> refreshTags() async {
+    try {
+      // Reload only the tag associations
+      final taskIds = _tasks.map((t) => t.id).toList();
+      _taskTags = await _tagService.getTagsForAllTasks(taskIds);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error refreshing tags: $e');
     }
   }
 
