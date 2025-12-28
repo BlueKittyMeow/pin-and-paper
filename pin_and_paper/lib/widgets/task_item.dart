@@ -51,6 +51,74 @@ class TaskItem extends StatelessWidget {
     }
   }
 
+  // Phase 3.4: Handle task edit
+  Future<void> _handleEdit(BuildContext context) async {
+    final controller = TextEditingController(text: task.title);
+
+    // Select all text for easy replacement
+    controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: controller.text.length,
+    );
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Task'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Task title',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) => Navigator.pop(context, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    // Service layer handles validation and trimming (Gemini feedback)
+    if (result != null && context.mounted) {
+      try {
+        await context.read<TaskProvider>().updateTaskTitle(task.id, result);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Task updated'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update task: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
+    }
+
+    // Dispose controller after update completes and dialog animation finishes
+    // (avoids "controller used after dispose" error during rebuild)
+    Future.delayed(const Duration(milliseconds: 300), () {
+      controller.dispose();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Phase 3.2: Calculate indentation based on depth
@@ -166,6 +234,7 @@ class TaskItem extends StatelessWidget {
           task: task,
           position: details.globalPosition,
           onDelete: () => _handleDelete(context),
+          onEdit: () => _handleEdit(context), // Phase 3.4
         );
       },
       child: taskContainer,

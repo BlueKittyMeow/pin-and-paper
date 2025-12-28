@@ -3,14 +3,17 @@ import '../models/task.dart';
 
 /// Context menu that appears on long-press of a task
 /// Phase 3.2: Initial implementation with delete action
+/// Phase 3.4: Added edit action
 class TaskContextMenu extends StatelessWidget {
   final Task task;
   final VoidCallback? onDelete;
+  final VoidCallback? onEdit; // Phase 3.4
 
   const TaskContextMenu({
     super.key,
     required this.task,
     this.onDelete,
+    this.onEdit, // Phase 3.4
   });
 
   @override
@@ -32,6 +35,16 @@ class TaskContextMenu extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Phase 3.4: Edit option
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit'),
+              onTap: () {
+                Navigator.pop(context);
+                onEdit?.call();
+              },
+            ),
+
             // Delete option (Phase 3.3: Soft delete - "Move to Trash")
             ListTile(
               leading: Icon(
@@ -61,6 +74,7 @@ class TaskContextMenu extends StatelessWidget {
     required Task task,
     required Offset position,
     VoidCallback? onDelete,
+    VoidCallback? onEdit, // Phase 3.4
   }) async {
     await showMenu(
       context: context,
@@ -76,6 +90,7 @@ class TaskContextMenu extends StatelessWidget {
           child: TaskContextMenu(
             task: task,
             onDelete: onDelete,
+            onEdit: onEdit, // Phase 3.4
           ),
         ),
       ],

@@ -290,6 +290,37 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  // Phase 3.4: Update task title
+  /// Updates a task's title
+  ///
+  /// OPTIMIZED: In-memory update to avoid:
+  /// - Full database reload (Gemini feedback - performance)
+  /// - TreeController collapse (Codex feedback - UX regression)
+  Future<void> updateTaskTitle(String taskId, String newTitle) async {
+    _errorMessage = null;
+
+    try {
+      final updatedTask = await _taskService.updateTaskTitle(taskId, newTitle);
+
+      // Find and update the task in-memory
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index != -1) {
+        _tasks[index] = updatedTask;
+
+        // Phase 3.4: Refresh TreeController to update UI without collapsing
+        _refreshTreeController();
+        notifyListeners();
+      } else {
+        // Fallback: reload if task not found (shouldn't happen)
+        await loadTasks();
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to update task title: $e';
+      debugPrint(_errorMessage);
+      rethrow; // Let UI handle error display
+    }
+  }
+
   // ========== Phase 3.2: Hierarchy Methods ==========
 
   /// Enter/exit reorder mode

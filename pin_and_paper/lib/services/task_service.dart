@@ -175,6 +175,48 @@ class TaskService {
     return updatedTask;
   }
 
+  // Phase 3.4: Update task title
+  /// Updates the title of an existing task
+  /// Returns the updated Task object
+  ///
+  /// Throws [ArgumentError] if title is empty or whitespace-only
+  /// Throws [Exception] if task not found
+  ///
+  /// OPTIMIZED: Fetch-first approach to avoid redundant query (Gemini feedback)
+  Future<Task> updateTaskTitle(String taskId, String newTitle) async {
+    final db = await _dbService.database;
+    final trimmedTitle = newTitle.trim();
+
+    // Validate title
+    if (trimmedTitle.isEmpty) {
+      throw ArgumentError('Task title cannot be empty');
+    }
+
+    // Fetch the original task first to have all its data
+    final maps = await db.query(
+      AppConstants.tasksTable,
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    if (maps.isEmpty) {
+      throw Exception('Task not found: $taskId');
+    }
+
+    final originalTask = Task.fromMap(maps.first);
+
+    // Perform the update
+    await db.update(
+      AppConstants.tasksTable,
+      {'title': trimmedTitle},
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    // Return updated copy (leverages existing copyWith method)
+    return originalTask.copyWith(title: trimmedTitle);
+  }
+
   // Get count of incomplete tasks
   // Phase 3.3: Excludes soft-deleted tasks
   Future<int> getIncompleteTaskCount() async {
