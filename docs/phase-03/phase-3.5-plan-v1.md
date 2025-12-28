@@ -1,9 +1,10 @@
 # Phase 3.5 Plan: Tags Feature
 
-**Version:** 1
+**Version:** 2
 **Created:** 2025-12-27
-**Status:** Draft - Awaiting Review
-**Scope:** Task tagging with filtering
+**Updated:** 2025-12-27 (Gemini feedback addressed)
+**Status:** Updated - Ready for Implementation
+**Scope:** Task tagging with filtering (expanded MVP)
 
 ---
 
@@ -31,22 +32,24 @@
 - ✅ View all tags (tag management screen)
 - ✅ Edit tag properties (name, color)
 - ✅ Delete tags (with confirmation)
+- ✅ **Tag renaming** (CRITICAL for "forgiving" ADHD-friendly design)
+- ✅ **Tag autocomplete** (CRITICAL for "zero friction" - prevents duplicate tags)
+- ✅ Empty states for UI (tag management, tag picker)
 
 **Filtering (Phase 3.5b):**
 - ✅ Filter tasks by single tag
-- ✅ Filter by multiple tags (OR logic)
+- ✅ Filter by multiple tags (OR logic initially)
+- ✅ AND/OR filter toggle (moved from stretch - essential for power users)
 - ✅ Clear active filters
 - ✅ Visual filter indicator
+- ✅ Handle edge case: deleting actively filtered tag
 
 ### Out of Scope (Future Phases)
 
 **Deferred to Phase 3.5c (Stretch):**
 - Inline #hashtag parsing in titles
-- Fuzzy search/autocomplete for tags
-- AND/OR filter toggle
-- Tag usage statistics
-- Bulk tag operations
-- Tag renaming
+- Tag usage statistics dashboard
+- Bulk tag operations (merge, delete multiple)
 
 **Deferred to Phase 4+:**
 - Smart/auto-tagging with AI
@@ -256,14 +259,16 @@ All design questions have been answered by BlueKitty:
 
 **Phase 3.5a: Core Tag Management**
 - Day 1: Tag model + TagService + tests
-- Day 2: UI widgets (TagChip, TagPickerDialog)
-- Day 3: Tag management screen + polish
+- Day 2: UI widgets (TagChip, TagPickerDialog with autocomplete)
+- Day 3: Tag management screen (renaming, empty states)
+- Day 4: Polish + edge case handling
 
 **Phase 3.5b: Filtering**
 - Day 1: Filter UI + TagProvider integration
-- Day 2: Testing + bug fixes
+- Day 2: AND/OR toggle + edge cases (deleting filtered tag)
+- Day 3: Testing + bug fixes
 
-**Total: 4-5 days**
+**Total: 6-7 days** (expanded from 4-5 to include critical features)
 
 ---
 
@@ -316,6 +321,38 @@ All design questions have been answered by BlueKitty:
 
 ---
 
-**Status:** Ready for team review and feedback!
+**Status:** Updated based on Gemini feedback - Ready for implementation!
 
 **Companion Document:** See `phase-3.5-ultrathinking.md` for deep analysis and detailed considerations.
+
+---
+
+## Team Feedback Addressed
+
+### Gemini's Review (2025-12-27)
+
+**CRITICAL - Contradictory Scope:**
+- ✅ **FIXED:** Moved tag renaming and autocomplete from stretch (3.5c) to MVP (3.5a)
+- **Rationale:** These features are essential for "zero friction" and "forgiving" ADHD-friendly design principles
+- Without autocomplete, users create duplicate tags (#errands vs #running-errands)
+- Without renaming, users must delete+recreate to fix typos (losing all associations)
+
+**HIGH - Ambiguous Tag Deletion:**
+- ✅ **FIXED:** Added edge case handling to 3.5b scope
+- When deleting a tag that's actively being filtered:
+  - Remove tag from `_activeFilters` in TagProvider
+  - TaskProvider listens for filter changes and refreshes list
+  - User sees filtered list with remaining tags (or full list if no filters remain)
+
+**MEDIUM - Soft-Deleted Tasks in Counts:**
+- ✅ **FIXED:** Added to implementation spec
+- Tag usage counts will exclude soft-deleted tasks
+- Query includes `WHERE tasks.deleted_at IS NULL`
+- Ensures counts reflect visible, active tasks
+
+**LOW - No Empty State:**
+- ✅ **FIXED:** Added empty states to 3.5a scope
+- Tag Management Screen: "No tags created yet. Add a tag to a task to get started!"
+- Tag Picker Dialog: "No existing tags" message when empty
+
+**Scope Impact:** Timeline extended from 4-5 days to 6-7 days to accommodate critical features.
