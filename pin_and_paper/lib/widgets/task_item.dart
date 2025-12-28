@@ -112,8 +112,13 @@ class TaskItem extends StatelessWidget {
       }
     }
 
-    // Dispose controller after update completes and dialog animation finishes
-    // (avoids "controller used after dispose" error during rebuild)
+    // Delayed disposal is required due to complex timing:
+    // 1. Dialog closes (animation starts)
+    // 2. updateTaskTitle() calls _categorizeTasks() + _refreshTreeController() + notifyListeners()
+    // 3. These trigger rebuilds while dialog is still animating
+    // 4. TextField tries to access controller during rebuild → crash
+    // Both try/finally and addPostFrameCallback dispose too early (tested & confirmed)
+    // The 300ms delay ensures dialog animation + all rebuilds complete before disposal
     Future.delayed(const Duration(milliseconds: 300), () {
       controller.dispose();
     });

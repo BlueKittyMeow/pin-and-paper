@@ -305,7 +305,13 @@ class TaskProvider extends ChangeNotifier {
       // Find and update the task in-memory
       final index = _tasks.indexWhere((task) => task.id == taskId);
       if (index != -1) {
-        _tasks[index] = updatedTask;
+        // Codex merge review: Preserve depth metadata from original task
+        // (TaskService rebuilds from plain SELECT which has depth=0)
+        final originalDepth = _tasks[index].depth;
+        _tasks[index] = updatedTask.copyWith(depth: originalDepth);
+
+        // Codex merge review: Re-categorize to keep derived lists synchronized
+        _categorizeTasks();
 
         // Phase 3.4: Refresh TreeController to update UI without collapsing
         _refreshTreeController();
