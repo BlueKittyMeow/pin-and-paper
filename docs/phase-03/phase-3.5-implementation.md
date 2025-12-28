@@ -1,9 +1,24 @@
 # Phase 3.5 Implementation Specification: Tags
 
-**Version:** 1.0
+**Version:** 2.0
 **Created:** 2025-12-27
+**Updated:** 2025-12-27 (Codex critical fixes applied)
 **Status:** Ready for Implementation
-**Based on:** phase-3.5-plan-v1.md + phase-3.5-ultrathinking.md + User decisions
+**Based on:** phase-3.5-plan-v2.md + phase-3.5-ultrathinking.md + User decisions + Codex review
+
+---
+
+## ⚠️ IMPORTANT: Codex Critical Fixes Applied
+
+This spec has been updated to address 6 critical issues found by Codex:
+1. ✅ Fixed N+1 tag loading (single JOIN query)
+2. ✅ Fixed tree filtering architecture (filter _tasks before categorization)
+3. ✅ Fixed listener lifecycle leak (removeListener in dispose)
+4. ✅ Defined hide-completed + tag filter interaction
+5. ✅ Removed custom palette scope creep (deferred to 3.5c)
+6. ✅ Specified all filtering SQL queries
+
+**See:** `docs/phase-03/codex-issues-response.md` for detailed analysis of all fixes.
 
 ---
 
@@ -14,7 +29,7 @@ All open questions have been answered:
 1. **Tag Input Method:** Context menu + Settings screen for tag management
 2. **Tag Creation Flow:** Two-step (name → color picker) with smart default (last used color)
 3. **Filter Button Location:** Top app bar (next to search/menu)
-4. **Color Palette:** Preset palette (12 colors) + custom color picker + user-saved palettes
+4. **Color Palette:** Preset palette (12 colors) + custom color picker ~~+ user-saved palettes~~ (saved palettes deferred to 3.5c per Codex review)
 5. **Tag Display Limit:** Show first 3 tags, tap to expand and show all
 6. **Tag Deletion:** **Hybrid approach:**
    - Hard delete if tag has **zero** task associations
@@ -31,8 +46,7 @@ All open questions have been answered:
 ```
 lib/
 ├── models/
-│   ├── tag.dart                    # NEW: Tag model
-│   └── tag_palette.dart            # NEW: Custom palette model
+│   └── tag.dart                    # NEW: Tag model
 ├── services/
 │   └── tag_service.dart            # NEW: Tag CRUD + associations
 ├── providers/
@@ -175,43 +189,13 @@ class Tag {
 }
 ```
 
-### TagPalette Model
+### ~~TagPalette Model~~ (Deferred to Phase 3.5c)
 
-```dart
-// lib/models/tag_palette.dart
-
-class TagPalette {
-  final String id;
-  final String name;          // e.g., "Work Colors", "Personal Palette"
-  final List<String> colors;  // List of hex colors
-  final DateTime createdAt;
-
-  TagPalette({
-    required this.id,
-    required this.name,
-    required this.colors,
-    required this.createdAt,
-  });
-
-  factory TagPalette.fromMap(Map<String, dynamic> map) {
-    return TagPalette(
-      id: map['id'] as String,
-      name: map['name'] as String,
-      colors: (map['colors'] as String).split(','), // Stored as CSV
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'name': name,
-      'colors': colors.join(','), // CSV format
-      'created_at': createdAt.millisecondsSinceEpoch,
-    };
-  }
-}
-```
+Custom palette saving has been removed from MVP scope per Codex review.
+Phase 3.5a will use:
+- 12 preset colors (Material Design palette)
+- Full custom color picker for one-off colors
+- Saved palettes deferred to Phase 3.5c stretch goals
 
 ---
 
@@ -226,31 +210,14 @@ class TagPalette {
 // lib/services/database_service.dart
 
 Future<void> _upgradeV5toV6(Database db) async {
-  // Add soft delete column to tags table
+  // Add soft delete column to tags table for hybrid deletion
+  // (hard delete if unused, soft delete if tag has task associations)
   await db.execute('''
     ALTER TABLE tags ADD COLUMN deleted_at INTEGER
   ''');
 
-  // Create tag_palettes table for custom palettes
-  await db.execute('''
-    CREATE TABLE tag_palettes (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      colors TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    )
-  ''');
-
-  // Seed default palettes (Material Design colors)
-  final defaultPalette = {
-    'id': const Uuid().v4(),
-    'name': 'Material Colors',
-    'colors': '#F44336,#E91E63,#9C27B0,#673AB7,#3F51B5,#2196F3,'
-              '#00BCD4,#009688,#4CAF50,#8BC34A,#FF9800,#FF5722',
-    'created_at': DateTime.now().millisecondsSinceEpoch,
-  };
-
-  await db.insert('tag_palettes', defaultPalette);
+  // NOTE: tag_palettes table deferred to Phase 3.5c per Codex review
+  // Keeping preset colors + custom picker is sufficient for MVP
 }
 ```
 
