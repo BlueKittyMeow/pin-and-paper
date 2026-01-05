@@ -222,7 +222,96 @@ ls docs/phase-XX/phase-X.*-validation-v*.md
 
 ---
 
-### 4. Confirm Team Finished with Findings Docs
+### 4. Update Master Documents ⚠️ **CRITICAL**
+
+**This step is MANDATORY - phase is not complete without it!**
+
+See [documentation-workflow.md](./documentation-workflow.md) for complete guide.
+
+#### 4.1 Update PROJECT_SPEC.md (Authoritative Source)
+
+**File:** `PROJECT_SPEC.md` (root level)
+
+**Updates required:**
+- [ ] **Header** (~Line 3): Update Version number (e.g., 3.4 → 3.5)
+- [ ] **Header** (~Line 4): Update Last Updated date
+- [ ] **Header** (~Line 6): Update Current Phase field
+- [ ] **Current Status** (~Line 28): Add completion line for this phase with date
+- [ ] **Phase Description** (~Line 404): Move phase from "Remaining" to "Completed"
+  - [ ] Add completion date
+  - [ ] Add key metrics (tests, LOC, achievements)
+  - [ ] Update "Remaining Subphases" list
+- [ ] **Next Steps** (~Line 985): Update current phase and completed recently
+- [ ] **Document Status** (~Line 1009): Update Last Review date
+
+**Example:**
+```markdown
+**Version:** 3.5 (Phase 3 In Progress)
+**Last Updated:** 2026-01-05
+**Current Phase:** Phase 3.5 Complete - Working on 3.6
+
+### Current Status
+✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 5, 2026)
+```
+
+**Confirm:** "✅ PROJECT_SPEC.md updated with Phase X.Y completion"
+
+#### 4.2 Update README.md (Public Facing)
+
+**File:** `README.md` (root level)
+
+**Updates required:**
+- [ ] **Phase 3 Section** (~Line 121): Add completed subphase with highlights
+- [ ] **Phase 3 Section**: Update "Next Up" list
+- [ ] **Tech Stack** (~Line 83): Update DB version if changed
+- [ ] **Tech Stack**: Update test count
+- [ ] **Project Status** (~Line 215): Add phase to completed list
+- [ ] **Current Stats** (~Line 261): Update LOC, tests, DB version
+
+**Example:**
+```markdown
+### Phase 3: Core Productivity 🚧 **IN PROGRESS**
+
+**Completed:**
+- ✅ **Phase 3.5:** Comprehensive Tagging System (Jan 2026)
+  - 78 comprehensive tests (100% passing)
+  - WCAG AA compliant colors
+  - Tag picker with search/filter/create
+
+### Current Stats
+- **~8,000+ lines of production code**
+- **154 tests passing** (95%+ pass rate)
+- **Database:** v6 (6 migrations complete)
+```
+
+**Confirm:** "✅ README.md synced with PROJECT_SPEC.md"
+
+#### 4.3 Commit Master Docs Together
+
+**CRITICAL:** Always commit PROJECT_SPEC.md and README.md together with phase docs.
+
+```bash
+git add PROJECT_SPEC.md README.md docs/phase-XX/phase-XX-summary.md
+git commit -m "docs: Complete Phase X.Y with master doc updates
+
+- Updated PROJECT_SPEC.md: Version X.Y, completion date, achievements
+- Updated README.md: Phase X section, project status, stats
+- Added phase-XX-summary.md with complete metrics
+
+Phase X.Y complete with [key achievement summary]"
+```
+
+**Why this matters:**
+- PROJECT_SPEC.md and README.md are the FIRST thing people see
+- They must reflect current reality, not be 2+ phases out of date
+- Future-you will thank you for keeping them current
+- Commits all related docs together maintains sync
+
+**Confirm:** "✅ Master documents updated and committed together"
+
+---
+
+### 5. Confirm Team Finished with Findings Docs
 
 **Important:** Don't archive while team is still working!
 
