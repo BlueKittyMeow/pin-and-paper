@@ -64,8 +64,10 @@ ls docs/archive/phase-XX/
 ### 3. Read Planning Context
 
 **Required reading:**
-- `project_spec.md` - What's in Phase X?
+- `PROJECT_SPEC.md` - What's in Phase X? (authoritative source)
+- `README.md` - Current project status
 - `docs/archive/phase-0X-1/phase-0X-1-summary.md` - Previous phase context
+- [documentation-workflow.md](./documentation-workflow.md) - How docs should be maintained
 - Any docs pulled from archive
 
 **Extract:**
@@ -75,6 +77,8 @@ ls docs/archive/phase-XX/
 - Known technical decisions
 
 **DO NOT ask BlueKitty for scope - it's in the docs!**
+
+**Reference:** Bookmark documentation-workflow.md - you'll need it when completing phases
 
 ---
 

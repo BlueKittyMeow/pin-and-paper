@@ -88,26 +88,30 @@ When completing ANY phase or subphase:
 
 ### PROJECT_SPEC.md Updates
 
-**Header Section (Lines 1-10):**
+**Header Section (top of file):**
+Search for: `**Version:**` and `**Current Phase:**`
 ```markdown
 **Version:** 3.5 (Phase 3 In Progress)  ← Update version
 **Last Updated:** 2026-01-05             ← Update date
 **Current Phase:** Phase 3.5 Complete - Working on 3.6  ← Update phase
 ```
 
-**Current Status Section (~Line 28):**
+**Current Status Section:**
+Search for: `### Current Status`
 ```markdown
 ✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 5, 2026)
 🔜 **Phase 3.6:** Tag Search & Filtering - In Planning
 ```
 
-**Phase Description Section (~Line 404):**
-- Move completed subphase from "Planned" to "Completed"
+**Phase 3 Description Section:**
+Search for: `### 🚧 Phase 3: Core Productivity Features`
+- Move completed subphase from "Remaining Subphases" to "Completed Subphases"
 - Add completion date
 - Add key metrics (tests, LOC, review results)
 - Update "Remaining Subphases" list
 
-**Next Steps Section (~Line 985):**
+**Next Steps Section:**
+Search for: `## Next Steps`
 ```markdown
 **Current Phase:** Phase 3.6 - Tag Search & Filtering (In Planning)
 
@@ -115,7 +119,8 @@ When completing ANY phase or subphase:
 - ✅ Phase 3.5: Comprehensive Tagging System (Jan 5, 2026)
 ```
 
-**Document Status (Bottom ~Line 1009):**
+**Document Status (bottom of file):**
+Search for: `**Document Status:**`
 ```markdown
 **Last Review:** January 5, 2026
 **Next Review:** After Phase 3.6-3.8 completion
@@ -125,7 +130,8 @@ When completing ANY phase or subphase:
 
 ### README.md Updates
 
-**Phase 3 Section (~Line 121):**
+**Phase 3 Section:**
+Search for: `### Phase 3: Core Productivity`
 ```markdown
 ### Phase 3: Core Productivity 🚧 **IN PROGRESS**
 
@@ -139,14 +145,16 @@ When completing ANY phase or subphase:
 - 🔜 **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
 ```
 
-**Tech Stack Section (~Line 83):**
+**Tech Stack Section:**
+Search for: `### Data & State`
 ```markdown
 - **SQLite v6** (via sqflite) - Local-first, offline-capable
   - 6 schema migrations (v1 → v6)
 - **154 comprehensive tests** - Models, services, utilities (95%+ pass rate)
 ```
 
-**Project Status Section (~Line 215):**
+**Project Status Section:**
+Search for: `## Project Status`
 ```markdown
 🚧 **Phase 3 In Progress** - Core productivity features!
 

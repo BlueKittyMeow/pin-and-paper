@@ -233,16 +233,16 @@ See [documentation-workflow.md](./documentation-workflow.md) for complete guide.
 **File:** `PROJECT_SPEC.md` (root level)
 
 **Updates required:**
-- [ ] **Header** (~Line 3): Update Version number (e.g., 3.4 → 3.5)
-- [ ] **Header** (~Line 4): Update Last Updated date
-- [ ] **Header** (~Line 6): Update Current Phase field
-- [ ] **Current Status** (~Line 28): Add completion line for this phase with date
-- [ ] **Phase Description** (~Line 404): Move phase from "Remaining" to "Completed"
+- [ ] **Header** (search for `**Version:**`): Update version number (e.g., 3.4 → 3.5)
+- [ ] **Header** (search for `**Last Updated:**`): Update date
+- [ ] **Header** (search for `**Current Phase:**`): Update current phase field
+- [ ] **Current Status** (search for `### Current Status`): Add completion line with date
+- [ ] **Phase Description** (search for `### 🚧 Phase 3:`): Move phase from "Remaining" to "Completed"
   - [ ] Add completion date
   - [ ] Add key metrics (tests, LOC, achievements)
   - [ ] Update "Remaining Subphases" list
-- [ ] **Next Steps** (~Line 985): Update current phase and completed recently
-- [ ] **Document Status** (~Line 1009): Update Last Review date
+- [ ] **Next Steps** (search for `## Next Steps`): Update current phase and completed recently
+- [ ] **Document Status** (search for `**Document Status:**`): Update Last Review date
 
 **Example:**
 ```markdown
@@ -261,12 +261,12 @@ See [documentation-workflow.md](./documentation-workflow.md) for complete guide.
 **File:** `README.md` (root level)
 
 **Updates required:**
-- [ ] **Phase 3 Section** (~Line 121): Add completed subphase with highlights
+- [ ] **Phase 3 Section** (search for `### Phase 3:`): Add completed subphase with highlights
 - [ ] **Phase 3 Section**: Update "Next Up" list
-- [ ] **Tech Stack** (~Line 83): Update DB version if changed
+- [ ] **Tech Stack** (search for `### Data & State`): Update DB version if changed
 - [ ] **Tech Stack**: Update test count
-- [ ] **Project Status** (~Line 215): Add phase to completed list
-- [ ] **Current Stats** (~Line 261): Update LOC, tests, DB version
+- [ ] **Project Status** (search for `## Project Status`): Add phase to completed list
+- [ ] **Current Stats** (search for `### Current Stats`): Update LOC, tests, DB version
 
 **Example:**
 ```markdown
