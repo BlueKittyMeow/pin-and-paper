@@ -13,6 +13,32 @@ BlueKitty says: "Let's start Phase X" or "Ready to plan Phase X"
 
 ## Checklist
 
+### 0. Verify Master Documents Are Current ⚠️
+
+**Before starting a new phase, check that previous phase is properly documented!**
+
+**Quick check:**
+```bash
+# Check PROJECT_SPEC.md header
+head -10 docs/PROJECT_SPEC.md | grep "Version:\|Current Phase:"
+
+# Should show previous phase complete, not 2+ phases behind
+```
+
+**If outdated:**
+- [ ] Previous phase may not be properly closed
+- [ ] Check if phase-end-checklist was followed
+- [ ] Update master docs before starting new phase (see [documentation-workflow.md](./documentation-workflow.md))
+
+**Why this matters:**
+- Prevents documentation drift
+- Ensures accurate project state tracking
+- Makes it easier to resume work later
+
+**Confirm:** "✅ Master documents current before starting Phase X"
+
+---
+
 ### 1. Create Phase Directory
 ```bash
 mkdir -p docs/phase-XX/
