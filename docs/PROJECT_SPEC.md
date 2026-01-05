@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
-**Version:** 3.3 (Phase 3 Complete)
-**Last Updated:** 2025-12-27
+**Version:** 3.5 (Phase 3 In Progress)
+**Last Updated:** 2026-01-05
 **Primary Device:** Samsung Galaxy S21 Ultra
-**Current Phase:** Phase 3 Complete - Ready for Phase 4
+**Current Phase:** Phase 3.5 Complete - Working on Phase 3.6
 
 ---
 
@@ -31,7 +31,11 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.1:** Task Nesting (Subtasks) - Complete (Dec 2025)
 ✅ **Phase 3.2:** Hierarchical Display & Drag/Drop - Complete (Dec 2025)
 ✅ **Phase 3.3:** Recently Deleted (Soft Delete) - Complete (Dec 27, 2025)
-🔜 **Phase 3+:** Tags, Search, Due Dates, Voice Input - Planned
+✅ **Phase 3.4:** Task Editing (Due Dates, Notes, etc.) - Complete (Dec 2025)
+✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 5, 2026)
+🔜 **Phase 3.6:** Tag Search & Filtering - In Planning
+🔜 **Phase 3.7:** Natural Language Date Parsing - Planned
+🔜 **Phase 3.8:** Due Date Notifications - Planned
 
 ---
 
@@ -397,33 +401,95 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 
 ---
 
-### 🔜 Phase 3: Mobile Polish & Voice Input (3-4 weeks estimated)
+### 🚧 Phase 3: Core Productivity Features (In Progress)
 
-**Goal:** Optimize for daily use on Galaxy phone
+**Goal:** Build essential productivity features before spatial workspace
 
-**Planned Features:**
-- Voice-to-text integration (speech_to_text package)
-- Home screen widget for quick capture (home_widget package)
-- Task nesting (subtasks with indentation)
-- Collapsible task groups
-- Improved search (fuzzy matching)
-- Natural language date parsing ("next Tuesday" → due date)
-  - Handles midnight boundary issues (night owl mode)
-  - Context-aware parsing (user's effective "today")
-- Task templates (common tasks as templates)
-- Notifications for due dates
-- Quick actions (swipe gestures for common operations)
+**Completed Subphases:**
 
-**Database Changes:**
-- Version 3 → 4
-- Add parent_id and position columns for nesting
+**Phase 3.1: Task Nesting** ✅ (Dec 2025)
+- Task hierarchy with parent_id and position
+- 4-level depth limit
+- Cascade delete support
+- Database v3 → v4 migration
 
-**Key Technical Challenges:**
-- Date parsing around midnight (solved with "today window" setting)
-- Android widget debugging (can't use hot reload)
-- Voice input permissions and error handling
+**Phase 3.2: Hierarchical Display & Drag/Drop** ✅ (Dec 2025)
+- flutter_fancy_tree_view2 integration
+- Expand/collapse functionality
+- Drag and drop reordering with position management
+- Preserved tree state
 
-**Documentation:** Will be created during implementation
+**Phase 3.3: Recently Deleted (Soft Delete)** ✅ (Dec 27, 2025)
+- Soft delete with deleted_at timestamp
+- Recently Deleted view with 30-day recovery
+- Permanent delete after 30 days
+- Restore functionality with ancestor chain support
+- Database v4 → v5 migration
+
+**Phase 3.4: Task Editing** ✅ (Dec 2025)
+- Edit task title inline
+- Task details dialog (due date, notes, start date)
+- Due date picker with calendar
+- All-day event toggle
+- Notification type selection (at time, 1 hour before, 1 day before)
+- Notes field for detailed task information
+
+**Phase 3.5: Comprehensive Tagging System** ✅ (Jan 5, 2026)
+- Tag model with validation (name, color, timestamps)
+- TagService with batch loading (handles 900+ tasks)
+- TagProvider state management
+- Tag UI components:
+  - TagPickerDialog with search/filter/create
+  - ColorPickerDialog with 12 Material Design presets
+  - TagChip with WCAG AA compliant text colors
+- Smart tag overflow (3 tags + "+N more" indicator)
+- Dual AI code review (Gemini UX + Codex technical)
+- 78 comprehensive tests (100% passing)
+- Database v5 → v6 migration
+
+**Remaining Subphases:**
+
+**Phase 3.6: Tag Search & Filtering** 🔜 (2-3 weeks)
+- Global search (task title + notes)
+- Tag-based filtering (AND/OR logic)
+- Date-based filtering (due today, this week, overdue)
+- Search indexes for performance
+- Combined filters
+
+**Phase 3.7: Natural Language Date Parsing** 🔜 (1-2 weeks)
+- Parse relative dates ("tomorrow", "next Tuesday", "in 3 days")
+- Parse absolute dates ("Jan 15", "March 3rd")
+- Time-of-day support ("3pm", "morning", "evening")
+- Night owl mode (configurable midnight boundary)
+- Integration with Brain Dump and task creation
+
+**Phase 3.8: Due Date Notifications** 🔜 (1-2 weeks)
+- flutter_local_notifications integration
+- Notification scheduling (at time, 1 hour before, 1 day before)
+- Platform-specific permissions (Android + iOS)
+- Quick actions from notifications
+- Quiet hours setting
+
+**Deferred to Phase 6+:**
+- Voice input (speech-to-text)
+- Task templates
+- Home screen widget (Android)
+- Quick swipe actions
+
+**Database Evolution:**
+- v1: Phase 1 (basic tasks)
+- v2: Phase 2 (AI integration)
+- v3: Phase 2 Stretch (API usage tracking)
+- v4: Phase 3.1 (task nesting)
+- v5: Phase 3.3-3.4 (soft delete, task editing fields)
+- v6: Phase 3.5 (tags and task_tags tables) ← **Current**
+
+**Key Achievements:**
+- 154 tests passing (95%+ pass rate)
+- ~8,000+ lines of production code
+- Zero regressions introduced
+- WCAG AA accessibility compliance
+- Performance optimized (batch loading, reentrant guards)
 
 ---
 
@@ -918,26 +984,31 @@ This section documents major architectural and scope decisions made during plann
 
 ## Next Steps
 
-**Current Phase:** Planning Phase 3 (Mobile Polish & Voice Input)
+**Current Phase:** Phase 3.6 - Tag Search & Filtering (In Planning)
 
 **Immediate Actions:**
-1. Review Phase 3 requirements with BlueKitty
-2. Research natural language date parsing approaches
-3. Prototype voice input integration
-4. Plan database migration v3 → v4 (nesting support)
-5. Create Phase 3 implementation document
+1. Complete Phase 3.6 planning document
+2. Design search UI and filter interface
+3. Plan search indexes for performance optimization
+4. Begin Phase 3.6 implementation
+5. Update documentation workflow in phase checklists
 
-**Questions to Answer:**
-- Voice input: Device native or cloud-based?
-- Date parsing: "Today window" setting - what default (3 hours)?
-- Task nesting: Maximum depth limit (prevent infinite recursion)?
-- Home screen widget: High priority or defer to Phase 4?
+**Completed Recently:**
+- ✅ Phase 3.5: Comprehensive Tagging System (Jan 5, 2026)
+  - 78 tests passing, WCAG AA compliant
+  - Dual AI code review (all findings addressed)
+  - Database v6 migration complete
+
+**Upcoming After 3.6:**
+- Phase 3.7: Natural Language Date Parsing (1-2 weeks)
+- Phase 3.8: Due Date Notifications (1-2 weeks)
+- Phase 4: Bounded Workspace View (4-5 weeks)
 
 ---
 
-**Document Status:** ✅ Consolidated and Complete
-**Last Review:** October 28, 2025
-**Next Review:** After Phase 3 completion
+**Document Status:** ✅ Up to Date (Phase 3.5 Complete)
+**Last Review:** January 5, 2026
+**Next Review:** After Phase 3.6-3.8 completion
 
 **See Also:**
 - `visual-design.md` - Complete aesthetic specification

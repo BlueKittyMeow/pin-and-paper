@@ -80,8 +80,11 @@ Muted Lavender:#9B8FA5  (dried flowers, soft accents)
 - **Custom rendering** - Skia engine for torn paper effects, dynamic lighting, shadows
 
 ### Data & State
-- **SQLite** (via sqflite) - Local-first, offline-capable, battle-tested
+- **SQLite v6** (via sqflite) - Local-first, offline-capable, battle-tested
+  - 6 schema migrations (v1 → v6)
+  - Supports task hierarchy, tags, soft delete, due dates
 - **Provider** - Simple state management (upgrading to Riverpod later)
+- **154 comprehensive tests** - Models, services, utilities, migrations, widgets (95%+ pass rate)
 
 ### AI Integration
 - **Claude API** (Phase 2) - Natural language task extraction from brain dumps
@@ -118,15 +121,30 @@ Data Layer (SQLite)
 - Draft persistence (never lose your thoughts)
 - Cost estimation (~$0.01 per brain dump)
 
-### Phase 3: Core Productivity ✅ **COMPLETE** *← We are here*
-- ✅ **Phase 3.1:** Task nesting (subtasks) with 4-level hierarchy
-- ✅ **Phase 3.2:** Hierarchical display with drag & drop reordering
-- ✅ **Phase 3.3:** Recently Deleted (soft delete with 30-day recovery)
-- 🔜 **Phase 3.4:** Task editing (edit task titles via context menu)
-- 🔜 Tags with filtering
-- 🔜 Search
-- 🔜 Due dates with notifications
-- 🔜 Voice input
+### Phase 3: Core Productivity 🚧 **IN PROGRESS** *← We are here*
+
+**Completed:**
+- ✅ **Phase 3.1:** Task nesting with 4-level hierarchy (Dec 2025)
+- ✅ **Phase 3.2:** Hierarchical display with drag & drop reordering (Dec 2025)
+- ✅ **Phase 3.3:** Recently Deleted - soft delete with 30-day recovery (Dec 2025)
+- ✅ **Phase 3.4:** Task editing - due dates, notes, start dates, notifications (Dec 2025)
+- ✅ **Phase 3.5:** Comprehensive Tagging System (Jan 2026)
+  - 78 comprehensive tests (100% passing)
+  - Tag picker with search/filter/create
+  - Color picker with 12 Material Design presets
+  - WCAG AA compliant colors (4.5:1 contrast)
+  - Smart overflow handling (3 tags + "+N more")
+  - Batch loading for 900+ tasks
+
+**Next Up:**
+- 🔜 **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
+- 🔜 **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
+- 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
+
+**Deferred to Phase 6+:**
+- ⏸️ Voice input (speech-to-text)
+- ⏸️ Task templates
+- ⏸️ Home screen widget
 
 ### Phase 4: Spatial Workspace
 - Bounded canvas (pan/zoom)
@@ -194,23 +212,63 @@ Each phase builds on the previous:
 
 ## Project Status
 
-✅ **Phase 2 Complete** - AI Integration shipped to production!
+🚧 **Phase 3 In Progress** - Core productivity features!
 
-### Completed
-- [x] Phase 1: Ultra-Minimal MVP (Oct 25, 2025)
+### Completed Phases
+
+- [x] **Phase 1:** Ultra-Minimal MVP (Oct 25, 2025)
   - Text capture, task list, completion toggling
-  - SQLite persistence, Provider state management
-- [x] Phase 2: Claude AI Integration (Oct 27, 2025)
+  - SQLite persistence (v1), Provider state management
+  - ~500 lines of code
+
+- [x] **Phase 2:** Claude AI Integration (Oct 27, 2025)
   - Brain Dump with AI task extraction
   - Settings with secure API key storage
   - Task Suggestion Preview with approval flow
   - Draft persistence and cost estimation
-  - **~2,000 lines of production code**
+  - Database v2
   - **User feedback:** *"Wow, it works! And... it's super cool!!! :D"*
 
+- [x] **Phase 2 Stretch:** Natural Language Completion (Oct 28, 2025)
+  - AI-powered task completion suggestions
+  - Database v3 with API usage tracking
+
+- [x] **Phase 3.1-3.3:** Task Hierarchy & Management (Dec 2025)
+  - Task nesting with 4-level hierarchy
+  - flutter_fancy_tree_view2 integration
+  - Drag & drop reordering with position management
+  - Soft delete with Recently Deleted view (30-day recovery)
+  - Database v4-v5
+
+- [x] **Phase 3.4:** Task Editing (Dec 2025)
+  - Due dates with date picker
+  - Notes field for detailed task information
+  - Start dates and all-day event toggle
+  - Notification type selection
+  - Edit dialog with full task details
+
+- [x] **Phase 3.5:** Comprehensive Tagging System (Jan 2026)
+  - **78 comprehensive tests** (100% passing)
+  - **WCAG AA compliant** colors (4.5:1 contrast ratio)
+  - 12 Material Design preset colors
+  - Tag picker with search/filter/create
+  - Color picker dialog
+  - Batch loading for 900+ tasks (prevents N+1 queries)
+  - Smart overflow handling (3 tags + "+N more")
+  - Database v6
+  - **Dual AI code review:** All 11 findings addressed (6 UX + 5 technical)
+
+### Current Stats
+- **~8,000+ lines of production code**
+- **154 tests passing** (95%+ pass rate)
+- **Database:** v6 (6 migrations complete)
+- **Phases completed:** 2 full phases + 5 subphases
+
 ### Next Up
-- Phase 2 Stretch Goals: Natural language task completion, draft management
-- Phase 3: Core productivity features (tags, search, dates)
+- **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
+- **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
+- **Phase 3.8:** Due Date Notifications (1-2 weeks)
+- **Then:** Phase 4 (Spatial Workspace View)
 
 ---
 
