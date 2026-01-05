@@ -24,6 +24,11 @@ void main() {
   setUp(() async {
     testDb = await TestDatabaseHelper.createTestDatabase();
     DatabaseService.setTestDatabase(testDb);
+
+    // CRITICAL FIX: Clear all data from previous tests
+    // In-memory databases with different paths may share data in sqflite_ffi
+    await TestDatabaseHelper.clearAllData(testDb);
+
     taskService = TaskService();
   });
 

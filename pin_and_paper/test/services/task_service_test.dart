@@ -20,6 +20,10 @@ void main() {
     // Inject the test database into DatabaseService
     DatabaseService.setTestDatabase(testDb);
 
+    // CRITICAL FIX: Clear all data from previous tests
+    // In-memory databases with different paths may share data in sqflite_ffi
+    await TestDatabaseHelper.clearAllData(testDb);
+
     // Create TaskService (it will use the injected test database)
     taskService = TaskService();
   });
