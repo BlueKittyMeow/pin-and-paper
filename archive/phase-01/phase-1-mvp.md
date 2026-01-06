@@ -41,7 +41,7 @@ A minimal task capture app with:
 
 ## Testing & Validation
 
-User testing on the target Android device (Samsung Galaxy S21 Ultra) was successful.
+User testing on the target Android device (Samsung Galaxy S22 Ultra) was successful.
 
 ### Test Checklist Results
 - [x] App launches quickly.
@@ -65,7 +65,7 @@ The following sections document the step-by-step process that was followed to bu
 ### Step 0: Environment Setup
 **Status:** ✅ **Complete**
 
-The Flutter SDK was installed and configured, and VS Code was set up with the necessary extensions. The target device (Samsung S21 Ultra) was connected and verified.
+The Flutter SDK was installed and configured, and VS Code was set up with the necessary extensions. The target device (Samsung S22 Ultra) was connected and verified.
 
 ---
 

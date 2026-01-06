@@ -195,7 +195,7 @@ Each phase builds on the previous:
 5. Add sync and polish
 
 ### Performance First
-**Primary device:** Samsung Galaxy S21 Ultra
+**Primary device:** Samsung Galaxy S22 Ultra
 - Target: 120fps (device native rate)
 - Minimum: 60fps
 - Launch time: <2 seconds
@@ -296,7 +296,7 @@ Each phase builds on the previous:
 - Flutter SDK (latest stable)
 - Dart SDK
 - Android SDK (for Android development)
-- Samsung Galaxy S21 Ultra (or similar device for testing)
+- Samsung Galaxy S22 Ultra (or similar device for testing)
 
 **Clone and setup:**
 ```bash

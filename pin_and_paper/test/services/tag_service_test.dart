@@ -16,22 +16,19 @@ void main() {
     late TaskService taskService;
     late Database testDb;
 
-    setUpAll(() async {
+    setUp(() async {
+      // Create fresh database for each test
       testDb = await TestDatabaseHelper.createTestDatabase();
       DatabaseService.setTestDatabase(testDb);
-    });
 
-    setUp(() async {
-      // Clear all data before each test
+      // Clear all data from previous tests
       await TestDatabaseHelper.clearAllData(testDb);
       tagService = TagService();
       taskService = TaskService();
     });
 
-    tearDownAll(() async {
-      await TestDatabaseHelper.closeDatabase();
-      await DatabaseService.resetDatabase();
-    });
+    // tearDownAll removed - TestDatabaseHelper.createTestDatabase() handles cleanup
+    // Double-close was causing "database is locked" errors (Gemini Issue #1)
 
     group('createTag', () {
       test('creates tag with name only', () async {

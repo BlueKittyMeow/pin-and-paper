@@ -3354,7 +3354,7 @@ void main() {
 - Notifications (uses user_settings from 3.1)
 
 **User Feedback:**
-- Test with BlueKitty on Galaxy S21 Ultra
+- Test with BlueKitty on Galaxy S22 Ultra
 - Iterate on UX (indentation depth, drag feedback)
 - Tune date parsing accuracy
 

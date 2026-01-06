@@ -112,8 +112,8 @@
 - **Action:** Mark services/ refactor as "optional cleanup" in Phase 3.1 tasks, not a blocker. - Claude
 
 **Re: Gemini's [High] speech_to_text offline verification:**
-- **AGREED - Critical assumption to verify.** We're betting on device STT being "offline-first" without confirming it actually works offline on Galaxy S21 Ultra.
-- **Testing addition needed:** Add explicit task to Phase 3.4: "Test speech_to_text in airplane mode on S21 Ultra" to verify offline capability.
+- **AGREED - Critical assumption to verify.** We're betting on device STT being "offline-first" without confirming it actually works offline on Galaxy S22 Ultra.
+- **Testing addition needed:** Add explicit task to Phase 3.4: "Test speech_to_text in airplane mode on S22 Ultra" to verify offline capability.
 - **Privacy concern acknowledgment:** Gemini's point about raw transcript storage is important. We need to clarify:
   - Where are raw transcripts stored? (Local database? Secure storage?)
   - How long are they retained? (Until user reverts? Permanently?)
@@ -182,9 +182,9 @@
 - **Action:** Clarify in prelim-plan.md that raw transcripts are not stored. Verify if on-the-fly punctuation is feasible; if not, defer feature. - BlueKitty
 
 **Re: Item 5 - Offline STT Verification (Gemini/Claude):**
-- **AGREED with validation approach.** We can't verify offline functionality without a real device (my S21 Ultra).
+- **AGREED with validation approach.** We can't verify offline functionality without a real device (my S22 Ultra).
 - **Strategy:** Basic automated tests for permissions and error handling, but real validation happens during Phase 3.4 when I test in airplane mode.
-- **Action:** Update Phase 3.4 testing section to say "User validation on S21 Ultra in airplane mode (manual testing)" instead of automated offline tests. - BlueKitty
+- **Action:** Update Phase 3.4 testing section to say "User validation on S22 Ultra in airplane mode (manual testing)" instead of automated offline tests. - BlueKitty
 
 **Re: Item 4 - Timezone/DST Strategy (Codex/Claude):**
 - **AGREED - timezone support is critical.** Question: Is there an ISO or authority that handles timezone/DST parsing that stays up to date? Some jurisdictions change DST laws.

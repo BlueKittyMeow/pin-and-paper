@@ -32,10 +32,8 @@ void main() {
     taskService = TaskService();
   });
 
-  tearDown() async {
-    await TestDatabaseHelper.closeDatabase();
-    await DatabaseService.resetDatabase();
-  };
+  // tearDown removed - TestDatabaseHelper.createTestDatabase() handles cleanup
+  // Double-close was causing "database is locked" errors (Gemini Issue #1)
 
   group('TaskService - Soft Delete Operations', () {
     test('softDeleteTask() soft deletes a single task', () async {

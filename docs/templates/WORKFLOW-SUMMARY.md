@@ -268,6 +268,8 @@ All templates and checklists in: `docs/templates/`
 | `validation-template-about.md` | How to use validation template | Guide |
 | `phase-start-checklist.md` | Start new phase workflow | Checklist |
 | `phase-end-checklist.md` | Close out phase workflow | Checklist |
+| `build-and-release.md` | Build/release and version updates | Guide |
+| `documentation-workflow.md` | Master doc update workflow | Guide |
 | `WORKFLOW-SUMMARY.md` | This document! | Reference |
 
 ---
@@ -322,6 +324,26 @@ docs/phase-04/
 ### Repeat for 4.2, 4.3...
 
 ### End Phase 4
+
+**Before archiving, complete these steps:**
+
+1. **Build and test release version** (see `build-and-release.md`)
+   - Update `pubspec.yaml` version to match phase (e.g., 4.0.0)
+   - Update `constants.dart` appVersion
+   - Build release APK: `flutter build apk --release`
+   - Test on device in release mode
+   - Verify performance, features, database migration
+
+2. **Update master documentation** (see `documentation-workflow.md`)
+   - Update PROJECT_SPEC.md (version, dates, current phase, status)
+   - Update README.md (phase section, stats)
+   - Commit together with phase docs
+
+3. **Create phase summary** (see `phase-end-checklist.md`)
+   - Create `phase-04-summary.md` with metrics, lessons learned
+   - Confirm team finished with findings docs
+   - Archive everything
+
 ```
 Before archiving:
 docs/phase-04/
@@ -344,6 +366,10 @@ docs/phase-04/
 After archiving:
 docs/phase-04/ (empty)
 docs/archive/phase-04/ (all files moved)
+
+Root-level master docs updated:
+PROJECT_SPEC.md (version 4.0, Phase 4 complete)
+README.md (Phase 4 section updated, stats current)
 ```
 
 ---

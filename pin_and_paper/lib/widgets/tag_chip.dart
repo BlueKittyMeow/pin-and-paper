@@ -45,13 +45,23 @@ class TagChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Tag name
-              Text(
-                tag.name,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: compact ? 12 : 14,
-                  fontWeight: compact ? FontWeight.normal : FontWeight.w500,
+              // Tag name with overflow handling
+              // Phase 3.5: Fix #C1 - Prevent text overflow with ellipsis
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: compact ? 150 : 200,
+                  ),
+                  child: Text(
+                    tag.name,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: compact ? 12 : 14,
+                      fontWeight: compact ? FontWeight.normal : FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
 

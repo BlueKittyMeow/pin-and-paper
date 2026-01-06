@@ -1,516 +1,269 @@
-# Claude's Bug Hunting - Phase 3.4 (Task Editing)
+# Claude's Implementation Notes - Phase 3.5
 
-**Phase:** 3.4 - Task Editing
-**Status:** 🔜 Planning
+**Phase:** 3.5
+**Status:** 📋 Planning Complete (Updated based on team feedback)
 **Last Updated:** 2025-12-27
 
 ---
 
-## Instructions
+## Purpose
 
-This document tracks bugs, edge cases, and potential issues discovered during Phase 3.4 implementation.
-
-**Format:**
-- Report bugs as they're discovered
-- Include severity (CRITICAL, HIGH, MEDIUM, LOW)
-- Provide reproduction steps
-- Suggest fixes when possible
-- Mark as FIXED when resolved
+This document tracks implementation decisions, learnings, and technical notes from Claude during Phase 3.5 development.
 
 ---
 
-## Pre-Implementation Review: Gemini Feedback Analysis
+## Implementation Decisions
 
-**Reviewed:** 2025-12-27
-**Source:** `gemini-findings.md`
+### Decision 1: Expanded MVP Scope
+**Date:** 2025-12-27
+**Context:** Gemini identified that tag renaming and autocomplete were incorrectly deferred to stretch, contradicting ADHD-friendly principles
 
-Gemini conducted a comprehensive review of the `phase-3.4-implementation.md` plan and identified several critical flaws in the proposed technical design. Below is my analysis of their feedback and the corrective actions needed.
+**Options Considered:**
+1. Keep original scope (defer to 3.5c)
+2. Expand MVP to include these features
 
-### BUG-3.4-001: Incorrect Task ID Data Type (CRITICAL) ✅ ACCEPTED
+**Chosen:** Expand MVP (Phase 3.5a)
 
-**Severity:** CRITICAL
-**Component:** All layers (TaskService, TaskProvider, UI)
-**Status:** PRE-IMPLEMENTATION (needs fix before coding)
+**Rationale:**
+- **"Forgiving" principle:** Users need to fix typos without losing associations
+- **"Zero friction" principle:** Autocomplete prevents duplicates (#errands vs #running-errands)
+- Timeline impact acceptable (6-7 days vs 4-5 days)
+- Better to ship polished feature than frustrating half-measure
 
-**Gemini's Finding:**
-The implementation plan consistently uses `int taskId` as a parameter throughout all code examples. However, the actual `Task` model and database schema use `String` for the task ID.
+### Decision 2: Hybrid Tag Deletion
+**Date:** 2025-12-27
+**Context:** User (BlueKitty) requested smart deletion behavior
 
-**Verification:**
-Confirmed by reviewing `lib/models/task.dart`:
-- Line 3: `final String id;`
-- Line 73: `id: map['id'] as String`
-- Database schema uses `id TEXT PRIMARY KEY` (from Phase 1)
+**Options Considered:**
+1. Hard delete only (CASCADE removes all)
+2. Soft delete only (mark deleted, preserve)
+3. Hybrid: Hard if unused, soft if used
+
+**Chosen:** Hybrid approach
+
+**Rationale:**
+- Cleans up unused tags completely
+- Preserves data integrity for active tags
+- Best user experience
+- Requires db migration (add `deleted_at` column)
+
+### Decision 3: Custom Color Palettes
+**Date:** 2025-12-27
+**Context:** User wanted ability to save custom color palettes
+
+**Chosen:** Presets + custom picker + saved palettes
+
+**Rationale:**
+- 12 preset colors for quick creation
+- Full picker for personalization
+- Saved palettes for consistency
+- Requires new `tag_palettes` table (v5 → v6 migration)
+
+### Decision 4: Two-Step Tag Creation with Smart Default
+**Date:** 2025-12-27
+**Context:** Balance between speed and customization
+
+**Chosen:** Name → Color picker, with last-used color as default
+
+**Rationale:**
+- First tag: Choose color explicitly
+- Subsequent tags: Default to last color, can override
+- Best of both: quick for repeated use, customizable when needed
+
+### Decision 5: Vertical Slice Implementation Approach
+**Date:** 2025-12-28
+**Context:** Gemini identified that bottom-up approach delays UX validation until Day 5
+
+**Options Considered:**
+1. Bottom-up (foundation → service → provider → UI)
+2. Vertical slices (complete user journeys incrementally)
+
+**Chosen:** Vertical slices
+
+**Rationale:**
+- UX validation by Day 2 (not Day 5!)
+- Can test complete "create tag" journey early
+- Iterate based on real user experience
+- Each slice delivers independent value
+- Critical features (rename, autocomplete) available sooner
+- Aligns with agile/iterative development best practices
 
 **Impact:**
-This would cause immediate compilation errors and prevent the code from running at all. Every method signature, database query, and parameter would be wrong.
-
-**Claude's Analysis:**
-This is a **CRITICAL BUG IN THE PLANNING DOCUMENT**. I completely missed this fundamental data type inconsistency when writing the implementation plan. Thank you Gemini for catching this before we wrote broken code!
-
-**Fix Required:**
-Replace ALL instances of `int taskId` with `String taskId` in:
-- `TaskService.updateTaskTitle(String taskId, String newTitle)`
-- `TaskProvider.updateTaskTitle(String taskId, String newTitle)`
-- `_showEditDialog()` and all related code
-- All test cases in the test plan
-
-**Status:** Must fix implementation plan before proceeding
+- Same 6-7 day timeline, better risk management
+- 4 vertical slices instead of 7 horizontal phases
+- Explicit UX checkpoints after each slice
 
 ---
 
-### BUG-3.4-002: Inefficient Full List Reload (HIGH) ✅ ACCEPTED
+## Technical Learnings
 
-**Severity:** HIGH
-**Component:** TaskProvider
-**Status:** PRE-IMPLEMENTATION (needs redesign)
+### Database Already Prepared!
+**Key Finding:** Tags and task_tags tables already exist from Phase 3.1
 
-**Gemini's Finding:**
-The proposed `TaskProvider.updateTaskTitle()` calls `await loadTasks()` after updating a single task. This re-fetches the ENTIRE task list from the database, which is extremely wasteful for changing one title.
+**Impact:**
+- No migration for core tables
+- Only need to add `deleted_at` column and `tag_palettes` table
+- v5 → v6 migration is lightweight
 
-**Performance Impact:**
-- With 100 tasks: Unnecessary read of 99 tasks
-- With 1000 tasks: 999 wasted reads + UI rebuild
-- Battery drain from excessive database queries
-- Noticeable lag as list grows
+### ASCII Mockups Work Great
+**Finding:** Simple ASCII mockups in ultrathinking doc were very well received
 
-**Claude's Analysis:**
-Gemini is absolutely correct. I proposed the lazy/inefficient approach. The Provider already has the full task list in memory (`_tasks`), so we should update in-place and call `notifyListeners()`.
-
-**Better Approach (from Gemini):**
-```dart
-Future<void> updateTaskTitle(String taskId, String newTitle) async {
-  try {
-    final updatedTask = await _taskService.updateTaskTitle(taskId, newTitle);
-    final index = _tasks.indexWhere((task) => task.id == taskId);
-    if (index != -1) {
-      _tasks[index] = updatedTask;
-      notifyListeners();
-    } else {
-      // Fallback: reload if task not found (shouldn't happen)
-      await loadTasks();
-    }
-  } catch (e) {
-    debugPrint('Error updating task title: $e');
-    rethrow;
-  }
-}
-```
-
-**Why This Is Better:**
-1. **O(n) search** instead of full database query
-2. **In-place update** instead of rebuilding entire list
-3. **Single notifyListeners()** instead of multiple rebuilds
-4. **Graceful fallback** if task somehow not in memory
-
-**Status:** Adopt Gemini's approach in implementation
+**Lesson:** Don't overthink visualization - clear text mockups communicate effectively
 
 ---
 
-### BUG-3.4-003: Redundant Database Query (MEDIUM) ✅ ACCEPTED
+## Feedback Integration
 
-**Severity:** MEDIUM
-**Component:** TaskService
-**Status:** PRE-IMPLEMENTATION (needs optimization)
+### Codex's Feedback - Round 1 (Initial Review)
+**Date:** 2025-12-27
+Status: ✅ All issues addressed (see codex-issues-response.md)
 
-**Gemini's Finding:**
-The proposed `TaskService.updateTaskTitle()` performs:
-1. `db.update()` - Update the title
-2. `db.query()` - Fetch the same task we just updated
+**CRITICAL - N+1 Tag Loading + Assignment Bug:**
+- ✅ Fixed with single JOIN query (`getTagsForAllTasks`)
+- Performance: 500 tasks = 2 queries (was 500 queries)
+- 250x reduction in database calls
 
-The second query is wasteful since we already know what the task contains.
+**CRITICAL - Tree Filtering Architecture:**
+- ✅ Filter `_tasks` before categorization
+- _refreshTreeController() called after filtering
+- Main tree view now correctly shows filtered tasks
 
-**Claude's Analysis:**
-Gemini is right. The second query is redundant. Their suggested optimization is clever: fetch first, then update, then return a modified copy using the existing `copyWith()` method.
+**MEDIUM - Listener Lifecycle Leak:**
+- ✅ Added removeListener() in dispose()
+- ✅ Handle provider swapping correctly
+- No memory leaks
 
-**Optimized Approach (from Gemini):**
-```dart
-Future<Task> updateTaskTitle(String taskId, String newTitle) async {
-  final db = await DatabaseService.instance.database;
-  final trimmedTitle = newTitle.trim();
+**MEDIUM - Hide-Completed + Tag Filters:**
+- ✅ Tag filters override hide-completed setting
+- Rationale: User explicitly filtered, show ALL matching tasks
+- Clear filter → hide-completed resumes
 
-  if (trimmedTitle.isEmpty) {
-    throw ArgumentError('Task title cannot be empty');
-  }
+**HIGH - Custom Palette Scope Creep:**
+- ✅ Deferred tag_palettes table to Phase 3.5c
+- Keeps preset colors + custom picker
+- Removes incomplete feature from MVP
 
-  // Fetch the original task first
-  final maps = await db.query(
-    AppConstants.tasksTable,
-    where: 'id = ?',
-    whereArgs: [taskId],
-  );
-
-  if (maps.isEmpty) {
-    throw Exception('Task not found: $taskId');
-  }
-
-  final originalTask = Task.fromMap(maps.first);
-
-  // Perform the update
-  await db.update(
-    AppConstants.tasksTable,
-    {'title': trimmedTitle},
-    where: 'id = ?',
-    whereArgs: [taskId],
-  );
-
-  // Return updated copy (leverages existing copyWith method)
-  return originalTask.copyWith(title: trimmedTitle);
-}
-```
-
-**Why This Is Better:**
-- Still **2 operations** (fetch + update) but NO redundant query
-- Leverages existing `copyWith()` method (line 109 in task.dart)
-- Guarantees we return accurate task data
-- Validates task exists BEFORE attempting update
-
-**Status:** Adopt Gemini's approach in implementation
+**CRITICAL - Filtering SQL Undefined:**
+- ✅ Specified all SQL queries with:
+  - Soft-delete exclusions (tasks.deleted_at IS NULL)
+  - Depth/parent data included
+  - Proper index usage (idx_task_tags_tag)
+  - OR and AND variants documented
 
 ---
 
-### BUG-3.4-004: Flawed Trim Logic in Save Validation (MEDIUM) ✅ ACCEPTED
+### Codex's Feedback - Round 2 (Blocker Review)
+**Date:** 2025-12-28
+Status: ✅ Both blockers RESOLVED
 
-**Severity:** MEDIUM
-**Component:** UI Dialog (_showEditDialog)
-**Status:** PRE-IMPLEMENTATION (needs logic refinement)
+**BLOCKER A: Filter Clearing Doesn't Restore Full List** ⚠️
+- **Issue:** `_applyTagFilters()` returns early when filters cleared, but `_tasks` stays filtered
+- **Impact:** Users stuck with filtered view until app restart - CRITICAL UX bug
+- **Root Cause:** While code DID call `loadTasks()`, clarity was needed
+- **Fix:** Added explicit debug logging and comments to make reload path bulletproof
+- **Verification:** Debug prints confirm "Filters cleared - reloading full task list" path
 
-**Gemini's Finding:**
-The proposed validation logic:
-```dart
-if (result != null && result.trim().isNotEmpty && result != task.title)
-```
+**BLOCKER B: Depth Preservation in Filter Queries** ⚠️
+- **Issue:** Filtering queries return tasks with `depth=0`, collapsing tree view
+- **Impact:** All filtered tasks render as root nodes - tree hierarchy lost
+- **Root Cause:** Queries used `SELECT t.* FROM tasks` without recursive CTE
+- **Fix:** Both `getTasksForTags()` and `getTasksForTagsAND()` now include full CTE
+- **CTE Logic:**
+  ```sql
+  WITH RECURSIVE task_tree AS (
+    SELECT *, 0 as depth FROM tasks WHERE parent_id IS NULL
+    UNION ALL
+    SELECT t.*, tt.depth + 1 FROM tasks t JOIN task_tree tt ON t.parent_id = tt.id
+  )
+  SELECT DISTINCT task_tree.* FROM task_tree
+  JOIN task_tags ON task_tree.id = task_tags.task_id
+  WHERE ...
+  ```
+- **Result:** Filtered tasks preserve full hierarchy (depth, parent_id, position)
 
-Has a subtle bug: If user edits `"  My Task  "` → `"My Task"`, the trimmed versions are identical but the raw strings differ. The `result != task.title` check might fail (or succeed incorrectly) depending on whether the original task title was stored with or without whitespace.
+**Additional Notes:**
+- ✅ SQLite ~999 parameter limit documented for `IN()` queries
+- ⚠️ Consider batching if >900 tasks (unlikely but noted)
+- ✅ `removeTagFromTask()` confirmed present (was added after Gemini feedback)
+- ✅ `getTagsForAllTasks()` includes parameter limit warning
 
-**Claude's Analysis:**
-Good catch. The validation should happen at the service layer, not the UI layer. The UI should simply pass the result to the provider, and let the provider/service handle trimming and deciding if an update is needed.
+### Gemini's Feedback - Round 1 (Plan Review)
+Status: ✅ All issues addressed
 
-**Better Approach (from Gemini):**
-```dart
-// In _showEditDialog
-if (result != null) {
-  // Let provider/service handle trimming and validation
-  await context.read<TaskProvider>().updateTaskTitle(task.id, result);
-  // Show success feedback
-}
-```
+**CRITICAL - Contradictory Scope:**
+- ✅ Moved tag renaming to Phase 3.5a (essential for "forgiving" design)
+- ✅ Moved tag autocomplete to Phase 3.5a (essential for "zero friction")
+- Timeline updated: 6-7 days (from 4-5 days)
 
-**Why This Is Better:**
-- **Separation of concerns:** UI presents dialog, business logic validates
-- **Consistent validation:** All title validation in one place (service layer)
-- **User intent preserved:** Service trims and compares, UI just submits
-- **Simpler UI code:** Less logic in widget
+**HIGH - Ambiguous Tag Deletion:**
+- ✅ Added edge case handling to 3.5b
+- When deleting actively filtered tag:
+  - Remove from `_activeFilters`
+  - TaskProvider refreshes list
+  - User sees remaining filtered tasks (or full list)
 
-**Status:** Adopt Gemini's approach - move validation to service layer
+**MEDIUM - Soft-Deleted Tasks in Counts:**
+- ✅ Added to implementation spec
+- Usage counts exclude soft-deleted tasks
+- Query: `WHERE tasks.deleted_at IS NULL`
 
----
-
-### ISSUE-3.4-005: Outdated Phase 3.3 Concern (LOW) ❌ REJECTED
-
-**Severity:** LOW
-**Component:** Project Planning
-**Status:** OUTDATED FEEDBACK
-
-**Gemini's Finding:**
-Gemini noted that Phase 3.3 post-implementation review mentioned missing "Empty Trash" button and "Trash Count Badge", and Phase 3.4 proceeds without addressing these.
-
-**Claude's Analysis:**
-This feedback is **OUTDATED**. We already implemented BOTH features in the previous session after Gemini/Codex provided their Phase 3.3 post-implementation feedback:
-
-**Evidence:**
-1. **Empty Trash Button** - Implemented in commit `6af84c4`
-   - Location: `lib/screens/recently_deleted_screen.dart:353-358`
-   - Method: `_handleEmptyTrash()` at lines 256-322
-
-2. **Trash Count Badge** - Implemented in commit `6af84c4`
-   - Location: `lib/screens/settings_screen.dart:245-255`
-   - Uses `FutureBuilder<int>` with `Badge` widget
-
-**Conclusion:**
-Gemini reviewed the *planning document* but didn't check the actual implemented code. This is a false positive.
-
-**Status:** No action needed - features already implemented
+**LOW - No Empty State:**
+- ✅ Added empty states to 3.5a scope
+- Tag Management: "No tags created yet..."
+- Tag Picker: "No existing tags" message
 
 ---
 
-## Bugs Discovered
+### Gemini's Feedback - Round 2 (Implementation Strategy UX Review)
+**Date:** 2025-12-28
+Status: ✅ All issues addressed
 
-### Pre-Implementation Bugs (Planning Document Issues)
+**CRITICAL - Implementation Order Not Ideal:**
+- ✅ Restructured for vertical slices (complete user journeys)
+- Old: Foundation → Service → Provider → UI (big bang)
+- New: Slice 1 (Create) → Slice 2 (Manage) → Slice 3 (Filter) → Slice 4 (Polish)
+- UX validation now by Day 2 (not Day 5!)
 
-**Summary:**
-- ✅ **BUG-3.4-001:** Wrong data type (`int` vs `String`) - CRITICAL
-- ✅ **BUG-3.4-002:** Inefficient UI refresh strategy - HIGH
-- ✅ **BUG-3.4-003:** Redundant database query - MEDIUM
-- ✅ **BUG-3.4-004:** Flawed trim logic - MEDIUM
-- ❌ **ISSUE-3.4-005:** Phase 3.3 concern - OUTDATED/INVALID
+**CRITICAL - Missing Feature: Remove Tag from Task:**
+- ✅ Added to implementation spec (Task #15, Day 3)
+- ✅ Added to corrections doc (section 1b)
+- ✅ Long-press tag chip → "Remove tag" option
+- ✅ Test coverage planned
 
-**Action Required:**
-Before starting implementation, I must **UPDATE THE IMPLEMENTATION PLAN** with:
-1. Change ALL `int taskId` to `String taskId`
-2. Replace `loadTasks()` with in-memory update pattern
-3. Optimize `updateTaskTitle()` to use fetch-then-update approach
-4. Move validation logic from UI to service layer
-5. Update all test cases to use `String` IDs
+**HIGH - Tag Renaming/Autocomplete Too Late:**
+- ✅ Moved from Day 4 to Day 2
+- Now part of Vertical Slice 1 (Create & Display)
+- Essential for ADHD-friendly "forgiving" and "zero friction" principles
 
-**Gemini's Review Grade: A+**
-Excellent catch on the data type bug. This would have broken everything. The performance optimizations are also spot-on and demonstrate deep understanding of Flutter's Provider pattern and database efficiency.
+**MEDIUM - Empty States as Polish:**
+- ✅ Integrated into each vertical slice
+- Task 7: Tag picker empty state (Day 2)
+- Task 14: Tag management empty state (Day 3)
+- Task 20: Filter empty state (Day 4)
+- Task 25: Filtered results empty state (Day 5)
 
----
+**MEDIUM - TagPickerDialog Too Large:**
+- ✅ Broken down into smaller tasks
+- Task 7: TagPickerDialog create journey (2 hours)
+- Task 8: Color picker (45 min)
+- More manageable, testable increments
 
-## Pre-Implementation Review: Codex Feedback Analysis
-
-**Reviewed:** 2025-12-27
-**Source:** `codex-findings.md`
-
-Codex conducted an architectural review of the implementation plan and identified 4 critical issues, including one that Gemini missed: the context menu widget structure doesn't match my proposed code.
-
-### BUG-3.4-006: Context Menu Widget Structure Mismatch (HIGH) ✅ ACCEPTED
-
-**Severity:** HIGH
-**Component:** UI Widget (TaskContextMenu)
-**Status:** PRE-IMPLEMENTATION (architectural mismatch)
-
-**Codex's Finding:**
-The implementation plan shows a bottom sheet (`showModalBottomSheet`) approach, but the actual `TaskContextMenu` widget (lines 6-84 in task_context_menu.dart) uses `showMenu` with a `PopupMenuItem` wrapper.
-
-**Verification:**
-Confirmed by reviewing `lib/widgets/task_context_menu.dart`:
-- Line 59-83: Static `show()` method uses `showMenu()`
-- Line 74-80: Wraps widget in `PopupMenuItem`
-- Line 32-52: Widget builds a `Column` with `ListTile` children
-- Current structure: 1 ListTile for "Move to Trash"
-
-**Claude's Analysis:**
-Codex is absolutely right. I wrote example code for a bottom sheet pattern that doesn't exist in our codebase. The actual implementation needs to:
-1. Add an `onEdit` callback parameter to `TaskContextMenu` widget
-2. Add "Edit" `ListTile` to the `Column` (BEFORE the Delete tile)
-3. Pass callback through the static `show()` method
-
-**Correct Implementation Pattern:**
-```dart
-// Widget parameters
-class TaskContextMenu extends StatelessWidget {
-  final Task task;
-  final VoidCallback? onDelete;
-  final VoidCallback? onEdit; // ADD THIS
-
-  // In build() - add to Column children BEFORE delete tile
-  children: [
-    // Edit option (NEW)
-    ListTile(
-      leading: Icon(Icons.edit_outlined),
-      title: const Text('Edit'),
-      onTap: () {
-        Navigator.pop(context);
-        onEdit?.call();
-      },
-    ),
-    // Delete option (existing)
-    ListTile(/* ... */),
-  ],
-
-  // In static show() method - add parameter
-  static Future<void> show({
-    required BuildContext context,
-    required Task task,
-    required Offset position,
-    VoidCallback? onDelete,
-    VoidCallback? onEdit, // ADD THIS
-  }) async {
-    await showMenu(/* ... */);
-  }
-}
-```
-
-**Why This Matters:**
-Following the existing pattern ensures consistency with the rest of the codebase and leverages the tested `showMenu` positioning logic.
-
-**Status:** Must fix implementation plan to match existing widget architecture
-
----
-
-### BUG-3.4-007: Tree State Collapse Issue (HIGH) ✅ ACCEPTED (Enhanced)
-
-**Severity:** HIGH
-**Component:** TaskProvider + TreeController interaction
-**Status:** PRE-IMPLEMENTATION (UX regression risk)
-
-**Codex's Finding:**
-Similar to Gemini's BUG-3.4-002, but Codex adds critical Phase 3.2 context: calling `loadTasks()` recreates the `TreeController` roots, **collapsing all expanded branches**. This means editing a task would collapse the user's view of the task tree.
-
-**Claude's Analysis:**
-This is an **enhancement** of Gemini's performance finding. Codex correctly identified the UX regression: imagine a user expands 5 nested levels, edits a deep subtask title, and suddenly the entire tree collapses. That's terrible UX!
-
-**Solution (from Gemini, validated by Codex):**
-Use in-memory update with `copyWith()` to avoid recreating the tree. The TreeController state is preserved because we're not calling `loadTasks()`.
-
-**Status:** Already covered by BUG-3.4-002, but Codex clarified the UX impact
-
----
-
-### BUG-3.4-008: Insufficient Widget Test Coverage (MEDIUM) ✅ ACCEPTED
-
-**Severity:** MEDIUM
-**Component:** Test Plan
-**Status:** PRE-IMPLEMENTATION (incomplete test strategy)
-
-**Codex's Finding:**
-The test plan focuses heavily on unit tests for `TaskService.updateTaskTitle()` but lacks widget/integration tests for the riskiest code paths:
-- Dialog validation feedback
-- SnackBar messaging
-- Provider interaction
-- Context menu → dialog → save flow
-
-**Claude's Analysis:**
-Codex is right. The unit tests will catch service-layer bugs, but most bugs in UI features come from the widget layer: wrong callbacks, missing mounted checks, improper dialog dismissal, etc.
-
-**Missing Test Coverage:**
-```dart
-// Need widget test like this:
-testWidgets('Edit dialog updates task title', (tester) async {
-  // Render task list with Provider
-  // Long-press to open context menu
-  // Tap "Edit" option
-  // Enter new title
-  // Press Save
-  // Verify provider.updateTaskTitle() was called
-  // Verify task title updated in UI
-  // Verify SnackBar shown
-});
-```
-
-**Action Required:**
-Add widget/integration test section to `phase-3.4-test-plan.md` covering:
-1. Context menu opens on long-press
-2. Edit option triggers dialog
-3. Dialog pre-populates current title
-4. Save button updates task
-5. UI reflects change immediately
-6. SnackBar confirmation shown
-
-**Status:** Must enhance test plan with widget-level tests
-
----
-
-### BUG-3.4-009: Task ID Type Mismatch (CRITICAL) ✅ DUPLICATE
-
-**Severity:** CRITICAL
-**Component:** All layers
-**Status:** DUPLICATE of BUG-3.4-001 (Gemini's finding)
-
-**Codex's Finding:**
-Same as Gemini: implementation plan uses `int taskId` but schema uses `String id`.
-
-**Claude's Analysis:**
-Both reviewers independently caught this critical bug. High confidence this is a real issue.
-
-**Status:** Already tracked as BUG-3.4-001
-
----
-
-## Summary of Pre-Implementation Review
-
-### Bugs Found by Both Reviewers (High Confidence)
-- **BUG-3.4-001** (CRITICAL): Wrong data type - `int` vs `String` (Gemini + Codex)
-- **BUG-3.4-002/007** (HIGH): Inefficient reload + tree collapse (Gemini + Codex)
-
-### Bugs Found by Gemini Only
-- **BUG-3.4-003** (MEDIUM): Redundant database query
-- **BUG-3.4-004** (MEDIUM): Flawed trim logic in UI
-
-### Bugs Found by Codex Only
-- **BUG-3.4-006** (HIGH): Context menu widget structure mismatch
-- **BUG-3.4-008** (MEDIUM): Insufficient widget test coverage
-
-### Total Pre-Implementation Issues
-- **1 CRITICAL** (would not compile)
-- **3 HIGH** (major performance/UX issues)
-- **3 MEDIUM** (quality/testing issues)
-- **1 LOW** (outdated concern - rejected)
-
-**Combined Review Grade: A+**
-Gemini and Codex together caught 7 real bugs before a single line of code was written. This saved hours of debugging and rework. The complementary nature of their reviews (Gemini focused on performance, Codex on architecture) demonstrates the value of multi-reviewer analysis.
-
----
-
-## Implementation Bugs
-
-*Will be updated during coding phase*
-
----
-
-## Edge Cases to Test
-
-### Context Menu Behavior
-- [ ] Tap "Edit" on root task
-- [ ] Tap "Edit" on deeply nested subtask
-- [ ] Tap "Edit" on completed task
-- [ ] Tap "Edit" on deleted task (should not be accessible)
-- [ ] Open context menu, tap outside to dismiss
-- [ ] Rapidly tap "Edit" multiple times
-
-### Edit Dialog Behavior
-- [ ] Enter empty string and save
-- [ ] Enter whitespace-only and save
-- [ ] Enter very long title (500+ chars)
-- [ ] Enter special characters (emoji, unicode, symbols)
-- [ ] Press Enter key to submit
-- [ ] Click "Cancel" button
-- [ ] Click outside dialog to dismiss
-- [ ] Edit same task twice in quick succession
-
-### Database & State Management
-- [ ] Edit task while another task is being edited
-- [ ] Edit task immediately after creating it
-- [ ] Edit task immediately after completing it
-- [ ] Edit task immediately after soft deleting it
-- [ ] Database error during save
-- [ ] Network interruption (if cloud sync added later)
-
-### UI State Updates
-- [ ] Task title updates immediately in list
-- [ ] Task title updates in parent/child views
-- [ ] Scroll position maintained after edit
-- [ ] Focus returns to appropriate location
-- [ ] Keyboard dismisses properly
-
-### Platform-Specific
-- [ ] Linux desktop keyboard behavior
-- [ ] Android soft keyboard behavior
-- [ ] Different screen sizes/orientations
-
----
-
-## Potential Issues
-
-### Issue Categories
-
-**Input Validation:**
-- What's the max title length? Should we enforce one?
-- Do we allow emoji/unicode in all SQLite implementations?
-- Should we sanitize input to prevent SQL injection? (Parameterized queries already do this)
-
-**Concurrency:**
-- What if user edits task A while TaskProvider is reloading from database?
-- What if background auto-cleanup deletes task while user is editing it?
-
-**UX Flow:**
-- Should pressing back button while editing cancel the edit?
-- Should edit dialog be dismissible by tapping outside?
-- Should we show "unsaved changes" warning if user cancels with changes?
-
-**Performance:**
-- Does `loadTasks()` after every edit cause lag with 1000+ tasks?
-- Should we update in-place rather than full reload?
+**HIGH - No UX Validation Checkpoints:**
+- ✅ Added explicit UX checkpoints after each slice
+- After Slice 1 (Day 2): "Zero → Aha Moment"
+- After Slice 2 (Day 3): "Forgiving Design"
+- After Slice 3 (Day 5): "Filter Interaction"
+- After Slice 4 (Day 7): "Production Quality"
+- Each with "If broken: can't ship" criteria
 
 ---
 
 ## Testing Notes
 
-*Will be updated during implementation*
+*Observations from test writing and validation*
 
 ---
 
-## Fixed Issues
+## Open Questions
 
-*Will be updated as bugs are found and fixed*
+*Items that need clarification or future consideration*

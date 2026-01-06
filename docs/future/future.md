@@ -269,12 +269,61 @@ CREATE INDEX idx_tasks_due_date ON tasks(due_date);
 
 ---
 
-## Phase 7+: Journal & History
+## Phase 3 Deferred Items (From 3.5 Validation)
+
+### Tag System Enhancements
+**Status:** Deferred from Phase 3.5 validation
+**Target:** Phase 3.6+ or future polish phase
+
+**Color UI/UX Review:**
+- Red color appears too pink (#M4)
+- Two blue colors are too similar (#M5)
+- Brown color doesn't read as brown (#L2)
+- **Note:** Group these for comprehensive color palette review
+- **Priority:** LOW - Subjective, not breaking functionality
+
+**Tag Management UX:**
+- Add standalone tag creation UI without requiring task attachment (#M2)
+- Improve duplicate tag name prevention with UI validation (#M3)
+- **Priority:** MEDIUM - Quality of life improvements
+- **Target:** Phase 3.6 or dedicated UX polish phase
+
+**Keyboard Input Preferences:**
+- Add user preference for keyboard capitalization (auto-capital vs lowercase) (#L1)
+- **Priority:** LOW - Nice-to-have preference
+- **Target:** Settings/Preferences phase
+
+---
+
+## Phase 4: Journal & Daybook View
+
+### Critical Design Note: Preserve Completed Task Hierarchy
+
+**Context:** Phase 3.5 validation identified that completed tasks display is broken (flattened to depth 0). This was fixed in validation to preserve full parent/child relationships.
+
+**Why This Matters:**
+- Future daybook/journal view will show completed tasks on the day they were completed
+- Users need to see completed tasks in their full hierarchical context
+- Example: Clicking "Get milk" in daybook should show it was part of "Buy groceries" parent task
+- Database already stores relationships (parent_id, depth) - UI must respect them
+
+**Implementation Requirements:**
+- ✅ **Done in 3.5:** Completed tasks preserve depth, hasChildren, and tree structure
+- 🔜 **Phase 4:** Daybook view displays completed tasks with full hierarchy
+- 🔜 **Phase 4:** Clicking completed child in daybook navigates to full task context
+- 🔜 **Phase 4:** Historical view shows "what I did on this day" with proper nesting
+
+**Database Schema (Already Exists):**
+- `tasks.parent_id` - References parent task
+- `tasks.completed_at` - Timestamp when completed
+- `tasks.depth` - Computed hierarchical depth (0 = root)
+- No schema changes needed - just UI implementation
 
 ### Temporal Awareness
 - Completed tasks archive
 - Productivity metrics
 - "On this day" historical view
+- **Daybook view:** Tasks organized by completion date with preserved hierarchy
 
 ---
 

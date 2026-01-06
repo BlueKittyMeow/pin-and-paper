@@ -3,7 +3,7 @@
 **Status:** Preliminary Planning (High-Level Strategy)
 **Estimated Duration:** 3-4 weeks
 **Database Version:** 3 → 4
-**Target Device:** Samsung Galaxy S21 Ultra (Android)
+**Target Device:** Samsung Galaxy S22 Ultra (Android)
 
 ---
 
@@ -855,13 +855,13 @@ CREATE INDEX idx_task_tags_task ON task_tags(task_id);
   - [ ] Write unit tests for permission flow handling
   - [ ] Write unit tests for streaming transcription display logic
   - [ ] Write unit tests for error handling (permissions denied, STT failures)
-  - [ ] **Device testing:** Test on Galaxy S21 Ultra with various dictation scenarios
+  - [ ] **Device testing:** Test on Galaxy S22 Ultra with various dictation scenarios
     - [ ] Short phrases ("call dentist tomorrow")
     - [ ] Long dictation (brain dump paragraph)
     - [ ] Background noise scenarios
     - [ ] Streaming interim results display
   - [ ] **Offline functionality - User validation (manual testing):**
-    - [ ] BlueKitty tests on Galaxy S21 Ultra in airplane mode
+    - [ ] BlueKitty tests on Galaxy S22 Ultra in airplane mode
     - [ ] Verify device-based STT works without internet connection
     - [ ] Confirm no unexpected network errors or degraded accuracy
     - [ ] Note: No automated offline tests - device dependency requires manual validation
@@ -899,7 +899,7 @@ CREATE INDEX idx_task_tags_task ON task_tags(task_id);
   - [ ] Write unit tests for notification cancellation (task complete/due date removed)
   - [ ] Write unit tests for hybrid model (use_global vs custom vs none)
   - [ ] Write unit tests for global default from user_settings
-  - [ ] **Device testing:** Verify notifications fire at correct time on Galaxy S21 Ultra
+  - [ ] **Device testing:** Verify notifications fire at correct time on Galaxy S22 Ultra
   - [ ] **Device testing:** Test tap notification → open task navigation
   - [ ] **Device testing:** Document Android battery optimization issues (if any)
   - [ ] **Integration test:** Set due date → notification scheduled → task completed → notification cancelled
@@ -1116,7 +1116,7 @@ final parsedDate = dateParserService.parse(
   - Device STT latency varies by hardware, OS version, system load
   - `speech_to_text` provides streaming interim results (text appears in real-time)
   - User perception of speed comes from streaming feedback, not final transcription time
-  - Galaxy S21 Ultra (2021 flagship) should be inherently fast
+  - Galaxy S22 Ultra (2021 flagship) should be inherently fast
 - **Implementation focus:**
   - Use interim results for streaming transcription updates
   - Smooth UI animations (pulsing mic, text streaming in)
@@ -1124,7 +1124,7 @@ final parsedDate = dateParserService.parse(
   - No UI freezes or janky states during transcription
   - Graceful error handling
 - **Testing approach:**
-  - BlueKitty tests on S21 Ultra during Phase 3.4 implementation
+  - BlueKitty tests on S22 Ultra during Phase 3.4 implementation
   - Qualitative feedback: "feels fast" vs "feels laggy"
   - Optimize based on actual user experience, not arbitrary benchmarks
 

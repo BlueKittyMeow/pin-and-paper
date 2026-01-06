@@ -542,7 +542,7 @@ But the actual question we should be asking is: *"What's the minimum viable feat
    - Cross-device performance testing (2015 Android phone vs 2024 flagship)
    - Memory usage profiling
    - Battery impact measurement
-   - **Risk:** Works great on dev's S21 Ultra, crashes on user's older device
+   - **Risk:** Works great on dev's S22 Ultra, crashes on user's older device
 
 **Total Realistic Estimate: 40-60 hours of specialized ML engineering work**
 

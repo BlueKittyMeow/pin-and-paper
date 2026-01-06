@@ -159,7 +159,7 @@ The core concept is to provide a digital workspace that feels like a physical de
 *   **mockito:** ^5.4.0 (Testing mocks)
 
 **Target Device:**
-*   **Primary:** Samsung Galaxy S21 Ultra (Android)
+*   **Primary:** Samsung Galaxy S22 Ultra (Android)
 *   **Display:** 120Hz, 1440x3088 pixels
 *   **Performance Target:** 120fps native, 60fps minimum
 
@@ -223,7 +223,7 @@ Data Layer (SQLite)
 2. Use `make` commands for common tasks (doctor, analyze, test, format)
 3. Keep files under 500 lines (split if larger)
 4. Follow DRY principles (reusable components)
-5. Test on Samsung Galaxy S21 Ultra (primary device)
+5. Test on Samsung Galaxy S22 Ultra (primary device)
 
 **When Completing a Phase:**
 1. Consolidate phase documentation into single markdown file

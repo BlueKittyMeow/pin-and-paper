@@ -2,7 +2,7 @@
 
 **Version:** 3.5 (Phase 3 In Progress)
 **Last Updated:** 2026-01-05
-**Primary Device:** Samsung Galaxy S21 Ultra
+**Primary Device:** Samsung Galaxy S22 Ultra
 **Current Phase:** Phase 3.5 Complete - Working on Phase 3.6
 
 ---
@@ -54,7 +54,7 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ### Primary User & Use Case
 
 **User:** Individual with ADHD (Blue Kitty 🐱)
-**Primary device:** Galaxy S21 Ultra (always with them)
+**Primary device:** Galaxy S22 Ultra (always with them)
 **Secondary devices:** iPad (organizing/beautifying), Linux desktop
 
 **Core need:** Frictionless task capture on phone with ability to later organize/beautify on larger screens
@@ -443,9 +443,11 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
   - ColorPickerDialog with 12 Material Design presets
   - TagChip with WCAG AA compliant text colors
 - Smart tag overflow (3 tags + "+N more" indicator)
+- **Completed task hierarchy preserved** (critical for Phase 4 daybook/journal view)
 - Dual AI code review (Gemini UX + Codex technical)
 - 78 comprehensive tests (100% passing)
 - Database v5 → v6 migration
+- **Note:** See `docs/future/future.md` for deferred UX polish items and Phase 4 daybook design notes
 
 **Remaining Subphases:**
 
@@ -455,6 +457,13 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Date-based filtering (due today, this week, overdue)
 - Search indexes for performance
 - Combined filters
+
+**Deferred from Phase 3.5 Validation:**
+- Tag color palette review (red too pink, blues too similar, brown unclear) - Low priority UX polish
+- Standalone tag creation UI (currently requires task attachment) - Medium priority enhancement
+- Duplicate tag UI validation (backend prevents duplicates, UI can improve) - Low priority
+- Keyboard capitalization preference - Defer to Settings phase
+- See `docs/future/future.md` for full details and rationale
 
 **Phase 3.7: Natural Language Date Parsing** 🔜 (1-2 weeks)
 - Parse relative dates ("tomorrow", "next Tuesday", "in 3 days")
@@ -730,7 +739,7 @@ Claude: "Added to your Novel Research card! 💚"
 
 **Technical Metrics:**
 - ✅ App launches in <2 seconds on Galaxy phone
-- ✅ 60fps scrolling in task list (achieved 120fps on Galaxy S21 Ultra)
+- ✅ 60fps scrolling in task list (achieved 120fps on Galaxy S22 Ultra)
 - ✅ Zero data loss (all tasks persist correctly)
 - ✅ Zero crashes in user testing
 
@@ -966,7 +975,7 @@ This section documents major architectural and scope decisions made during plann
 
 ### Performance Standards
 
-- **Target:** 120fps on Galaxy S21 Ultra (native refresh rate)
+- **Target:** 120fps on Galaxy S22 Ultra (native refresh rate)
 - **Minimum:** 60fps on mid-range devices
 - **Launch Time:** <2 seconds cold start
 - **Battery Impact:** <5% per hour of active use
@@ -977,7 +986,7 @@ This section documents major architectural and scope decisions made during plann
 - **Unit Tests:** All service layer methods
 - **Widget Tests:** Key UI interactions
 - **Integration Tests:** Critical user flows (create task, brain dump, sync)
-- **Manual Testing:** Every phase on physical Galaxy S21 Ultra
+- **Manual Testing:** Every phase on physical Galaxy S22 Ultra
 - **Performance Profiling:** Use Flutter DevTools regularly
 
 ---

@@ -28,11 +28,8 @@ void main() {
     taskService = TaskService();
   });
 
-  tearDown() async {
-    // Clean up after each test - close the database to destroy in-memory data
-    await TestDatabaseHelper.closeDatabase();
-    await DatabaseService.resetDatabase();
-  }
+  // tearDown removed - TestDatabaseHelper.createTestDatabase() handles cleanup
+  // Double-close was causing "database is locked" errors (Gemini Issue #1)
 
   group('TaskService - Hierarchical Query Methods', () {
     test('getTaskHierarchy() returns tasks with correct depth', () async {

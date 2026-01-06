@@ -7,8 +7,6 @@ import 'package:pin_and_paper/utils/constants.dart';
 /// This avoids the need for path_provider and provides fast, isolated tests.
 class TestDatabaseHelper {
   static bool _initialized = false;
-  static Database? _database;
-  static int _dbCounter = 0;
 
   /// Initialize sqflite_common_ffi for testing
   ///
@@ -26,17 +24,14 @@ class TestDatabaseHelper {
   ///
   /// Creates a new database with the full schema (Phase 3.2).
   /// Each call returns a new, isolated database with a unique path.
+  ///
+  /// NOTE: Uses microsecond timestamps to ensure truly unique paths even
+  /// when tests run in parallel. This avoids race conditions from counter increments.
   static Future<Database> createTestDatabase() async {
-    // Close any existing database first to ensure clean state
-    if (_database != null) {
-      await _database!.close();
-      _database = null;
-    }
-
-    // Use unique in-memory database for each test to ensure isolation
-    // Each database gets a unique identifier to prevent reuse
-    _dbCounter++;
-    final uniquePath = inMemoryDatabasePath + '_test_$_dbCounter';
+    // Use microsecond timestamp for truly unique database path
+    // This is more reliable than a counter when tests run in parallel
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    final uniquePath = inMemoryDatabasePath + '_test_$timestamp';
 
     final db = await databaseFactory.openDatabase(
       uniquePath,
@@ -47,7 +42,6 @@ class TestDatabaseHelper {
       ),
     );
 
-    _database = db;
     return db;
   }
 
@@ -178,11 +172,13 @@ class TestDatabaseHelper {
   }
 
   /// Close the test database
+  ///
+  /// NOTE: This method is deprecated. Each test should manage its own database
+  /// instance instead of relying on a shared static variable. This method is kept
+  /// for backward compatibility but does nothing.
+  @Deprecated('Each test manages its own database instance')
   static Future<void> closeDatabase() async {
-    if (_database != null) {
-      await _database!.close();
-      _database = null;
-    }
+    // No-op: Tests manage their own database instances
   }
 
   /// Clear all data from the test database (for test cleanup)

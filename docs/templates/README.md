@@ -12,8 +12,12 @@
 |----------|---------|-------------|-------------|
 | [review-template.md](./review-template.md) | Pre-implementation review | Before coding starts | `phase-XXA-review-v1.md` |
 | [validation-template.md](./validation-template.md) | Post-implementation validation | After coding complete | `phase-X.Y-validation-v1.md` |
+| [codex-findings-template.md](./codex-findings-template.md) | Codex code review findings | During validation | `codex-findings-phase-X.Y.md` |
+| [gemini-findings-template.md](./gemini-findings-template.md) | Gemini build/analysis findings | During validation | `gemini-findings-phase-X.Y.md` |
 | [phase-start-checklist.md](./phase-start-checklist.md) | Phase initialization | Starting new phase | Follow checklist steps |
 | [phase-end-checklist.md](./phase-end-checklist.md) | Phase closeout | Finishing phase | `phase-XX-summary.md` + archive |
+| [build-and-release.md](./build-and-release.md) | Build and release guide | Before building release | Version updates + testing |
+| [documentation-workflow.md](./documentation-workflow.md) | Master doc update workflow | Completing phases | Updated PROJECT_SPEC + README |
 | [WORKFLOW-SUMMARY.md](./WORKFLOW-SUMMARY.md) | Development cycle overview | Reference anytime | N/A (reference only) |
 | [agent-prompts-cheatsheet.md](./agent-prompts-cheatsheet.md) | Agent interaction guide | Reference for prompting | N/A (reference only) |
 | [agent-feedback-guide.md](./agent-feedback-guide.md) | How to provide feedback | Giving feedback | N/A (guide only) |
@@ -34,8 +38,11 @@
 ├─ Just finished implementation and need validation?
 │  └─> validation-template.md
 │
+├─ Ready to build a release version?
+│  └─> build-and-release.md
+│
 ├─ Ready to close out a completed phase?
-│  └─> phase-end-checklist.md
+│  └─> phase-end-checklist.md (also see documentation-workflow.md)
 │
 ├─ Need to understand the overall workflow?
 │  └─> WORKFLOW-SUMMARY.md
@@ -254,7 +261,84 @@ Closing Phase 3:
 
 ---
 
-### 7. Agent Feedback Guide (Reference)
+### 7. Build and Release Guide
+
+**File:** [build-and-release.md](./build-and-release.md)
+
+**Use When:**
+- ✅ Ready to build release version for testing
+- ✅ End of phase - preparing for production
+- ✅ Need to update version numbers
+- ✅ Want to understand debug vs release builds
+
+**Don't Use When:**
+- ❌ Daily development (use debug builds)
+- ❌ Quick testing with hot reload
+
+**Key Features:**
+- Pre-build version update checklist
+- Build mode comparison (debug/release/profile)
+- Release testing checklist
+- Version numbering strategy
+- Performance verification
+
+**Critical Reminders:**
+- Update `pubspec.yaml` version to match phase (e.g., 3.5.0)
+- Update `constants.dart` appVersion to match
+- Increment build number for every APK
+- Test in release mode before marking phase complete
+
+**Example Usage:**
+```bash
+# Before Phase 3.5 release
+1. Update pubspec.yaml: version: 3.5.0+5
+2. Update constants.dart: appVersion = '3.5.0'
+3. flutter build apk --release
+4. Test on device
+5. Tag release: git tag -a v3.5.0
+```
+
+---
+
+### 8. Documentation Workflow Guide
+
+**File:** [documentation-workflow.md](./documentation-workflow.md)
+
+**Use When:**
+- ✅ Completing any phase or subphase
+- ✅ Need to update PROJECT_SPEC.md and README.md
+- ✅ Want to understand documentation hierarchy
+
+**Don't Use When:**
+- ❌ Ongoing development (only update at phase completion)
+- ❌ Phase-specific docs (those go in docs/phase-XX/)
+
+**Key Features:**
+- Documentation hierarchy (PROJECT_SPEC → README → phase docs)
+- When to update master documents
+- What to update in each document
+- Stable search patterns (not line numbers)
+- Integration with phase-end-checklist
+
+**Critical Reminders:**
+- PROJECT_SPEC.md is the authoritative source
+- Always update PROJECT_SPEC.md and README.md together
+- Use "Search for:" patterns, not line numbers
+- Commit master docs together with phase docs
+
+**Example Usage:**
+```bash
+# Phase 3.5 completion
+1. Update PROJECT_SPEC.md: version, dates, status
+2. Update README.md: Phase 3 section, stats
+3. Create phase-3.5-implementation-report.md
+4. git add PROJECT_SPEC.md README.md docs/phase-03/
+5. git commit -m "docs: Complete Phase 3.5 with master doc updates"
+```
+
+---
+
+### 9. Agent Feedback Guide (Reference)
 
 **File:** [agent-feedback-guide.md](./agent-feedback-guide.md)
 
@@ -298,7 +382,20 @@ Closing Phase 3:
 5️⃣ REPEAT for each subphase in phase
    └─> Implement 3.1 → Validate → Implement 3.2 → Validate → etc.
 
-6️⃣ PHASE END
+6️⃣ BUILD AND TEST RELEASE VERSION
+   └─> Use: build-and-release.md
+   └─> Update: pubspec.yaml version, constants.dart
+   └─> Build: flutter build apk --release
+   └─> Test: Manual testing in release mode
+   └─> Verify: Performance, features, database migration
+
+7️⃣ UPDATE MASTER DOCUMENTATION
+   └─> Use: documentation-workflow.md
+   └─> Update: PROJECT_SPEC.md (version, dates, status)
+   └─> Update: README.md (phase section, stats)
+   └─> Commit: All together with phase docs
+
+8️⃣ PHASE END
    └─> Use: phase-end-checklist.md
    └─> Create: phase-XX-summary.md
    └─> Archive: mv docs/phase-XX/* docs/archive/phase-XX/
@@ -445,6 +542,8 @@ All templates support customization:
 - Validation: [validation-template.md](./validation-template.md) + [validation-template-about.md](./validation-template-about.md)
 - Phase Start: [phase-start-checklist.md](./phase-start-checklist.md)
 - Phase End: [phase-end-checklist.md](./phase-end-checklist.md)
+- Build & Release: [build-and-release.md](./build-and-release.md)
+- Documentation: [documentation-workflow.md](./documentation-workflow.md)
 - Workflow: [WORKFLOW-SUMMARY.md](./WORKFLOW-SUMMARY.md)
 
 **For Detailed Instructions:**
@@ -463,6 +562,12 @@ All templates support customization:
 
 **"Implementation is done, need validation"**
 → Use [validation-template.md](./validation-template.md)
+
+**"Ready to build a release version"**
+→ Use [build-and-release.md](./build-and-release.md)
+
+**"Need to update master documents"**
+→ Use [documentation-workflow.md](./documentation-workflow.md)
 
 **"Phase is complete, ready to close"**
 → Use [phase-end-checklist.md](./phase-end-checklist.md)

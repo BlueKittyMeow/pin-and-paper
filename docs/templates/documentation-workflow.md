@@ -365,8 +365,13 @@ A: These are implementation details. Create them as needed during development, b
 This workflow is now integrated into:
 - `phase-start-checklist.md` - Reminds you to check current docs
 - `phase-end-checklist.md` - **Enforces updating master docs**
+- `build-and-release.md` - Version updates before release builds
 
 Always refer to phase-end-checklist.md when completing a phase to ensure you don't forget documentation updates.
+
+**See also:**
+- [build-and-release.md](./build-and-release.md) - For version number updates (pubspec.yaml, constants.dart)
+- [phase-end-checklist.md](./phase-end-checklist.md) - For complete phase closeout workflow
 
 ---
 
