@@ -163,14 +163,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Divider(),
                       ),
 
-                      // Recently completed tasks (flat list with breadcrumbs)
-                      ...completedTasks.map((task) {
+                      // Recently completed tasks (Phase 3.5 Fix #C3: with hierarchy preserved)
+                      ...taskProvider.completedTasksWithHierarchy.map((task) {
                         final breadcrumb = taskProvider.getBreadcrumb(task);
                         return TaskItem(
                           key: ValueKey(task.id),
                           task: task,
-                          depth: 0, // Flat list, no indentation
-                          hasChildren: false, // No expand/collapse in completed section
+                          depth: task.depth, // Phase 3.5 Fix #C3: Use real depth from DB
+                          hasChildren: taskProvider.hasCompletedChildren(task.id), // Phase 3.5 Fix #C3: Check actual children
                           isReorderMode: false,
                           breadcrumb: breadcrumb,
                           tags: taskProvider.getTagsForTask(task.id), // Phase 3.5

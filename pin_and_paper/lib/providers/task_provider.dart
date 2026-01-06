@@ -35,6 +35,10 @@ class TaskProvider extends ChangeNotifier {
   // Phase 3.5: Tag storage (loaded with tasks)
   Map<String, List<Tag>> _taskTags = {};
 
+  // Phase 3.5 Fix #C3: Cache completed child map for O(1) hasCompletedChildren lookup
+  // Updated by completedTasksWithHierarchy, used by hasCompletedChildren (Codex review fix)
+  Map<String, List<Task>> _lastCompletedChildMap = {};
+
   // Phase 3.5: Codex review - reentrant guard for loadTasks()
   Future<void>? _loadTasksFuture;
 
@@ -110,6 +114,39 @@ class TaskProvider extends ChangeNotifier {
     return false;
   }
 
+  // Phase 3.5 Fix #C3: Check if a completed task has any completed children
+  //
+  // Uses cached child map from last completedTasksWithHierarchy call
+  // for O(1) lookup instead of O(N) scan (Codex review fix)
+  //
+  // Returns true if at least one completed child exists
+  bool hasCompletedChildren(String taskId) {
+    // O(1) lookup in cached map
+    return _lastCompletedChildMap.containsKey(taskId);
+  }
+
+  // Phase 3.5 Fix #C3: Recursively add completed descendants in depth-first order
+  //
+  // Uses prebuilt child map for O(1) lookup per task
+  // Sorts children by position before adding (Codex fix)
+  void _addCompletedDescendants(
+    Task parent,
+    Map<String, List<Task>> childMap,
+    List<Task> result,
+  ) {
+    final children = childMap[parent.id];
+    if (children == null || children.isEmpty) return;
+
+    // Sort children by position (Codex fix)
+    children.sort((a, b) => a.position.compareTo(b.position));
+
+    // Add children in order, recursing for each
+    for (final child in children) {
+      result.add(child);
+      _addCompletedDescendants(child, childMap, result);
+    }
+  }
+
   // Phase 3.2: Build breadcrumb path for a task (root > parent > grandparent)
   String? getBreadcrumb(Task task) {
     if (task.parentId == null) return null; // No breadcrumb for root tasks
@@ -159,6 +196,59 @@ class TaskProvider extends ChangeNotifier {
       final hoursSinceCompletion = DateTime.now().difference(t.completedAt!).inHours;
       return hoursSinceCompletion < _hideThresholdHours;
     }).toList();
+  }
+
+  // Phase 3.5 Fix #C3: Get completed tasks with hierarchy preserved
+  //
+  // Returns completed tasks in tree order:
+  // - Roots first (no parent OR parent not completed)
+  // - Then their completed descendants
+  // - Sorted by position within each level
+  //
+  // **CRITICAL:** Handles orphaned completed children
+  // (child completed, parent incomplete) by treating them as roots
+  //
+  // **Performance:** O(N) using child map + Set for lookups
+  List<Task> get completedTasksWithHierarchy {
+    // Get all fully completed tasks (no incomplete descendants)
+    final completed = _tasks.where((t) {
+      if (!t.completed) return false;
+      if (_hasIncompleteDescendants(t)) return false;
+      return true;
+    }).toList();
+
+    // Build child map ONCE for O(N) performance (Codex fix)
+    // Maps parent ID -> list of completed children
+    final childMap = <String, List<Task>>{};
+    for (final task in completed) {
+      if (task.parentId != null) {
+        childMap.putIfAbsent(task.parentId!, () => []).add(task);
+      }
+    }
+
+    // Build completed ID set for O(1) membership test (Codex review fix)
+    // Prevents O(N²) complexity when finding roots
+    final completedIds = completed.map((t) => t.id).toSet();
+
+    // Find roots: Tasks with no parent OR parent not in completed set
+    // **CRITICAL:** This handles orphaned completed children (Codex fix)
+    final roots = completed.where((t) =>
+      t.parentId == null ||
+      !completedIds.contains(t.parentId)  // O(1) instead of O(N)
+    ).toList()
+      ..sort((a, b) => a.position.compareTo(b.position)); // Codex fix: Sort roots
+
+    // Cache child map for hasCompletedChildren to use (Codex review fix)
+    _lastCompletedChildMap = childMap;
+
+    // Build tree in depth-first order
+    final result = <Task>[];
+    for (final root in roots) {
+      result.add(root);
+      _addCompletedDescendants(root, childMap, result);
+    }
+
+    return result;
   }
 
   // Phase 2 Stretch: Categorize tasks after loading (called once per load, not per build)
