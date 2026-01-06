@@ -292,6 +292,97 @@ flutter build web --release
 
 ---
 
+## Test Execution
+
+### Running Tests
+
+**Default command:**
+```bash
+cd pin_and_paper
+flutter test
+```
+
+**Recommended command (Phase 3.5+):**
+```bash
+flutter test --concurrency=1
+```
+
+### Why --concurrency=1?
+
+**Issue:** sqflite_common_ffi has limitations with parallel in-memory databases
+
+**Symptoms without --concurrency=1:**
+- "database is locked" SQLite errors
+- Random test failures
+- Race conditions with shared database instances
+
+**Solution:** Run tests sequentially instead of in parallel
+
+**Impact:**
+- ✅ All 154+ tests pass reliably
+- ✅ No database lock errors
+- ✅ Predictable test results
+- ⚠️ Adds ~30 seconds to test execution time
+
+**Trade-off:** Reliability > Speed for test execution
+
+### Test Execution in Different Contexts
+
+**Local development:**
+```bash
+flutter test --concurrency=1
+```
+
+**CI/CD pipelines:**
+```yaml
+test:
+  script:
+    - cd pin_and_paper
+    - flutter test --concurrency=1
+```
+
+**Testing specific files:**
+```bash
+# Single test file
+flutter test --concurrency=1 test/services/tag_service_test.dart
+
+# Multiple test files
+flutter test --concurrency=1 test/services/
+
+# All tests
+flutter test --concurrency=1
+```
+
+### Test Coverage
+
+**Generate coverage report:**
+```bash
+flutter test --coverage --concurrency=1
+genhtml coverage/lcov.info -o coverage/html
+open coverage/html/index.html
+```
+
+**Current test count:** 154+ tests (as of Phase 3.5)
+
+### Test Failures Troubleshooting
+
+**Problem:** Tests fail with "database is locked"
+
+**Solution:**
+1. Ensure using `--concurrency=1` flag
+2. Verify no tearDown() functions closing shared database
+3. Check for static database variables in test helpers
+4. Run tests again with --concurrency=1
+
+**Problem:** Tests pass locally but fail in CI
+
+**Solution:**
+1. Add `--concurrency=1` to CI script
+2. Ensure CI uses same Flutter version
+3. Check for environment-specific dependencies
+
+---
+
 ## Release Workflow
 
 ### End of Phase Release
