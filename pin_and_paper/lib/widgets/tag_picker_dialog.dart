@@ -163,11 +163,32 @@ class _TagPickerDialogState extends State<TagPickerDialog> {
 
   List<Tag> _getFilteredTags(List<Tag> allTags) {
     final query = _searchController.text.toLowerCase().trim();
-    if (query.isEmpty) return allTags;
 
-    return allTags.where((tag) {
-      return tag.name.toLowerCase().contains(query);
-    }).toList();
+    // Filter by search query
+    final filtered = query.isEmpty
+        ? allTags
+        : allTags.where((tag) {
+            return tag.name.toLowerCase().contains(query);
+          }).toList();
+
+    // Phase 3.5: Fix #H4 - Sort selected tags to top
+    return _sortTagsWithSelectedFirst(filtered);
+  }
+
+  /// Sort tags with selected ones first, then alphabetically within each group
+  List<Tag> _sortTagsWithSelectedFirst(List<Tag> tags) {
+    return tags.toList()
+      ..sort((a, b) {
+        // Selected tags first
+        final aSelected = _selectedTagIds.contains(a.id);
+        final bSelected = _selectedTagIds.contains(b.id);
+
+        if (aSelected && !bSelected) return -1;
+        if (!aSelected && bSelected) return 1;
+
+        // Within each group (selected/unselected), sort alphabetically (case-insensitive)
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
   }
 
   @override
