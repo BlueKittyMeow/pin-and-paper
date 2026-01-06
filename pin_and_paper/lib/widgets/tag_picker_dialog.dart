@@ -124,6 +124,7 @@ class _TagPickerDialogState extends State<TagPickerDialog> {
         }
       } else if (tag == null && mounted) {
         // Codex review: Show tag creation errors to user
+        // Phase 3.5: Fix #H3 - Float SnackBar above keyboard for visibility
         final errorMsg = tagProvider.errorMessage ?? 'Failed to create tag';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -131,6 +132,12 @@ class _TagPickerDialogState extends State<TagPickerDialog> {
               content: Text(errorMsg),
               backgroundColor: Theme.of(context).colorScheme.error,
               duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              margin: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                left: 16,
+                right: 16,
+              ),
             ),
           );
         }
