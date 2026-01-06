@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../services/task_service.dart';
 import '../providers/task_provider.dart';
-import '../widgets/task_context_menu.dart'; // For confirmation dialogs
 
 /// Screen showing soft-deleted tasks that can be restored or permanently deleted
 /// Phase 3.3: Soft delete feature

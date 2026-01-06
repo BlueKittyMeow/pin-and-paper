@@ -417,7 +417,7 @@ void main() {
 
   group('TaskService - Recently Deleted Query', () {
     test('getRecentlyDeletedTasks() returns only soft-deleted tasks', () async {
-      final active = await taskService.createTask('Active Task');
+      await taskService.createTask('Active Task');
       final deleted = await taskService.createTask('Deleted Task');
 
       await taskService.softDeleteTask(deleted.id);

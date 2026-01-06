@@ -104,6 +104,6 @@ void main() {
 
     final Text taskText = tester.widget(find.text('Buy candles'));
     expect(taskText.style?.decoration, TextDecoration.lineThrough);
-    expect(taskText.style?.color?.opacity, lessThan(1.0));
+    expect(taskText.style?.color?.a, lessThan(255)); // Use .a instead of deprecated .opacity
   });
 }
