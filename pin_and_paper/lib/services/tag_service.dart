@@ -146,17 +146,21 @@ class TagService {
   /// **CRITICAL**: Enables removing tag from individual task
   /// without affecting other tasks using the same tag
   ///
-  /// Returns true if association was removed, false if didn't exist
+  /// Returns true if tag is not associated (idempotent operation)
+  /// Returns false only on database errors (exceptions)
   Future<bool> removeTagFromTask(String taskId, String tagId) async {
     final db = await _dbService.database;
 
-    final deleted = await db.delete(
+    await db.delete(
       AppConstants.taskTagsTable,
       where: 'task_id = ? AND tag_id = ?',
       whereArgs: [taskId, tagId],
     );
 
-    return deleted > 0;
+    // Phase 3.5: Fix #M1 - Idempotent removal
+    // Return true even if 0 rows deleted (tag already removed)
+    // Only return false on actual database errors (caught exceptions)
+    return true;
   }
 
   /// Get all tags for a single task
