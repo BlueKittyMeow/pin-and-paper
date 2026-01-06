@@ -217,21 +217,21 @@ void main() {
         expect(Tag.validateName('\turgent\n'), isNull);
       });
 
-      test('name at max length (100 chars) is valid', () {
-        final maxLengthName = 'a' * 100;
+      test('name at max length (250 chars) is valid', () {
+        final maxLengthName = 'a' * 250;
         expect(Tag.validateName(maxLengthName), isNull);
       });
 
-      test('name exceeding max length (101+ chars) returns error', () {
-        final tooLongName = 'a' * 101;
+      test('name exceeding max length (251+ chars) returns error', () {
+        final tooLongName = 'a' * 251;
         expect(Tag.validateName(tooLongName), isNotNull);
-        expect(Tag.validateName(tooLongName), contains('100 characters'));
+        expect(Tag.validateName(tooLongName), contains('250 characters'));
       });
 
       test('descriptive tag name (AO3-style) is valid', () {
         final descriptiveName = 'Alternate Universe - Coffee Shops & Cafés';
         expect(Tag.validateName(descriptiveName), isNull);
-        expect(descriptiveName.length, lessThan(101));
+        expect(descriptiveName.length, lessThan(251));
       });
     });
 

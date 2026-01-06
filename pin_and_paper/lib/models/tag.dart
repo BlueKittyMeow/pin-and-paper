@@ -62,12 +62,16 @@ class Tag {
     );
   }
 
+  /// Maximum tag name length (allows descriptive tags)
+  /// Phase 3.5: Increased from 100 to 250 for better usability
+  static const int maxNameLength = 250;
+
   /// Validate tag name
   ///
   /// Rules:
   /// - Must not be empty or whitespace-only
   /// - Trimmed name must have at least 1 character
-  /// - Maximum 100 characters (allows descriptive tags like AO3)
+  /// - Maximum 250 characters (allows descriptive tags)
   /// - Uniqueness enforced by database UNIQUE constraint
   ///
   /// Returns error message if invalid, null if valid
@@ -76,8 +80,8 @@ class Tag {
     if (trimmed.isEmpty) {
       return 'Tag name cannot be empty';
     }
-    if (trimmed.length > 100) {
-      return 'Tag name must be 100 characters or less';
+    if (trimmed.length > maxNameLength) {
+      return 'Tag name must be $maxNameLength characters or less';
     }
     return null; // Valid
   }
