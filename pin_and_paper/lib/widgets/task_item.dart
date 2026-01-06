@@ -309,7 +309,8 @@ class TaskItem extends StatelessWidget {
 
           // Phase 3.5: Display tags or "Add Tag" prompt
           // Gemini review: Show "+ Add Tag" for discoverability when no tags exist
-          if (!isReorderMode && (tags == null || tags!.isEmpty || tags!.isNotEmpty))
+          // Fix #C2: Show tags in reorder mode (but hide "+ Add Tag")
+          if (tags == null || tags!.isEmpty || tags!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(
                 left: 60, // Align with title (24px collapse + 24px checkbox + 12px padding)
@@ -320,7 +321,7 @@ class TaskItem extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 4,
                 children: tags == null || tags!.isEmpty
-                    ? [
+                    ? (!isReorderMode ? [
                         // Gemini review: Discoverability chip when no tags
                         GestureDetector(
                           onTap: () => _handleManageTags(context),
@@ -353,7 +354,7 @@ class TaskItem extends StatelessWidget {
                             ),
                           ),
                         ),
-                      ]
+                      ] : []) // In reorder mode, show nothing when no tags
                     : [
                         // Show first 3 tags
                         ...tags!.take(3).map((tag) {
