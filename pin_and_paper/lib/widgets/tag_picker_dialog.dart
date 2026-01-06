@@ -264,9 +264,12 @@ class _TagPickerDialogState extends State<TagPickerDialog> {
                     );
                   }
 
-                  return ListView.builder(
-                    itemCount: (showCreateOption ? 1 : 0) + filteredTags.length,
-                    itemBuilder: (context, index) {
+                  // Phase 3.5: Fix #H6 - Add scrollbar indicator for long tag lists
+                  return Scrollbar(
+                    thumbVisibility: true,
+                    child: ListView.builder(
+                      itemCount: (showCreateOption ? 1 : 0) + filteredTags.length,
+                      itemBuilder: (context, index) {
                       // Show "Create new tag" option as first item
                       if (showCreateOption && index == 0) {
                         return ListTile(
@@ -306,7 +309,8 @@ class _TagPickerDialogState extends State<TagPickerDialog> {
                         controlAffinity: ListTileControlAffinity.leading,
                       );
                     },
-                  );
+                  ),
+                  ); // End Scrollbar
                 },
               ),
             ),
