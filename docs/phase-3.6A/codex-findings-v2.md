@@ -1,200 +1,163 @@
-# Codex Findings - Phase 3.6A Plan Review (v2)
+# Phase 3.6A Review - v2
 
-**Phase:** 3.6A (Tag Filtering)
-**Review Document:** [phase-3.6A-plan-v2.md](./phase-3.6A-plan-v2.md)
-**Review Request:** [review-request-codex-v2.md](./review-request-codex-v2.md)
-**Review Date:** [To be filled by Codex]
-**Reviewer:** Codex
-**Status:** ⏳ Pending Review
+**Reviewer:** Codex  
+**Date:** 2026-01-09  
+**Status:** Draft
 
 ---
 
-## Instructions
+## Verification of Original Bugs
 
-This document is for **Codex** to document findings during Phase 3.6A plan v2 review.
+### Bug #1: Race conditions in async filter updates
+**Status:** ⚠️ Partially Fixed
 
-### Review Focus
+**Verification:**  
+The operation-ID guard is in place and prevents stale results from overwriting `_tasks`. However, `setFilter` still mutates `_filterState` before the awaited queries and never reverts it on failure. If `_taskService.getFilteredTasks` throws (e.g., transient SQLite error), the UI shows the new filter bar even though the task list still holds old data. Users see “Work” active but the list is unfiltered.
 
-This is a **plan verification review** - checking if our fixes for your original 7 bugs are correct and complete.
-
-**Your v1 findings:** [codex-findings.md](./codex-findings.md)
-- 2 HIGH severity bugs (race conditions, missing completed parameter)
-- 5 MEDIUM severity bugs (list mutation, equality, contradictions, validation, _completedTasks)
-
-**Our v2 plan:** [phase-3.6A-plan-v2.md](./phase-3.6A-plan-v2.md)
-- Incorporates all your fixes
-- Need you to verify correctness and completeness
-
-### Review Tasks
-
-1. **Verify each of your 7 original bugs is properly addressed**
-   - Check if the fix is correct (actually solves the problem)
-   - Check if the fix is complete (no edge cases remaining)
-   - Check if the fix introduces new issues
-
-2. **Look for new bugs in the v2 plan**
-   - Any issues introduced by our fixes?
-   - Any logic errors in the updated code?
-   - Any edge cases we missed?
-
-3. **Answer specific questions** (see review-request-codex-v2.md)
-   - Operation ID overflow concerns
-   - Future.wait safety with SQLite
-   - List.unmodifiable sufficiency
-   - Validation depth
-   - Error recovery approach
+**Remaining Concerns:**  
+Defer assigning `_filterState` until after both queries succeed, or store a “pending” filter separately and revert on error. Also clear/rollback `_filterState` inside the catch block so the visible state matches actual results.
 
 ---
 
-## Format for Findings
+### Bug #2: Filtered queries ignore active/completed scope
+**Status:** ✅ Fixed
 
-### For Original Bug Verification
+**Verification:**  
+`getFilteredTasks` now accepts `completed` and prepends `tasks.completed = ?` (plus `deleted_at IS NULL`) to every branch. Both active and completed lists are requested in parallel.
 
-```markdown
-## Verification: Bug #[N] - [Title]
-
-**Original Issue:** [Brief summary of your v1 finding]
-**Proposed Fix:** [Brief summary of our v2 approach]
-**Status:** ✅ Fixed / ⚠️ Partially Fixed / ❌ Not Fixed / 🔄 New Issue Introduced
-
-**Assessment:**
-[Your detailed evaluation of whether the fix works]
-
-**Remaining Concerns:**
-[Any edge cases, gaps, or new issues - or "None"]
-
-**Code Review:**
-\`\`\`dart
-[Specific code snippet if discussing implementation details]
-\`\`\`
+**Remaining Concerns:**  
+None.
 
 ---
+
+### Bug #3: FilterState.copyWith list mutation issues
+**Status:** ⚠️ Partially Fixed
+
+**Verification:**  
+`copyWith` wraps provided lists with `List.unmodifiable`, but the constructor still exposes the default `const []` reference. Callers can still receive the literal and mutate it by mistake. There’s no defensive copy at construction time, so `FilterState(selectedTagIds: myList)` shares whatever list is passed in.
+
+**Remaining Concerns:**  
+Clone incoming lists in the constructor (and `fromJson`) the same way `copyWith` does so every instance always holds its own unmodifiable list.
+
+---
+
+### Bug #4: Equality comparison broken
+**Status:** ✅ Fixed
+
+**Verification:**  
+Equality overrides now compare `selectedTagIds`, `logic`, and the new `presenceFilter` via `listEquals`. Hash code composes the same fields.
+
+**Remaining Concerns:**  
+None.
+
+---
+
+### Bug #5: Tag-presence toggles can contradict
+**Status:** ⚠️ Partially Fixed
+
+**Verification:**  
+The enum + UI guard prevents selecting “untagged” while keeping explicit tag filters. But selecting “onlyTagged” still allows `_selectedTagIds` to stay empty, which makes “Has tags” act as a no-op filter when no specific tags are chosen. This contradicts the requirement that presence filters only make sense with tag selection.
+
+**Remaining Concerns:**  
+Enforce `_selectedTagIds.isNotEmpty` when `presenceFilter == onlyTagged` (either by auto-switching back to `any` or disabling that option until at least one tag is selected).
+
+---
+
+### Bug #6: addTagFilter allows duplicates/invalid IDs
+**Status:** ⚠️ Partially Fixed
+
+**Verification:**  
+Empty strings and duplicates are rejected, but the plan still raw-appends `tagId` without confirming it exists. Erroneous IDs (typos, stale chips) propagate to SQL and either return zero rows or throw foreign-key errors, which then hit the `setFilter` catch path noted above.
+
+**Remaining Concerns:**  
+Resolve the optional “tagExists” TODO (or assert via `TagProvider`) before calling `setFilter`.
+
+---
+
+### Bug #7: _completedTasks never updated
+**Status:** ✅ Fixed
+
+**Verification:**  
+`setFilter` fetches both active and completed lists and assigns `_completedTasks` alongside `_tasks`. `_refreshTasks` also reloads both lists when filters clear.
+
+**Remaining Concerns:**  
+None.
+
+---
+
+## New Issues Found in v2
+
+### HIGH – Architecture – FilterState constructor still exposes mutable input
+**Location:** `phase-3.6A-plan-v2.md:108-170`
+
+**Issue Description:**  
+Only `copyWith` and `fromJson` wrap incoming lists; the constructor leaves `selectedTagIds` as-is when a caller passes a mutable list. Any code that constructs `FilterState(selectedTagIds: existingList)` can mutate the underlying list later and silently change the filter mid-stream.
+
+**Suggested Fix:**  
+Mirror the defensive copy from `copyWith` inside the constructor:
+```dart
+const FilterState({
+  List<String> selectedTagIds = const [],
+  this.logic = FilterLogic.or,
+  this.presenceFilter = TagPresenceFilter.any,
+}) : selectedTagIds = List.unmodifiable(selectedTagIds);
 ```
 
-### For New Issues Found
-
-```markdown
-## Issue #[N]: [Brief Title]
-
-**File:** `phase-3.6A-plan-v2.md:line` or section reference
-**Type:** [Bug / Performance / Architecture / Documentation / Test Coverage]
-**Severity:** [CRITICAL / HIGH / MEDIUM / LOW]
-**Introduced By:** [The fix that caused this, or "New finding"]
-
-**Description:**
-[Detailed description of what's wrong in v2]
-
-**Current Code/Plan:**
-\`\`\`dart
-[Problematic code snippet from v2 plan]
-\`\`\`
-
-**Suggested Fix:**
-[Concrete recommendation]
-
-\`\`\`dart
-[Fixed code example if applicable]
-\`\`\`
-
-**Impact:**
-[Why this matters, what breaks if not fixed]
-
----
-```
+**Impact:** Medium – immutability guarantees remain brittle and future contributors can reintroduce data races.
 
 ---
 
-## [Your findings go here]
+### MEDIUM – Performance – Tag counts use N×FutureBuilder with pending TODO
+**Location:** `phase-3.6A-plan-v2.md:660-730`
 
-_Codex: Please document your v2 review findings above._
+**Issue Description:**  
+`CheckboxListTile.subtitle` is a `FutureBuilder` calling `_getTaskCount(tag.id)` per row. The method is currently a TODO that returns 0, meaning task counts are misleading until Day 1-2. Even once implemented, this will issue a separate query per tag (dozens or hundreds) every time the dialog opens.
 
-_After completing review, update the Status at the top to "✅ Complete" and fill the summary below._
+**Suggested Fix:**  
+Preload tag counts from a single query (e.g., `SELECT tag_id, COUNT(*) ... GROUP BY tag_id`) before building the dialog, and pass a `Map<String,int>` into the widget. Remove the per-row FutureBuilder to avoid N+1 queries.
 
----
-
-## Issue Summary (to be filled by Codex)
-
-### Original Bugs Status
-
-**Bug #1 (Race conditions):** [✅ Fixed / ⚠️ Partial / ❌ Not Fixed / 🔄 New Issue]
-**Bug #2 (Missing completed param):** [Status]
-**Bug #3 (List mutation):** [Status]
-**Bug #4 (Equality comparison):** [Status]
-**Bug #5 (Tag contradictions):** [Status]
-**Bug #6 (Validation missing):** [Status]
-**Bug #7 (_completedTasks):** [Status]
-
-### New Issues Found
-
-**Total New Issues:** [X]
-
-**By Severity:**
-- CRITICAL: [count] - [List issue numbers]
-- HIGH: [count] - [List issue numbers]
-- MEDIUM: [count] - [List issue numbers]
-- LOW: [count] - [List issue numbers]
-
-**By Type:**
-- Bug: [count]
-- Performance: [count]
-- Architecture: [count]
-- Test Coverage: [count]
-- Documentation: [count]
-
-### Overall Assessment
-
-**Plan Quality:** [✅ Ready to implement / ⚠️ Needs adjustments / ❌ Major issues]
-
-**Confidence Level:** [High / Medium / Low - in completeness of fixes]
+**Impact:** Medium – initial implementation will ship a dialog that always displays “0 tasks”, and the eventual fix risks severe performance issues.
 
 ---
 
-## Answers to Specific Questions
+### MEDIUM – UX/Consistency – Filter presence “Tagged” option does nothing alone
+**Location:** `phase-3.6A-plan-v2.md:600-640`
 
-### Q1: Operation ID overflow concerns?
-**Answer:** [Your analysis]
+**Issue Description:**  
+Selecting “Tagged” is allowed even when `_selectedTagIds` is empty, resulting in the same behavior as “Any”. The plan claims the enum prevents impossible states, but this combination is still useless and can confuse users (the radio button changes yet nothing happens).
 
-### Q2: Future.wait safety with SQLite?
-**Answer:** [Your analysis]
+**Suggested Fix:**  
+When `_presenceFilter` switches to `onlyTagged`, either automatically select all tags, prompt the user to pick at least one, or treat it as “has any tag” (which needs its own query). Document the intended semantics and enforce them.
 
-### Q3: List.unmodifiable sufficient?
-**Answer:** [Your analysis]
-
-### Q4: Validation depth appropriate?
-**Answer:** [Your analysis]
-
-### Q5: Error recovery approach correct?
-**Answer:** [Your analysis]
+**Impact:** Medium – users think they filtered to tagged tasks but see no change.
 
 ---
 
-## Recommendations
+### LOW – Error Handling – setFilter leaves UI in inconsistent state on failure
+**Location:** `phase-3.6A-plan-v2.md:360-420`
 
-**Must Fix Before Implementation:**
-- [List any blocking issues, or "None"]
+**Issue Description:**  
+The catch block logs and re-emits `notifyListeners()` but retains the new `_filterState`. If the query fails, the filter bar shows the attempted filter but the list stays unfiltered. There is no Snackbar/toast acknowledging the failure even though other parts of the plan emphasize user clarity.
 
-**Should Fix (Nice to Have):**
-- [List improvements, or "None"]
+**Suggested Fix:**  
+Capture the previous `_filterState` before mutation; if an exception occurs, restore it and show a Snackbar. Alternatively, set a `filterError` message in state so the UI can inform the user.
 
-**Can Defer:**
-- [List low-priority issues, or "None"]
-
----
-
-## Notes for Claude
-
-**Implementation Priorities:**
-[Any guidance on what to focus on during Day 1-2 implementation]
-
-**Testing Focus Areas:**
-[Specific test cases you recommend based on your review]
-
-**Architecture Suggestions:**
-[Any broader improvements to consider for Phase 3.6B or later]
+**Impact:** Low – inconsistent UI and silent failure; still worth addressing.
 
 ---
 
-**Review completed by:** Codex
-**Date:** [YYYY-MM-DD]
-**Time spent:** [X hours/minutes]
-**Confidence level:** [High / Medium / Low - in thoroughness of review]
+## Summary
+
+**Original Bugs Addressed:** 4 / 7  
+- ✅ Fully fixed: 3, 4, 7  
+- ⚠️ Partially fixed: 1, 3, 5, 6  
+- ❌ Not fixed: 0
+
+**New Issues in v2:** 4 (0 Critical / 1 High / 2 Medium / 1 Low)
+
+**Overall Assessment:** ⚠️ Needs minor adjustments
+
+**Must Address Before Implementation:**
+1. Harden FilterState constructor (and presence filter semantics) to maintain immutability and consistent UX.
+2. Add tag ID validation in `addTagFilter` (or document why it isn’t needed) and consider reverting `_filterState` on query failures.
+3. Replace the per-row `_getTaskCount` FutureBuilder or at least implement the TODO before shipping to avoid misleading counts.
