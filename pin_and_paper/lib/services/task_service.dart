@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
+import '../models/filter_state.dart'; // Phase 3.6A
 import '../models/task.dart';
 import '../models/task_suggestion.dart'; // Phase 2
 import '../utils/constants.dart';
@@ -154,6 +155,105 @@ class TaskService {
       orderBy: 'position ASC',
     );
 
+    return maps.map((map) => Task.fromMap(map)).toList();
+  }
+
+  /// Phase 3.6A: Get filtered tasks by tags and presence
+  ///
+  /// Returns tasks matching the filter criteria:
+  /// - selectedTagIds with OR logic: tasks with ANY of the selected tags
+  /// - selectedTagIds with AND logic: tasks with ALL of the selected tags
+  /// - onlyTagged: tasks with at least one tag
+  /// - onlyUntagged: tasks with no tags
+  /// - No filter active: returns all tasks for the completed status
+  ///
+  /// Always filters by:
+  /// - `completed` status (active vs completed)
+  /// - Excludes soft-deleted tasks (deleted_at IS NULL)
+  ///
+  /// Returns tasks ordered by position.
+  Future<List<Task>> getFilteredTasks(
+    FilterState filter, {
+    required bool completed,
+  }) async {
+    final db = await _dbService.database;
+
+    // Base WHERE conditions (always apply)
+    final baseConditions = [
+      'tasks.deleted_at IS NULL',
+      'tasks.completed = ?',
+    ];
+    final baseArgs = [completed ? 1 : 0];
+
+    // Build query based on filter state
+    String query;
+    List<dynamic> args;
+
+    if (filter.selectedTagIds.isNotEmpty) {
+      // Specific tag filter
+      if (filter.logic == FilterLogic.or) {
+        // OR logic: tasks with ANY of the selected tags
+        query = '''
+          SELECT DISTINCT tasks.*
+          FROM ${AppConstants.tasksTable} tasks
+          INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+          WHERE task_tags.tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            AND ${baseConditions.join(' AND ')}
+          ORDER BY tasks.position DESC;
+        ''';
+        args = [...filter.selectedTagIds, ...baseArgs];
+      } else {
+        // AND logic: tasks with ALL of the selected tags
+        query = '''
+          SELECT tasks.*
+          FROM ${AppConstants.tasksTable} tasks
+          WHERE tasks.id IN (
+            SELECT task_id
+            FROM ${AppConstants.taskTagsTable}
+            WHERE tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            GROUP BY task_id
+            HAVING COUNT(DISTINCT tag_id) = ?
+          )
+            AND ${baseConditions.join(' AND ')}
+          ORDER BY tasks.position DESC;
+        ''';
+        args = [...filter.selectedTagIds, filter.selectedTagIds.length, ...baseArgs];
+      }
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyTagged) {
+      // Show only tasks with at least one tag
+      query = '''
+        SELECT DISTINCT tasks.*
+        FROM ${AppConstants.tasksTable} tasks
+        INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+        WHERE ${baseConditions.join(' AND ')}
+        ORDER BY tasks.position DESC;
+      ''';
+      args = baseArgs;
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyUntagged) {
+      // Show only tasks with no tags
+      query = '''
+        SELECT tasks.*
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE tasks.id NOT IN (
+          SELECT DISTINCT task_id
+          FROM ${AppConstants.taskTagsTable}
+        )
+          AND ${baseConditions.join(' AND ')}
+        ORDER BY tasks.position DESC;
+      ''';
+      args = baseArgs;
+    } else {
+      // No filter active - return all tasks for this completed status
+      query = '''
+        SELECT tasks.*
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE ${baseConditions.join(' AND ')}
+        ORDER BY tasks.position DESC;
+      ''';
+      args = baseArgs;
+    }
+
+    final maps = await db.rawQuery(query, args);
     return maps.map((map) => Task.fromMap(map)).toList();
   }
 

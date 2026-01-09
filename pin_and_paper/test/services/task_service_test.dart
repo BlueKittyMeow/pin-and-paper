@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:pin_and_paper/models/filter_state.dart'; // Phase 3.6A
 import 'package:pin_and_paper/services/task_service.dart';
+import 'package:pin_and_paper/services/tag_service.dart'; // Phase 3.6A
 import 'package:pin_and_paper/services/database_service.dart';
 import '../helpers/test_database_helper.dart';
 
@@ -318,6 +320,254 @@ void main() {
       expect(updated3.position, 0, reason: 'Child3 should be at position 0');
       expect(updated1.position, 1, reason: 'Child1 should be pushed to position 1');
       expect(updated2.position, 2, reason: 'Child2 should be pushed to position 2');
+    });
+  });
+
+  group('getFilteredTasks (Phase 3.6A)', () {
+    late TagService tagService;
+
+    setUp(() {
+      tagService = TagService();
+    });
+
+    test('returns all tasks when filter is inactive', () async {
+      final task1 = await taskService.createTask('Task 1');
+      final task2 = await taskService.createTask('Task 2');
+
+      final filter = FilterState.empty; // No filter
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 2);
+      expect(tasks.map((t) => t.id), containsAll([task1.id, task2.id]));
+    });
+
+    test('filters by completed status', () async {
+      final task1 = await taskService.createTask('Active Task');
+      final task2 = await taskService.createTask('Completed Task');
+      await taskService.toggleTaskCompletion(task2);
+
+      final filter = FilterState.empty;
+
+      // Get active tasks
+      final activeTasks = await taskService.getFilteredTasks(filter, completed: false);
+      expect(activeTasks.length, 1);
+      expect(activeTasks.first.id, task1.id);
+
+      // Get completed tasks
+      final completedTasks = await taskService.getFilteredTasks(filter, completed: true);
+      expect(completedTasks.length, 1);
+      expect(completedTasks.first.id, task2.id);
+    });
+
+    test('excludes soft-deleted tasks', () async {
+      final task1 = await taskService.createTask('Active Task');
+      final task2 = await taskService.createTask('Deleted Task');
+      await taskService.softDeleteTask(task2.id);
+
+      final filter = FilterState.empty;
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 1);
+      expect(tasks.first.id, task1.id);
+    });
+
+    test('OR logic: returns tasks with ANY of the selected tags', () async {
+      final tag1 = await tagService.createTag('work');
+      final tag2 = await tagService.createTag('urgent');
+
+      final task1 = await taskService.createTask('Task 1');
+      final task2 = await taskService.createTask('Task 2');
+      final task3 = await taskService.createTask('Task 3');
+
+      await tagService.addTagToTask(task1.id, tag1.id); // Has work
+      await tagService.addTagToTask(task2.id, tag2.id); // Has urgent
+      // task3 has no tags
+
+      final filter = FilterState(
+        selectedTagIds: [tag1.id, tag2.id],
+        logic: FilterLogic.or,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 2);
+      expect(tasks.map((t) => t.id), containsAll([task1.id, task2.id]));
+      expect(tasks.map((t) => t.id), isNot(contains(task3.id)));
+    });
+
+    test('AND logic: returns tasks with ALL of the selected tags', () async {
+      final tag1 = await tagService.createTag('work');
+      final tag2 = await tagService.createTag('urgent');
+
+      final task1 = await taskService.createTask('Task 1');
+      final task2 = await taskService.createTask('Task 2');
+      final task3 = await taskService.createTask('Task 3');
+
+      await tagService.addTagToTask(task1.id, tag1.id); // Only work
+      await tagService.addTagToTask(task2.id, tag1.id); // Both work and urgent
+      await tagService.addTagToTask(task2.id, tag2.id);
+      await tagService.addTagToTask(task3.id, tag2.id); // Only urgent
+
+      final filter = FilterState(
+        selectedTagIds: [tag1.id, tag2.id],
+        logic: FilterLogic.and,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 1);
+      expect(tasks.first.id, task2.id); // Only task2 has both tags
+    });
+
+    test('onlyTagged: returns only tasks with at least one tag', () async {
+      final tag = await tagService.createTag('work');
+
+      final task1 = await taskService.createTask('Tagged Task');
+      final task2 = await taskService.createTask('Untagged Task');
+
+      await tagService.addTagToTask(task1.id, tag.id);
+
+      final filter = FilterState(
+        presenceFilter: TagPresenceFilter.onlyTagged,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 1);
+      expect(tasks.first.id, task1.id);
+    });
+
+    test('onlyUntagged: returns only tasks with no tags', () async {
+      final tag = await tagService.createTag('work');
+
+      final task1 = await taskService.createTask('Tagged Task');
+      final task2 = await taskService.createTask('Untagged Task');
+
+      await tagService.addTagToTask(task1.id, tag.id);
+
+      final filter = FilterState(
+        presenceFilter: TagPresenceFilter.onlyUntagged,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 1);
+      expect(tasks.first.id, task2.id);
+    });
+
+    test('single tag filter works correctly', () async {
+      final tag = await tagService.createTag('work');
+
+      final task1 = await taskService.createTask('Task 1');
+      final task2 = await taskService.createTask('Task 2');
+
+      await tagService.addTagToTask(task1.id, tag.id);
+
+      final filter = FilterState(
+        selectedTagIds: [tag.id],
+        logic: FilterLogic.or,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 1);
+      expect(tasks.first.id, task1.id);
+    });
+
+    test('returns empty list when no tasks match filter', () async {
+      final tag = await tagService.createTag('work');
+
+      await taskService.createTask('Untagged Task 1');
+      await taskService.createTask('Untagged Task 2');
+
+      final filter = FilterState(
+        selectedTagIds: [tag.id],
+        logic: FilterLogic.or,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks, isEmpty);
+    });
+
+    test('combines tag filter with completed filter correctly', () async {
+      final tag = await tagService.createTag('work');
+
+      final task1 = await taskService.createTask('Active with tag');
+      final task2 = await taskService.createTask('Completed with tag');
+      final task3 = await taskService.createTask('Active without tag');
+
+      await tagService.addTagToTask(task1.id, tag.id);
+      await tagService.addTagToTask(task2.id, tag.id);
+      await taskService.toggleTaskCompletion(task2);
+
+      final filter = FilterState(
+        selectedTagIds: [tag.id],
+        logic: FilterLogic.or,
+      );
+
+      // Active tasks with tag
+      final activeTasks = await taskService.getFilteredTasks(filter, completed: false);
+      expect(activeTasks.length, 1);
+      expect(activeTasks.first.id, task1.id);
+
+      // Completed tasks with tag
+      final completedTasks = await taskService.getFilteredTasks(filter, completed: true);
+      expect(completedTasks.length, 1);
+      expect(completedTasks.first.id, task2.id);
+    });
+
+    test('AND logic with 3+ tags', () async {
+      final tag1 = await tagService.createTag('work');
+      final tag2 = await tagService.createTag('urgent');
+      final tag3 = await tagService.createTag('personal');
+
+      final task1 = await taskService.createTask('Task with all 3 tags');
+      final task2 = await taskService.createTask('Task with 2 tags');
+
+      await tagService.addTagToTask(task1.id, tag1.id);
+      await tagService.addTagToTask(task1.id, tag2.id);
+      await tagService.addTagToTask(task1.id, tag3.id);
+
+      await tagService.addTagToTask(task2.id, tag1.id);
+      await tagService.addTagToTask(task2.id, tag2.id);
+
+      final filter = FilterState(
+        selectedTagIds: [tag1.id, tag2.id, tag3.id],
+        logic: FilterLogic.and,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(tasks.length, 1);
+      expect(tasks.first.id, task1.id);
+    });
+
+    test('tasks are ordered by position', () async {
+      final tag = await tagService.createTag('work');
+
+      // Create tasks in specific order
+      final task1 = await taskService.createTask('Task 1');
+      final task2 = await taskService.createTask('Task 2');
+      final task3 = await taskService.createTask('Task 3');
+
+      // Tag all tasks
+      await tagService.addTagToTask(task1.id, tag.id);
+      await tagService.addTagToTask(task2.id, tag.id);
+      await tagService.addTagToTask(task3.id, tag.id);
+
+      final filter = FilterState(
+        selectedTagIds: [tag.id],
+        logic: FilterLogic.or,
+      );
+
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      // Should be ordered by position DESC (newest first)
+      expect(tasks.length, 3);
+      expect(tasks[0].id, task3.id); // Newest (highest position)
+      expect(tasks[1].id, task2.id);
+      expect(tasks[2].id, task1.id); // Oldest (lowest position)
     });
   });
 }
