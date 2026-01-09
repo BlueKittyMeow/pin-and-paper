@@ -94,14 +94,14 @@ Read the **Executive Summary** in `phase-3.6A-ultrathink.md` (lines 1-30)
 - Edge case handling
 - Performance bottlenecks
 
-### Codex 🏗️
-**Strengths:** Flutter/Dart patterns, architecture, state management
+### Codex 🐛
+**Strengths:** Bug detection, code correctness, Dart/Flutter idioms
 **Focus Areas:**
-- FilterState design
-- Provider pattern usage
-- Race condition prevention
-- Widget architecture
-- Code organization
+- Finding bugs (null errors, crashes, race conditions)
+- Null safety validation
+- Async pattern issues
+- Edge case handling
+- Idiomatic Dart/Flutter patterns
 
 ### Claude (That's Me!) 🤖
 **Role:** Synthesize feedback, implement changes, coordinate
@@ -122,10 +122,11 @@ Read the **Executive Summary** in `phase-3.6A-ultrathink.md` (lines 1-30)
 4. Any edge cases we haven't considered?
 
 **From Codex:**
-1. Is FilterState design sound?
-2. Should we use TaskProvider or create FilterProvider?
-3. Is the race condition pattern robust?
-4. Are we following Flutter best practices?
+1. Are there any bugs in the proposed code? (null errors, crashes, etc.)
+2. Is the null safety handling correct?
+3. Will the async patterns work without race conditions?
+4. What edge cases could cause failures?
+5. Are we using idiomatic Dart/Flutter patterns?
 
 ---
 
