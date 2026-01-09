@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
 **Version:** 3.5 (Phase 3 In Progress)
-**Last Updated:** 2026-01-05
+**Last Updated:** 2026-01-06
 **Primary Device:** Samsung Galaxy S22 Ultra
-**Current Phase:** Phase 3.5 Complete - Working on Phase 3.6
+**Current Phase:** Phase 3.5 Complete - Validation & Planning Phase 3.6
 
 ---
 
@@ -34,6 +34,7 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.4:** Task Editing (Due Dates, Notes, etc.) - Complete (Dec 2025)
 ✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 5, 2026)
 🔜 **Phase 3.6:** Tag Search & Filtering - In Planning
+⚠️ **Phase 3.6.5:** Edit Task Modal Rework - Required Before 3.7
 🔜 **Phase 3.7:** Natural Language Date Parsing - Planned
 🔜 **Phase 3.8:** Due Date Notifications - Planned
 
@@ -458,12 +459,51 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Search indexes for performance
 - Combined filters
 
+**Enhanced from Fix #C3 Validation (Jan 9, 2026):**
+- **Universal Search** (magnifying glass icon 🔍)
+  - Search active + completed tasks (not just active)
+  - Filter checkboxes: All tasks / Current / Recently completed / Completed
+  - Search includes: titles, notes, tags
+  - Results grouped by section (Active / Completed)
+- **Tag Filtering UI** (filter icon ⚙️ or tag icon 🏷️)
+  - Clickable tag chips throughout app
+  - Tag selection dialog with multi-select
+  - AND/OR logic toggle
+  - Show tag count (e.g., "Work (12 tasks)")
+  - Quick filter bar showing selected tags
+- See: `docs/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
+
 **Deferred from Phase 3.5 Validation:**
 - Tag color palette review (red too pink, blues too similar, brown unclear) - Low priority UX polish
 - Standalone tag creation UI (currently requires task attachment) - Medium priority enhancement
 - Duplicate tag UI validation (backend prevents duplicates, UI can improve) - Low priority
 - Keyboard capitalization preference - Defer to Settings phase
 - See `docs/future/future.md` for full details and rationale
+
+**Phase 3.6.5: Edit Task Modal Rework** 🔜 ⚠️ **REQUIRED BEFORE PHASE 3.7** (1 week)
+- **Current limitation:** Edit modal only allows changing task title
+- **Need:** Comprehensive edit modal with all task fields
+  - Title (currently implemented)
+  - Due date picker (needed before Phase 3.7)
+  - Notes/description field
+  - Tag management (inline)
+  - Parent task selector (change nesting)
+- **Rationale:** Must have robust editing UI before adding natural language date parsing
+- **UX Decision:** Already agreed to remove confusing "+ Add Tag" chip; context menu only
+- **Priority:** Blocking for Phase 3.7 date features
+
+**New from Fix #C3 Validation (Jan 9, 2026):**
+- **Completed Task Metadata View** (HIGH priority)
+  - Click completed task to open read-only modal
+  - Show: created/completed timestamps, duration, tags, notes, full hierarchy
+  - Actions: "View in Context", "Uncomplete", "Delete Permanently"
+  - Use case: Task history, journaling, "temporal proof of existence"
+- **Show Completed Parents with Incomplete Children** (MEDIUM priority)
+  - Display completed parent in completed section even if children incomplete
+  - Visual indicator: dimmed text, icon, or "X incomplete children" badge
+  - Clicking navigates to active task list to show context
+  - Optional: Make this a user preference
+- See: `docs/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
 
 **Phase 3.7: Natural Language Date Parsing** 🔜 (1-2 weeks)
 - Parse relative dates ("tomorrow", "next Tuesday", "in 3 days")
@@ -993,31 +1033,34 @@ This section documents major architectural and scope decisions made during plann
 
 ## Next Steps
 
-**Current Phase:** Phase 3.6 - Tag Search & Filtering (In Planning)
+**Current Phase:** Phase 3.5 Complete - Validation in Progress (Jan 6, 2026)
 
 **Immediate Actions:**
-1. Complete Phase 3.6 planning document
-2. Design search UI and filter interface
-3. Plan search indexes for performance optimization
-4. Begin Phase 3.6 implementation
-5. Update documentation workflow in phase checklists
+1. Complete Phase 3.5 Fix #C3 validation (completed task hierarchy)
+2. Document UX decisions (removed "+ Add Tag" chip, context menu only)
+3. Plan Phase 3.6 (Tag Search & Filtering)
+4. ⚠️ **Plan Phase 3.6.5 (Edit Task Modal Rework)** - Required before Phase 3.7
 
 **Completed Recently:**
-- ✅ Phase 3.5: Comprehensive Tagging System (Jan 5, 2026)
-  - 78 tests passing, WCAG AA compliant
-  - Dual AI code review (all findings addressed)
+- ✅ Phase 3.5: Comprehensive Tagging System (Jan 5-6, 2026)
+  - 154+ tests passing (including 6 new hierarchy tests)
+  - Dual AI code review (Gemini + Codex)
+  - Fix #C3: Completed task hierarchy preserved (depth + hasChildren)
+  - UX improvements: breadcrumb icons, right-click support, removed confusing UI
   - Database v6 migration complete
 
-**Upcoming After 3.6:**
+**Upcoming Phases:**
+- Phase 3.6: Tag Search & Filtering (2-3 weeks)
+- **Phase 3.6.5: Edit Task Modal Rework (1 week)** ⚠️ BLOCKING for 3.7
 - Phase 3.7: Natural Language Date Parsing (1-2 weeks)
 - Phase 3.8: Due Date Notifications (1-2 weeks)
 - Phase 4: Bounded Workspace View (4-5 weeks)
 
 ---
 
-**Document Status:** ✅ Up to Date (Phase 3.5 Complete)
-**Last Review:** January 5, 2026
-**Next Review:** After Phase 3.6-3.8 completion
+**Document Status:** ✅ Up to Date (Phase 3.5 Complete + 3.6.5 Planning Added)
+**Last Review:** January 6, 2026
+**Next Review:** After Phase 3.6.5-3.8 completion
 
 **See Also:**
 - `visual-design.md` - Complete aesthetic specification

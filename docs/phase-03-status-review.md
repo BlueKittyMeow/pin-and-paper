@@ -1,7 +1,8 @@
 # Phase 3 Status Review
 
-**Date:** 2025-01-05
+**Date:** 2026-01-09 (Updated from 2026-01-05)
 **Purpose:** Review what's been completed in Phase 3 and determine next steps
+**Status:** Phase 3.5 COMPLETE with Fix #C3 validated
 
 ---
 
@@ -75,25 +76,39 @@ Original planned features:
 - WCAG AA compliant text colors
 - Tag display with overflow handling
 - Search and filter in tag picker
-- 78 comprehensive tests
+- 160+ comprehensive tests (all passing)
 - All AI review findings addressed (6 UX + 5 technical)
+- **Fix #C3: Completed Task Hierarchy Preserved** ✅
+  - Completed tasks maintain depth and hasChildren indicators
+  - Breadcrumbs with ↳ icon + italic text
+  - O(N) performance optimizations (5 Codex fixes validated)
+  - 6 new unit tests for hierarchy edge cases
+  - Manual validation: 9/9 tests passed
+  - Ready for Phase 4 daybook/journal view
 
 ---
 
 ## Current Test Status
 
-### Phase 3.5 Tests: ✅ 78/78 Passing (100%)
+### Phase 3.5 Tests: ✅ 160+/160+ Passing (100%)
 - Tag Model: 23 tests
 - TagService: 21 tests
 - TagColors: 7 tests
 - Database Migration v6: 3 tests
-- Widget test: 1 test (fixed for 3.5 compatibility)
+- Widget tests: Multiple tests
+- **Completed Task Hierarchy (Fix #C3): 6 tests** (NEW)
+  - Simple hierarchy
+  - Orphaned children
+  - Deep nesting (3+ levels)
+  - Multiple independent trees
+  - Position-based sorting
+  - hasCompletedChildren indicator
+- Manual testing: 9/9 test scenarios passed
 
-### Pre-Existing Failures: ⚠️ 21 failing tests
-- All in `task_service_soft_delete_test.dart`
-- Test isolation issue (not Phase 3.5 related)
-- Verified to exist in pre-Phase 3.5 code
-- Priority: LOW (can be fixed in cleanup)
+### Pre-Existing Failures: ✅ RESOLVED
+- All tests now passing (100% pass rate)
+- Test isolation issues resolved
+- No outstanding test failures
 
 ---
 
@@ -194,21 +209,38 @@ Features:
 
 ## My Recommendation
 
-**Go with Option C (Hybrid):**
+**Updated Plan (Jan 9, 2026) - Option C (Hybrid) with Validation Enhancements:**
 
-1. ✅ **Phase 3.5 complete** (tags)
+1. ✅ **Phase 3.5 complete** (tags + Fix #C3 validated)
 2. 🔜 **Phase 3.6: Search & Tag Filtering** (2-3 weeks)
-   - High value feature
-   - Completes the tag system
-   - Enables finding tasks quickly
-3. 🎯 **Phase 4: Workspace View** (4-5 weeks)
+   - **Enhanced from Fix #C3 validation:**
+   - Universal search (magnifying glass icon) - active + completed tasks
+   - Tag filtering with clickable chips and multi-select
+   - Search includes titles, notes, tags
+   - High value feature - Completes the tag system
+3. 🔜 **Phase 3.6.5: Edit Task Modal Rework** (1 week) ⚠️ **REQUIRED BEFORE 3.7**
+   - **New priority from validation:**
+   - Comprehensive modal (title, due date, notes, tags, parent selector)
+   - **Completed task metadata view** (HIGH priority)
+     - Click completed task → see created/completed timestamps, duration
+     - Full details: tags, notes, hierarchy breadcrumb
+     - Actions: View in Context, Uncomplete, Delete
+     - **Foundation for Phase 4 "card view" in desk GUI**
+   - Show completed parents with incomplete children (visual indicator)
+4. 🔜 **Phase 3.7: Natural Language Dates** (1-2 weeks)
+5. 🔜 **Phase 3.8: Notifications** (1-2 weeks)
+6. 🎯 **Phase 4: Workspace View** (4-5 weeks)
    - Big visual differentiator
    - Core to product vision
-   - Can add search/notifications later
+   - Card view modal already built in Phase 3.6.5
 
 **Defer to future:**
-- Phase 3.7+: Notifications, templates, voice input, widget
+- Phase 6+: Templates, voice input, widget
 - These can be added anytime as polish features
+
+**See Also:**
+- `docs/phase-03/phase-3.5-fix-c3-validation-summary.md` - Full validation results
+- `docs/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md` - Enhancement planning
 
 ---
 

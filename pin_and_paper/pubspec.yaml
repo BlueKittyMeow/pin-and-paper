@@ -2,9 +2,9 @@ name: pin_and_paper
 description: ADHD-friendly task management with beautiful aesthetic
 publish_to: 'none'
 # Version format: MAJOR.MINOR.PATCH+BUILD
-# 0.3.2 = Phase 3.2 in progress (hierarchical tasks)
-# +2 = Build number (increment with each build)
-version: 0.3.2+2
+# 0.3.5 = Phase 3.5 complete (tagging system + Fix #C3 validated)
+# +3 = Build number (increment with each build)
+version: 0.3.5+3
 
 environment:
   sdk: '>=3.5.0 <4.0.0'  # Supports Flutter 3.24+ (Dart 3.5+) through current stable

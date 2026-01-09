@@ -244,14 +244,28 @@ class TaskItem extends StatelessWidget {
                 right: 12,
                 top: 8,
               ),
-              child: Text(
-                breadcrumb!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-                softWrap: true,
-                overflow: TextOverflow.visible,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.subdirectory_arrow_right,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      breadcrumb!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                      softWrap: true,
+                      overflow: TextOverflow.visible,
+                    ),
+                  ),
+                ],
               ),
             ),
           ListTile(
@@ -307,10 +321,10 @@ class TaskItem extends StatelessWidget {
                 : null,
           ),
 
-          // Phase 3.5: Display tags or "Add Tag" prompt
-          // Gemini review: Show "+ Add Tag" for discoverability when no tags exist
-          // Fix #C2: Show tags in reorder mode (but hide "+ Add Tag")
-          if (tags == null || tags!.isEmpty || tags!.isNotEmpty)
+          // Phase 3.5: Display tags (only when tags exist)
+          // Fix #C2: Show tags in reorder mode
+          // UX Decision: No "+ Add Tag" chip - use context menu only
+          if (tags != null && tags!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(
                 left: 60, // Align with title (24px collapse + 24px checkbox + 12px padding)
@@ -320,80 +334,45 @@ class TaskItem extends StatelessWidget {
               child: Wrap(
                 spacing: 6,
                 runSpacing: 4,
-                children: tags == null || tags!.isEmpty
-                    ? (!isReorderMode ? [
-                        // Gemini review: Discoverability chip when no tags
-                        GestureDetector(
-                          onTap: () => _handleManageTags(context),
-                          child: Material(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.add,
-                                    size: 14,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Add Tag',
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                children: [
+                  // Show first 3 tags
+                  ...tags!.take(3).map((tag) {
+                    return CompactTagChip(tag: tag);
+                  }),
+                  // Show "+N more" chip if there are more than 3 tags
+                  if (tags!.length > 3)
+                    Material(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          '+${tags!.length - 3} more',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 12,
                           ),
                         ),
-                      ] : []) // In reorder mode, show nothing when no tags
-                    : [
-                        // Show first 3 tags
-                        ...tags!.take(3).map((tag) {
-                          return CompactTagChip(tag: tag);
-                        }),
-                        // Show "+N more" chip if there are more than 3 tags
-                        if (tags!.length > 3)
-                          Material(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              child: Text(
-                                '+${tags!.length - 3} more',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
+                      ),
+                    ),
+                ],
               ),
             ),
         ],
       ),
     );
 
-    // Only enable context menu (long-press) when NOT in reorder mode
+    // Only enable context menu (long-press/right-click) when NOT in reorder mode
     // In reorder mode, TreeDraggable handles the long-press for dragging
     if (isReorderMode) {
       return taskContainer;
     }
 
     return GestureDetector(
-      // Phase 3.2: Long-press to show context menu (disabled in reorder mode)
+      // Phase 3.2: Long-press (mobile) and right-click (desktop) to show context menu
       onLongPressStart: (details) {
         TaskContextMenu.show(
           context: context,
@@ -402,6 +381,17 @@ class TaskItem extends StatelessWidget {
           onDelete: () => _handleDelete(context),
           onEdit: () => _handleEdit(context), // Phase 3.4
           onManageTags: () => _handleManageTags(context), // Phase 3.5
+        );
+      },
+      // Add right-click support for desktop (Linux, Windows, macOS)
+      onSecondaryTapDown: (details) {
+        TaskContextMenu.show(
+          context: context,
+          task: task,
+          position: details.globalPosition,
+          onDelete: () => _handleDelete(context),
+          onEdit: () => _handleEdit(context),
+          onManageTags: () => _handleManageTags(context),
         );
       },
       child: taskContainer,

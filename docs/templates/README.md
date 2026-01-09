@@ -2,7 +2,7 @@
 
 **Purpose:** Central guide for all project documentation templates
 **Audience:** BlueKitty + Claude + Team Agents (Codex, Gemini)
-**Last Updated:** 2025-01-05
+**Last Updated:** 2026-01-06
 
 ---
 
@@ -12,6 +12,7 @@
 |----------|---------|-------------|-------------|
 | [review-template.md](./review-template.md) | Pre-implementation review | Before coding starts | `phase-XXA-review-v1.md` |
 | [validation-template.md](./validation-template.md) | Post-implementation validation | After coding complete | `phase-X.Y-validation-v1.md` |
+| [manual-test-plan-template.md](./manual-test-plan-template.md) | Manual testing checklist | During validation | `phase-X.Y-manual-test-plan.md` |
 | [codex-findings-template.md](./codex-findings-template.md) | Codex code review findings | During validation | `codex-findings-phase-X.Y.md` |
 | [gemini-findings-template.md](./gemini-findings-template.md) | Gemini build/analysis findings | During validation | `gemini-findings-phase-X.Y.md` |
 | [phase-start-checklist.md](./phase-start-checklist.md) | Phase initialization | Starting new phase | Follow checklist steps |
@@ -627,6 +628,7 @@ All templates support customization:
 |---------|------|---------|
 | 1.0 | 2025-10-30 | Initial templates created based on Phase 3.1 learnings |
 | 1.1 | 2025-01-05 | Added README.md based on Phase 3.5 experience |
+| 1.2 | 2026-01-06 | Added manual-test-plan-template.md with checkbox legend system |
 
 ---
 
@@ -643,6 +645,69 @@ All templates support customization:
 - Provide clear examples
 - Link related documents
 - Update all related docs when making changes
+
+---
+
+---
+
+## 🧪 Manual Test Plan Template (NEW!)
+
+**File:** [manual-test-plan-template.md](./manual-test-plan-template.md)
+
+**Use When:**
+- ✅ Need structured manual testing for a feature
+- ✅ Validating complex UI/UX behavior
+- ✅ Testing features that are hard to automate
+- ✅ Device-specific testing (phone, tablet, desktop)
+
+**Don't Use When:**
+- ❌ Can be fully covered by unit/widget tests
+- ❌ Simple bug fixes (use findings docs)
+
+**Key Features:**
+- Legend with checkbox meanings (`[ ]`, `[X]`, `[0]`, `[/]`, `[NA]`)
+- Pre-test setup checklist
+- Test sections with sub-steps
+- Expected vs Actual results sections
+- Screenshot placeholders
+- Performance testing template
+- Regression testing checklist
+- Edge case testing
+- Final sign-off section
+
+**Legend System:**
+```markdown
+- [ ] : Pending
+- [X] : Completed successfully
+- [0] : Failed
+- [/] : Neither successful nor failure
+- [NA] : Not applicable
+
+** : Notes appended with asterisks
+```
+
+**Example Usage:**
+```bash
+# Create manual test plan for Phase 3.5 tagging
+cp docs/templates/manual-test-plan-template.md \
+   docs/phase-03/phase-3.5-manual-test-plan.md
+
+# Fill out test cases, give to BlueKitty for testing
+# BlueKitty marks checkboxes and adds notes with **
+# Review results and address any [0] failures
+```
+
+**Real Example:**
+- `docs/phase-03/phase-3.5-manual-test-plan.md` - Phase 3.5 tagging system
+- `docs/phase-03/phase-3.5-fix-c3-manual-test-plan.md` - Fix #C3 hierarchy testing
+
+**Process:**
+1. Copy template to phase directory
+2. Customize test scenarios for your feature
+3. Tester fills in checkboxes during testing
+4. Tester adds notes with `**` for observations
+5. Review results and fix any `[0]` failures
+6. Re-test until all pass `[X]`
 
 ---
 

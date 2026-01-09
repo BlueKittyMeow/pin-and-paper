@@ -129,15 +129,25 @@ Data Layer (SQLite)
 - ✅ **Phase 3.3:** Recently Deleted - soft delete with 30-day recovery (Dec 2025)
 - ✅ **Phase 3.4:** Task editing - due dates, notes, start dates, notifications (Dec 2025)
 - ✅ **Phase 3.5:** Comprehensive Tagging System (Jan 2026)
-  - 78 comprehensive tests (100% passing)
+  - 160+ comprehensive tests (100% passing)
   - Tag picker with search/filter/create
   - Color picker with 12 Material Design presets
   - WCAG AA compliant colors (4.5:1 contrast)
   - Smart overflow handling (3 tags + "+N more")
-  - Batch loading for 900+ tasks
+  - **Fix #C3:** Completed task hierarchy preserved (depth + hasChildren)
+  - Performance optimized for 60+ hierarchical completed tasks
+  - Breadcrumbs with visual indicators (↳ icon + italic text)
+  - Validation complete with future enhancements identified
 
 **Next Up:**
 - 🔜 **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
+  - Universal search (active + completed tasks)
+  - Tag-based filtering with multi-select
+  - Clickable tag chips throughout app
+- ⚠️ **Phase 3.6.5:** Edit Task Modal Rework (1 week) - **Required before 3.7**
+  - Comprehensive edit modal with all task fields
+  - **Completed task metadata view** (created/completed timestamps, full details)
+  - Show completed parents with incomplete children (with visual indicator)
 - 🔜 **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
 - 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
 
@@ -260,12 +270,26 @@ Each phase builds on the previous:
 
 ### Current Stats
 - **~8,000+ lines of production code**
-- **154 tests passing** (95%+ pass rate)
+- **160+ tests passing** (100% pass rate)
 - **Database:** v6 (6 migrations complete)
 - **Phases completed:** 2 full phases + 5 subphases
+- **Fix #C3 validated:** Completed task hierarchy preserved for Phase 4 daybook
 
 ### Next Up
 - **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
+  - Universal search with magnifying glass icon (active + completed)
+  - Tag filtering with clickable chips and multi-select
+  - Search includes titles, notes, tags
+- **Phase 3.6.5:** Edit Task Modal Rework (1 week) ⚠️ **Blocking for Phase 3.7**
+  - Current edit modal only allows title changes
+  - Need comprehensive modal with due date picker, notes, tags, parent selector
+  - **Completed task metadata view** - Click completed task to see full details:
+    - Created/completed timestamps, duration calculation
+    - Tags, notes, full hierarchy breadcrumb
+    - Actions: View in Context, Uncomplete, Delete
+    - Foundation for Phase 4 "card view" in desk GUI
+  - Show completed parents with incomplete children (visual indicator)
+  - Required before natural language date parsing features
 - **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
 - **Phase 3.8:** Due Date Notifications (1-2 weeks)
 - **Then:** Phase 4 (Spatial Workspace View)
