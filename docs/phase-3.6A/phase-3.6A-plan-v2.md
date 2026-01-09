@@ -1,8 +1,8 @@
 # Phase 3.6A Plan: Tag Filtering (v2)
 
-**Version:** 2 (incorporates Gemini + Codex review feedback)
+**Version:** 2.1 (incorporates Gemini + Codex review feedback + Gemini v2 UX polish)
 **Created:** 2026-01-09
-**Updated:** 2026-01-09 (post-review)
+**Updated:** 2026-01-09 (post-review, added v2 UX polish)
 **Status:** Ready for Implementation
 **Branch:** `phase-3.6A-tag-filtering`
 
@@ -23,6 +23,11 @@
 1. 🟢 Added `toJson`/`fromJson` methods (future-proofing for Phase 6+ persistence)
 2. 🟢 Pinned "Clear All" button in ActiveFilterBar (UX polish)
 3. 🟢 Dialog search state preservation + test (power user UX)
+
+**UX polish from Gemini v2 review (all approved):**
+1. 🎯 Scroll position reset when filter changes (prevent disorienting UX)
+2. 🎨 Ghost tag handling in ActiveFilterBar (hide deleted tags gracefully)
+3. 📳 Haptic feedback for filter interactions (tactile response)
 
 **See:** `docs/phase-3.6A/review-analysis.md` for detailed rationale on each fix.
 
@@ -526,6 +531,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_position ON tasks(position);
 **1. TagFilterDialog** (`lib/widgets/tag_filter_dialog.dart`)
 
 ```dart
+import 'package:flutter/services.dart'; // For HapticFeedback
+
 /// Dialog for advanced tag filtering with multi-select and logic options.
 ///
 /// Features:
@@ -534,6 +541,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_position ON tasks(position);
 /// - AND/OR logic toggle
 /// - Tag presence radio buttons (mutually exclusive)
 /// - Task count per tag
+/// - Haptic feedback for interactions (UX polish)
 class TagFilterDialog extends StatefulWidget {
   final FilterState initialFilter;
   final List<Tag> allTags;
@@ -687,6 +695,9 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
                     onChanged: _tagSelectionDisabled
                         ? null
                         : (bool? value) {
+                            // UX POLISH: Light haptic feedback for checkbox toggle
+                            HapticFeedback.lightImpact();
+
                             setState(() {
                               if (value == true) {
                                 _selectedTagIds.add(tag.id);
@@ -709,6 +720,9 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
         ),
         FilledButton(
           onPressed: () {
+            // UX POLISH: Medium haptic feedback for major action
+            HapticFeedback.mediumImpact();
+
             final filter = FilterState(
               selectedTagIds: _selectedTagIds.toList(),
               logic: _logic,
@@ -736,16 +750,20 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
 - ✅ Disables specific tags when "untagged" selected (prevents contradictions)
 - ✅ Shows AND/OR toggle only when multiple tags selected
 - ✅ Task count per tag (requires new TagService method)
+- ✅ Haptic feedback: Light impact for checkboxes, medium impact for Apply (tactile response)
 
 ---
 
 **2. ActiveFilterBar** (`lib/widgets/active_filter_bar.dart`)
 
 ```dart
+import 'package:flutter/services.dart'; // For HapticFeedback
+
 /// Displays active filters below the app bar.
 ///
 /// Shows selected tags as chips with remove buttons.
 /// "Clear All" button is pinned on the right and doesn't scroll.
+/// Provides haptic feedback for Clear All action (UX polish).
 class ActiveFilterBar extends StatelessWidget {
   final FilterState filterState;
   final List<Tag> allTags;
@@ -765,6 +783,12 @@ class ActiveFilterBar extends StatelessWidget {
     if (!filterState.isActive) {
       return const SizedBox.shrink(); // Hide when no filters
     }
+
+    // UX POLISH: Filter out ghost tags (deleted tags that are still in filter state)
+    // Instead of showing "Unknown", we hide them gracefully (self-healing UI)
+    final validTagIds = filterState.selectedTagIds
+        .where((id) => allTags.any((t) => t.id == id))
+        .toList();
 
     return Container(
       height: 56,
@@ -787,8 +811,8 @@ class ActiveFilterBar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  // Tag chips
-                  for (final tagId in filterState.selectedTagIds) ...[
+                  // Tag chips (only valid tags)
+                  for (final tagId in validTagIds) ...[
                     _buildTagChip(context, tagId),
                     const SizedBox(width: 8),
                   ],
@@ -812,7 +836,11 @@ class ActiveFilterBar extends StatelessWidget {
           // Pinned "Clear All" button (doesn't scroll)
           const SizedBox(width: 8),
           TextButton(
-            onPressed: onClearAll,
+            onPressed: () {
+              // UX POLISH: Medium haptic feedback for major action
+              HapticFeedback.mediumImpact();
+              onClearAll();
+            },
             child: const Text('Clear All'),
           ),
         ],
@@ -821,10 +849,8 @@ class ActiveFilterBar extends StatelessWidget {
   }
 
   Widget _buildTagChip(BuildContext context, String tagId) {
-    final tag = allTags.firstWhere(
-      (t) => t.id == tagId,
-      orElse: () => Tag(id: tagId, name: 'Unknown', color: 0xFF9E9E9E),
-    );
+    // Safe to use firstWhere without orElse since we filtered validTagIds above
+    final tag = allTags.firstWhere((t) => t.id == tagId);
 
     return Chip(
       label: Text(tag.name),
@@ -873,6 +899,8 @@ class ActiveFilterBar extends StatelessWidget {
 - ✅ Shows tag chips, presence filter, and logic indicator
 - ✅ Material 3 design with proper elevation and colors
 - ✅ Hides automatically when no filters active
+- ✅ Ghost tag handling: Hides deleted tags gracefully instead of showing "Unknown" (self-healing UI)
+- ✅ Haptic feedback: Medium impact for Clear All (tactile response)
 
 ---
 
@@ -923,40 +951,101 @@ FilterableTagChip(
 **TaskListScreen** (`lib/screens/task_list_screen.dart`)
 
 ```dart
-// Add to app bar actions:
-IconButton(
-  icon: Badge(
-    isLabelVisible: taskProvider.hasActiveFilters,
-    child: const Icon(Icons.filter_alt),
-  ),
-  tooltip: 'Filter tasks',
-  onPressed: () => _showFilterDialog(context),
-),
+class _TaskListScreenState extends State<TaskListScreen> {
+  late ScrollController _scrollController;
+  FilterState? _previousFilterState;
 
-// Add below app bar:
-ActiveFilterBar(
-  filterState: taskProvider.filterState,
-  allTags: tagProvider.tags,
-  onClearAll: () => taskProvider.clearFilters(),
-  onRemoveTag: (tagId) => taskProvider.removeTagFilter(tagId),
-),
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _previousFilterState = context.read<TaskProvider>().filterState;
+  }
 
-// Filter dialog handler:
-Future<void> _showFilterDialog(BuildContext context) async {
-  final taskProvider = context.read<TaskProvider>();
-  final tagProvider = context.read<TagProvider>();
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
-  final result = await showDialog<FilterState>(
-    context: context,
-    builder: (_) => TagFilterDialog(
-      initialFilter: taskProvider.filterState,
-      allTags: tagProvider.tags,
-    ),
-  );
+  // UX POLISH: Reset scroll position when filter changes
+  // Prevents user from staring at empty space if they were scrolled down
+  void _checkFilterChange(TaskProvider taskProvider) {
+    if (_previousFilterState != taskProvider.filterState) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0); // Reset to top
+      }
+      _previousFilterState = taskProvider.filterState;
+    }
+  }
 
-  // Check context is still mounted after async operation
-  if (result != null && context.mounted) {
-    await taskProvider.setFilter(result);
+  @override
+  Widget build(BuildContext context) {
+    final taskProvider = context.watch<TaskProvider>();
+    final tagProvider = context.watch<TagProvider>();
+
+    // Check for filter changes and reset scroll if needed
+    _checkFilterChange(taskProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Tasks'),
+        actions: [
+          // Filter button with badge
+          IconButton(
+            icon: Badge(
+              isLabelVisible: taskProvider.hasActiveFilters,
+              child: const Icon(Icons.filter_alt),
+            ),
+            tooltip: 'Filter tasks',
+            onPressed: () => _showFilterDialog(context),
+          ),
+          // ... other actions
+        ],
+      ),
+      body: Column(
+        children: [
+          // Active filter bar (shows when filters applied)
+          ActiveFilterBar(
+            filterState: taskProvider.filterState,
+            allTags: tagProvider.tags,
+            onClearAll: () => taskProvider.clearFilters(),
+            onRemoveTag: (tagId) => taskProvider.removeTagFilter(tagId),
+          ),
+
+          // Task list with scroll controller
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController, // Use our scroll controller
+              itemCount: taskProvider.tasks.length,
+              itemBuilder: (context, index) {
+                // ... task item builder
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Filter dialog handler
+  Future<void> _showFilterDialog(BuildContext context) async {
+    final taskProvider = context.read<TaskProvider>();
+    final tagProvider = context.read<TagProvider>();
+
+    final result = await showDialog<FilterState>(
+      context: context,
+      builder: (_) => TagFilterDialog(
+        initialFilter: taskProvider.filterState,
+        allTags: tagProvider.tags,
+      ),
+    );
+
+    // Check context is still mounted after async operation
+    if (result != null && context.mounted) {
+      await taskProvider.setFilter(result);
+      // Scroll reset happens automatically in _checkFilterChange
+    }
   }
 }
 ```
@@ -1539,6 +1628,31 @@ void main() {
 
       expect(find.text('ALL'), findsOneWidget);
     });
+
+    testWidgets('hides ghost tags gracefully', (tester) async {
+      // UX POLISH TEST: Ghost tag handling
+      final tags = [
+        Tag(id: '1', name: 'Work', color: 0xFF0000FF),
+        // Note: Tag '2' is in filter state but not in allTags (deleted tag)
+      ];
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ActiveFilterBar(
+            filterState: const FilterState(
+              selectedTagIds: ['1', '2'], // '2' is a ghost tag
+            ),
+            allTags: tags,
+            onClearAll: () {},
+            onRemoveTag: (_) {},
+          ),
+        ),
+      ));
+
+      // Should only show 'Work', not an "Unknown" chip for tag '2'
+      expect(find.text('Work'), findsOneWidget);
+      expect(find.text('Unknown'), findsNothing);
+    });
   });
 }
 ```
@@ -1866,6 +1980,11 @@ Use template from `docs/templates/manual-test-plan-template.md`
 - ✅ toJson/fromJson for future persistence
 - ✅ Dialog search preserves selection
 - ✅ Clear All button pinned (UX polish)
+
+**UX polish (included in v2.1 from Gemini feedback):**
+- ✅ Scroll position resets to top when filter changes (prevents disorienting UX)
+- ✅ Ghost tag handling: Deleted tags hidden gracefully in ActiveFilterBar
+- ✅ Haptic feedback for filter interactions (checkboxes, Apply, Clear All)
 
 **Out of Scope (deferred to future):**
 - ❌ Filter state persistence (deferred - no auto-save)
