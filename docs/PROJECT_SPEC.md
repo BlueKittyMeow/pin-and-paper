@@ -519,6 +519,14 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Quick actions from notifications
 - Quiet hours setting
 
+**Phase 3 Completion:**
+- ✅ Git tag: `v3.5.0` (Phase 3.5 complete - Jan 9, 2026)
+- 📦 **Create GitHub Release when Phase 3 fully complete (after 3.8)**
+  - Milestone release: "Phase 3: Core Productivity Complete"
+  - Include full changelog of 3.1-3.8
+  - Mark as stable release for mobile workflows
+  - Tag: `v3.8.0` or `v3.0.0` (major milestone)
+
 **Deferred to Phase 6+:**
 - Voice input (speech-to-text)
 - Task templates

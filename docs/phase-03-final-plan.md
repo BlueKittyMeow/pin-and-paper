@@ -1,8 +1,22 @@
 # Phase 3 Final Plan (3.6-3.8)
 
-**Date:** 2025-01-05
-**Status:** APPROVED by BlueKitty
+**Date:** 2026-01-09 (Updated from 2025-01-05)
+**Status:** Phase 3.5 ✅ COMPLETE - Executing Plan
 **Strategy:** Leverage tag momentum, then complete date/notification features
+
+---
+
+## Completed Work
+
+### Phase 3.5: Comprehensive Tagging System ✅ (Complete: Jan 9, 2026)
+- Database v6 with tags and task_tags tables
+- 160+ tests (100% passing)
+- WCAG AA compliant colors
+- Smart overflow handling (3 tags + "+N more")
+- **Fix #C3:** Completed task hierarchy preserved for Phase 4
+- Context menu refinements (right-click support)
+- Breadcrumb visual indicators (↳ icon + italic)
+- Version: `v3.5.0` tagged and released
 
 ---
 
@@ -58,6 +72,54 @@
 
 **Estimated Time:** 2-3 weeks
 **Database Version:** Still v6 (no schema changes)
+
+**Enhancements from Fix #C3 Validation:**
+- Universal search (magnifying glass icon) - search active + completed tasks
+- Search includes titles, notes, tags
+- Tag filtering UI with clickable chips and multi-select
+- Filter checkboxes (All / Current / Completed)
+
+---
+
+### Phase 3.6.5: Edit Task Modal Rework (1 week) ⚠️ **REQUIRED BEFORE 3.7**
+
+**Why required:** Current edit modal only allows title changes. Need comprehensive modal before adding natural language date parsing.
+
+**Features:**
+1. **Comprehensive Edit Modal for Active Tasks**
+   - Edit all fields: title, due date, notes, tags, parent selector
+   - Natural language date input field (ready for Phase 3.7)
+   - Tag picker integration
+   - Parent task picker (change hierarchy)
+   - All-day event toggle, start date, notification settings
+
+2. **Completed Task Metadata View** (HIGH priority)
+   - Click completed task → open read-only modal
+   - Display created/completed timestamps with duration calculation
+   - Full hierarchy breadcrumb (not just parent)
+   - Tags (clickable to filter)
+   - Notes/descriptions
+   - Actions: "View in Context", "Uncomplete", "Delete Permanently"
+   - **Foundation for Phase 4 "card view" in spatial desk GUI**
+
+3. **Show Completed Parents with Incomplete Children** (optional)
+   - Display in completed section with visual indicator (⚠️ icon + badge)
+   - Click to navigate to active task list
+   - Highlight parent task in context
+
+**Technical:**
+- Refactor EditTaskDialog to support multiple modes (edit/view)
+- Add timestamp display utilities
+- Duration calculation helper
+- "View in Context" navigation logic
+- Read-only field styling for completed tasks
+
+**Estimated Time:** 1 week (5-7 days)
+**Database Version:** Still v6 (no schema changes)
+
+**References:**
+- `archive/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
+- Identified during Fix #C3 validation testing
 
 ---
 
@@ -202,19 +264,27 @@
 
 ## Final Timeline
 
-### Immediate (This Week):
-1. ✅ Fix test failures (21 soft delete tests) - Today/Tomorrow
-2. ✅ Manual test Phase 3.5 tags - Tomorrow
-3. ✅ Update PROJECT_SPEC.md - This week
+### Completed:
+1. ✅ Phase 3.5: Tagging System (Complete: Jan 9, 2026)
+2. ✅ Fix #C3: Completed task hierarchy preserved
+3. ✅ Manual validation: 9/9 tests passed
+4. ✅ Git tag v3.5.0 created and pushed
 
 ### Phase 3.6: Tag Search & Filtering
-- **Start:** Next week
+- **Start:** Week of Jan 13, 2026
 - **Duration:** 2-3 weeks
 - **Database:** v6 (no migration)
 - **Tests:** Search tests, filter tests, integration tests
 
-### Phase 3.7: Natural Language Date Parsing
+### Phase 3.6.5: Edit Task Modal Rework ⚠️
 - **Start:** After 3.6 complete
+- **Duration:** 1 week (5-7 days)
+- **Database:** v6 (no migration)
+- **Tests:** Modal tests, metadata view tests
+- **REQUIRED:** Must complete before 3.7
+
+### Phase 3.7: Natural Language Date Parsing
+- **Start:** After 3.6.5 complete
 - **Duration:** 1-2 weeks
 - **Database:** v6 (no migration)
 - **Tests:** Date parser tests, integration tests
@@ -225,8 +295,8 @@
 - **Database:** v6 (no migration)
 - **Tests:** Notification tests, scheduling tests
 
-**Total Phase 3 Remaining:** 5-8 weeks
-**Then:** Phase 4 (Workspace View) or Phase 6 (Widget/Voice/Templates)
+**Total Phase 3 Remaining:** 6-9 weeks
+**Then:** 📦 Create GitHub Release (Phase 3 Complete) → Phase 4 (Workspace View)
 
 ---
 
@@ -239,6 +309,16 @@
 - ✅ Combined filters work (search + tags + dates)
 - ✅ Performance: Search results in <100ms for 1000 tasks
 - ✅ Clear filters is obvious and works
+- ✅ Universal search includes completed tasks
+
+### Phase 3.6.5 (Edit Task Modal Rework)
+- ✅ Edit modal shows all task fields (title, due date, notes, tags, parent)
+- ✅ Completed tasks open metadata view (read-only)
+- ✅ Metadata view shows created/completed timestamps
+- ✅ Duration calculation works correctly
+- ✅ "View in Context" navigation works
+- ✅ Clickable tags in modal filter by that tag
+- ✅ Foundation ready for Phase 4 card view
 
 ### Phase 3.7 (Natural Language Date Parsing)
 - ✅ Parses common relative dates ("tomorrow", "next week", "in 3 days")
@@ -260,50 +340,68 @@
 
 ## Next Actions
 
-### Today:
-1. ✅ Update PROJECT_SPEC.md with Phase 3.6-3.8 plan
-2. 🔧 Fix 21 failing soft delete tests (Option 3)
+### Completed (Jan 9, 2026):
+1. ✅ Phase 3.5 implementation and validation complete
+2. ✅ Manual testing: 9/9 test scenarios passed
+3. ✅ Git tag v3.5.0 created and pushed
+4. ✅ Phase 3.5 summary document created
+5. ✅ PROJECT_SPEC.md updated with Phase 3.6-3.8 plan + GitHub release note
+6. ✅ All Phase 3 docs archived to `archive/phase-03/`
 
-### Tomorrow:
-3. 🧪 Manual test Phase 3.5 tag UI (Option 2)
-
-### Next Week:
-4. 📋 Create phase-3.6-plan.md (detailed implementation plan)
-5. 🚀 Begin Phase 3.6 implementation
+### Next (Week of Jan 13, 2026):
+1. 📋 Create `phase-3.6-plan.md` (detailed implementation plan)
+2. 🚀 Begin Phase 3.6 implementation (Tag Search & Filtering)
+3. 📝 Update docs/phase-03-status-review.md when starting 3.6
 
 ---
 
 ## Why This Order Works
 
-**3.6 (Tags) First:**
-- Momentum from just completing tag system
-- Tags aren't useful without filtering
-- Can test and validate tags work well
-- Natural extension of 3.5
+**3.6 (Tag Search & Filtering) First:**
+- Momentum from just completing tag system (3.5)
+- Tags aren't useful without filtering capability
+- Can test and validate tags work well in practice
+- Natural extension of 3.5 infrastructure
+- High immediate user value
 
-**3.7 (Dates) Second:**
-- Unblocks notifications (need dates to notify)
-- Smaller scope (1-2 weeks)
-- Self-contained feature
-- High user value
+**3.6.5 (Edit Modal Rework) Second:**
+- Current edit modal only allows title changes (blocker for 3.7)
+- Need date picker UI before adding natural language parsing
+- Completed task metadata view is HIGH user priority
+- Foundation for Phase 4 spatial "card view" GUI
+- Small scope (1 week) between major features
+- **Critical blocker for 3.7 natural language dates**
 
-**3.8 (Notifications) Third:**
-- Requires date parsing to be useful
-- Completes the "due date workflow"
-- Makes due dates actually actionable
+**3.7 (Natural Language Dates) Third:**
+- Requires comprehensive edit modal from 3.6.5
+- Unblocks notifications (need dates to notify about)
+- Smaller scope (1-2 weeks) after two larger phases
+- Self-contained feature with clear boundaries
+- High user value for quick date entry
+
+**3.8 (Notifications) Fourth:**
+- Requires date parsing from 3.7 to be useful
+- Completes the "due date workflow" end-to-end
+- Makes due dates actually actionable (not just metadata)
 - Final polish before Phase 4
+- Natural culmination of Phase 3
 
-**Defer Widget/Voice:**
-- Widget: Nice-to-have, not essential workflow
+**Defer Widget/Voice to Phase 6+:**
+- Widget: Nice-to-have, not essential to core workflow
 - Voice: Can add anytime, not blocking other features
 - Templates: Enhancement, not core functionality
-- Focus on completing essential features first
+- Focus on completing essential productivity features first
+- Phase 4 (Spatial Workspace) is higher priority
 
 ---
 
-**Status:** ✅ APPROVED - Ready to proceed
-**Next Step:** Fix test failures, then start Phase 3.6 planning
+**Status:** ✅ Phase 3.5 COMPLETE (v3.5.0) - Executing Approved Plan
+**Next Step:** Create Phase 3.6 implementation plan, begin development
 
 ---
+
+**Document History:**
+- 2025-01-05: Initial plan approved by BlueKitty
+- 2026-01-09: Updated with Phase 3.5 completion, added Phase 3.6.5, GitHub release note
 
 *Building the perfect task management system, one phase at a time.* 📌✨
