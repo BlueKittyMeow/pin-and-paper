@@ -32,11 +32,12 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.2:** Hierarchical Display & Drag/Drop - Complete (Dec 2025)
 ✅ **Phase 3.3:** Recently Deleted (Soft Delete) - Complete (Dec 27, 2025)
 ✅ **Phase 3.4:** Task Editing (Due Dates, Notes, etc.) - Complete (Dec 2025)
-✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 5, 2026)
-🔜 **Phase 3.6:** Tag Search & Filtering - In Planning
-⚠️ **Phase 3.6.5:** Edit Task Modal Rework - Required Before 3.7
-🔜 **Phase 3.7:** Natural Language Date Parsing - Planned
-🔜 **Phase 3.8:** Due Date Notifications - Planned
+✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 9, 2026)
+🔜 **Phase 3.6A:** Tag Filtering - In Planning (1 week)
+🔜 **Phase 3.6B:** Universal Search - Planned (1-2 weeks)
+⚠️ **Phase 3.6.5:** Edit Task Modal Rework - Required Before 3.7 (1 week)
+🔜 **Phase 3.7:** Natural Language Date Parsing - Planned (1-2 weeks)
+🔜 **Phase 3.8:** Due Date Notifications - Planned (1-2 weeks)
 
 ---
 
@@ -452,32 +453,44 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 
 **Remaining Subphases:**
 
-**Phase 3.6: Tag Search & Filtering** 🔜 (2-3 weeks)
-- Global search (task title + notes)
-- Tag-based filtering (AND/OR logic)
-- Date-based filtering (due today, this week, overdue)
-- Search indexes for performance
-- Combined filters
+**Phase 3.6A: Tag Filtering** 🔜 (1 week)
+- **Clickable tag chips** - Click any tag → immediately filter by that tag
+- **Tag filter dialog** (filter icon ⚙️ or tag icon 🏷️)
+  - Multi-select tags with checkboxes
+  - AND/OR logic toggle (show tasks with ALL vs ANY selected tags)
+  - Tag count display (e.g., "Work (12 tasks)")
+- **Active filter bar** showing selected tags (click X to remove)
+- **Filter by tag presence** ("Has tags" / "No tags" checkboxes)
+- Works on both active and completed tasks
+- FilterState model + TaskProvider integration
+- Performance target: <50ms for 1000 tasks
 
-**Enhanced from Fix #C3 Validation (Jan 9, 2026):**
-- **Universal Search** (magnifying glass icon 🔍)
-  - Search active + completed tasks (not just active)
+**Phase 3.6B: Universal Search** 🔜 (1-2 weeks)
+- **Search UI** (magnifying glass icon 🔍)
+  - Search dialog with text input
   - Filter checkboxes: All tasks / Current / Recently completed / Completed
-  - Search includes: titles, notes, tags
-  - Results grouped by section (Active / Completed)
-- **Tag Filtering UI** (filter icon ⚙️ or tag icon 🏷️)
-  - Clickable tag chips throughout app
-  - Tag selection dialog with multi-select
-  - AND/OR logic toggle
-  - Show tag count (e.g., "Work (12 tasks)")
-  - Quick filter bar showing selected tags
-- See: `docs/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
+  - Combine search with tag filters from 3.6A
+- **Search capabilities**
+  - Search titles, notes, and tag names
+  - Fuzzy matching (string_similarity package)
+  - Case-insensitive search
+  - Match highlighting in results
+- **Search results**
+  - Grouped by section (Active / Completed)
+  - Show hierarchy breadcrumb for context
+  - Click result → navigate to task
+  - Sort by relevance score
+- **Performance**
+  - Add search indexes (idx_tasks_title, idx_tasks_notes)
+  - Target: <100ms for 1000 tasks
+- See: `archive/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
 
 **Deferred from Phase 3.5 Validation:**
 - Tag color palette review (red too pink, blues too similar, brown unclear) - Low priority UX polish
 - Standalone tag creation UI (currently requires task attachment) - Medium priority enhancement
 - Duplicate tag UI validation (backend prevents duplicates, UI can improve) - Low priority
 - Keyboard capitalization preference - Defer to Settings phase
+- Date-based filtering (due today, this week, overdue) - Consider for 3.6B stretch goal or 3.7
 - See `docs/future/future.md` for full details and rationale
 
 **Phase 3.6.5: Edit Task Modal Rework** 🔜 ⚠️ **REQUIRED BEFORE PHASE 3.7** (1 week)
@@ -1044,10 +1057,11 @@ This section documents major architectural and scope decisions made during plann
 **Current Phase:** Phase 3.5 Complete - Validation in Progress (Jan 6, 2026)
 
 **Immediate Actions:**
-1. Complete Phase 3.5 Fix #C3 validation (completed task hierarchy)
-2. Document UX decisions (removed "+ Add Tag" chip, context menu only)
-3. Plan Phase 3.6 (Tag Search & Filtering)
-4. ⚠️ **Plan Phase 3.6.5 (Edit Task Modal Rework)** - Required before Phase 3.7
+1. ✅ Complete Phase 3.5 Fix #C3 validation (completed task hierarchy) - Jan 9, 2026
+2. ✅ Document UX decisions (removed "+ Add Tag" chip, context menu only) - Jan 9, 2026
+3. 🔜 Plan Phase 3.6A (Tag Filtering - 1 week)
+4. 🔜 Plan Phase 3.6B (Universal Search - 1-2 weeks)
+5. ⚠️ **Plan Phase 3.6.5 (Edit Task Modal Rework)** - Required before Phase 3.7
 
 **Completed Recently:**
 - ✅ Phase 3.5: Comprehensive Tagging System (Jan 5-6, 2026)

@@ -22,62 +22,111 @@
 
 ## Approved Phase Order
 
-### Phase 3.6: Tag Search & Filtering (2-3 weeks) ⭐ NEXT
+### Phase 3.6A: Tag Filtering (1 week) ⭐ NEXT
 **Why first:** Just completed comprehensive tag system in 3.5, strike while iron is hot!
 
 **Features:**
-1. **Tag-Based Filtering**
-   - Filter by single tag
-   - Filter by multiple tags (AND logic: "has ALL these tags")
-   - Filter by multiple tags (OR logic: "has ANY of these tags")
-   - Quick filter buttons in main screen
-   - Clear filters easily
+1. **Clickable Tag Chips**
+   - Click any tag chip → filter by that tag immediately
+   - Works in main task list and completed task list
+   - Visual feedback (highlighted when active filter)
 
-2. **Global Search**
-   - Search by task title
-   - Search in notes field
-   - Fuzzy matching (already have string_similarity package)
-   - Search results screen with highlighting
-   - Combine search with tag filters
+2. **Tag Filter Dialog**
+   - Filter icon in top bar (🏷️ or filter icon)
+   - Opens tag selection dialog
+   - Multi-select tags (checkboxes)
+   - AND/OR logic toggle
+     - AND: "Show tasks with ALL selected tags"
+     - OR: "Show tasks with ANY selected tags"
+   - Tag count display ("Work (12 tasks)")
 
-3. **Advanced Filtering**
-   - Show only active tasks
-   - Show only completed tasks
-   - Show only tasks with tags
-   - Show only tasks without tags
-   - Filter by parent/child (root tasks, subtasks, etc.)
+3. **Active Filter Bar**
+   - Shows currently selected tags as chips
+   - Click X on chip to remove filter
+   - "Clear all filters" button
+   - Persists across app navigation (within session)
 
-4. **Date-Based Filtering** (if time permits, or move to 3.7)
-   - Show tasks due today
-   - Show tasks due this week
-   - Show overdue tasks
-   - Date range picker
+4. **Filter by Tag Presence**
+   - "Show only tasks with tags" checkbox
+   - "Show only tasks without tags" checkbox
+   - Combine with specific tag filters
 
 **Technical:**
 - No database migration needed (all data exists)
+- Enhanced TaskProvider with filter state
+- FilterState model (selected tags, AND/OR mode, hasTag/noTag flags)
+- Filter UI components (TagFilterDialog, ActiveFilterBar)
+- Query builder in TaskService for filtered results
+
+**Why this is perfect timing:**
+- Tag infrastructure is fresh in mind
+- Completes the tag feature (tags aren't useful if you can't filter by them!)
+- Quick win: Clickable tags work in week 1!
+- Natural extension of 3.5 work
+
+**Estimated Time:** 1 week (5-7 days)
+**Database Version:** Still v6 (no schema changes)
+
+---
+
+### Phase 3.6B: Universal Search (1-2 weeks)
+**Why second:** Build on tag filtering infrastructure with text search
+
+**Features:**
+1. **Search UI**
+   - Magnifying glass icon (🔍) in top bar
+   - Search dialog with text input
+   - Filter checkboxes:
+     - ☐ All tasks
+     - ☐ Current tasks (active/incomplete)
+     - ☐ Recently completed
+     - ☐ Completed (all)
+   - Combine search with tag filters from 3.6A
+
+2. **Search Capabilities**
+   - Search by task title
+   - Search in notes field
+   - Search in tag names
+   - Fuzzy matching (already have string_similarity package)
+   - Case-insensitive search
+   - Highlight matching text in results
+
+3. **Search Results UI**
+   - Grouped by section (Active / Completed)
+   - Show hierarchy breadcrumb for context
+   - Click result → navigate to task
+   - Show match context (snippet of where match found)
+   - Sort by relevance score
+
+4. **Advanced Filtering** (if time permits)
+   - Filter by parent/child (root tasks, subtasks, etc.)
+   - Date-based filtering (due today, this week, overdue)
+   - Save filter presets (stretch goal)
+
+**Technical:**
 - Add search indexes for performance:
   ```sql
   CREATE INDEX idx_tasks_title ON tasks(title);
   CREATE INDEX idx_tasks_notes ON tasks(notes);
   ```
-- Enhanced TaskProvider with filter state
 - SearchService layer for query building
-- Filter UI components
+- Fuzzy matching with string_similarity package
+- Search result ranking algorithm
+- Search history (optional, store in SharedPreferences)
 
-**Why this is perfect timing:**
-- Tag infrastructure is fresh in mind
-- Can test tag filtering immediately
-- Completes the tag feature (tags aren't useful if you can't filter by them!)
-- Users can immediately leverage their new tags
+**Why after tag filtering:**
+- Tag filtering infrastructure (filter state, UI) already built
+- Can reuse filter bar and state management
+- Search combines naturally with tag filters
+- More complex than tag filtering (fuzzy matching, ranking)
 
-**Estimated Time:** 2-3 weeks
-**Database Version:** Still v6 (no schema changes)
+**Estimated Time:** 1-2 weeks (7-10 days)
+**Database Version:** Still v6 (add indexes, no schema changes)
 
 **Enhancements from Fix #C3 Validation:**
-- Universal search (magnifying glass icon) - search active + completed tasks
-- Search includes titles, notes, tags
-- Tag filtering UI with clickable chips and multi-select
-- Filter checkboxes (All / Current / Completed)
+- Universal search includes completed tasks (not just active)
+- Search includes titles, notes, AND tags
+- Combined with tag filters for powerful queries
 
 ---
 
@@ -270,11 +319,17 @@
 3. ✅ Manual validation: 9/9 tests passed
 4. ✅ Git tag v3.5.0 created and pushed
 
-### Phase 3.6: Tag Search & Filtering
+### Phase 3.6A: Tag Filtering
 - **Start:** Week of Jan 13, 2026
-- **Duration:** 2-3 weeks
+- **Duration:** 1 week (5-7 days)
 - **Database:** v6 (no migration)
-- **Tests:** Search tests, filter tests, integration tests
+- **Tests:** Filter state tests, tag filter tests, UI tests
+
+### Phase 3.6B: Universal Search
+- **Start:** After 3.6A complete
+- **Duration:** 1-2 weeks (7-10 days)
+- **Database:** v6 (add indexes, no schema changes)
+- **Tests:** Search tests, fuzzy matching tests, integration tests
 
 ### Phase 3.6.5: Edit Task Modal Rework ⚠️
 - **Start:** After 3.6 complete
@@ -302,14 +357,25 @@
 
 ## Success Criteria
 
-### Phase 3.6 (Tag Search & Filtering)
-- ✅ Can filter tasks by one or multiple tags
-- ✅ Search finds tasks by title and notes
+### Phase 3.6A (Tag Filtering)
+- ✅ Click any tag chip → immediately filters by that tag
+- ✅ Tag filter dialog shows all tags with task counts
+- ✅ Can filter by multiple tags (AND/OR logic works)
+- ✅ Active filter bar shows selected tags
+- ✅ Can remove individual filters or clear all
+- ✅ Filters work on both active and completed tasks
+- ✅ "Has tags" / "No tags" filters work
+- ✅ Performance: Filter updates in <50ms for 1000 tasks
+
+### Phase 3.6B (Universal Search)
+- ✅ Search finds tasks by title, notes, and tags
 - ✅ Fuzzy search works (finds "cal dentist" when searching "call")
-- ✅ Combined filters work (search + tags + dates)
+- ✅ Combined filters work (search + tag filters from 3.6A)
 - ✅ Performance: Search results in <100ms for 1000 tasks
-- ✅ Clear filters is obvious and works
+- ✅ Clear search is obvious and works
 - ✅ Universal search includes completed tasks
+- ✅ Search results grouped by section (Active / Completed)
+- ✅ Match highlighting works in results
 
 ### Phase 3.6.5 (Edit Task Modal Rework)
 - ✅ Edit modal shows all task fields (title, due date, notes, tags, parent)
@@ -349,22 +415,30 @@
 6. ✅ All Phase 3 docs archived to `archive/phase-03/`
 
 ### Next (Week of Jan 13, 2026):
-1. 📋 Create `phase-3.6-plan.md` (detailed implementation plan)
-2. 🚀 Begin Phase 3.6 implementation (Tag Search & Filtering)
-3. 📝 Update docs/phase-03-status-review.md when starting 3.6
+1. 📋 Create `phase-3.6A-plan.md` (detailed implementation plan for Tag Filtering)
+2. 🚀 Begin Phase 3.6A implementation (Tag Filtering)
+3. 📝 Update docs/phase-03-status-review.md when starting 3.6A
 
 ---
 
 ## Why This Order Works
 
-**3.6 (Tag Search & Filtering) First:**
+**3.6A (Tag Filtering) First:**
 - Momentum from just completing tag system (3.5)
 - Tags aren't useful without filtering capability
-- Can test and validate tags work well in practice
+- Quick win in week 1 (clickable tags work!)
+- Simpler than search (no fuzzy matching complexity)
 - Natural extension of 3.5 infrastructure
 - High immediate user value
 
-**3.6.5 (Edit Modal Rework) Second:**
+**3.6B (Universal Search) Second:**
+- Builds on filter state management from 3.6A
+- Can reuse active filter bar UI
+- Search naturally combines with tag filters
+- More complex (fuzzy matching, ranking, indexes)
+- Users already have filtering working from 3.6A
+
+**3.6.5 (Edit Modal Rework) Third:**
 - Current edit modal only allows title changes (blocker for 3.7)
 - Need date picker UI before adding natural language parsing
 - Completed task metadata view is HIGH user priority
@@ -372,14 +446,14 @@
 - Small scope (1 week) between major features
 - **Critical blocker for 3.7 natural language dates**
 
-**3.7 (Natural Language Dates) Third:**
+**3.7 (Natural Language Dates) Fourth:**
 - Requires comprehensive edit modal from 3.6.5
 - Unblocks notifications (need dates to notify about)
 - Smaller scope (1-2 weeks) after two larger phases
 - Self-contained feature with clear boundaries
 - High user value for quick date entry
 
-**3.8 (Notifications) Fourth:**
+**3.8 (Notifications) Fifth:**
 - Requires date parsing from 3.7 to be useful
 - Completes the "due date workflow" end-to-end
 - Makes due dates actually actionable (not just metadata)
@@ -403,5 +477,6 @@
 **Document History:**
 - 2025-01-05: Initial plan approved by BlueKitty
 - 2026-01-09: Updated with Phase 3.5 completion, added Phase 3.6.5, GitHub release note
+- 2026-01-09: Subdivided Phase 3.6 into 3.6A (Tag Filtering) and 3.6B (Universal Search)
 
 *Building the perfect task management system, one phase at a time.* 📌✨
