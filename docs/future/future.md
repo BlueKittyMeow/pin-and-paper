@@ -293,6 +293,27 @@ CREATE INDEX idx_tasks_due_date ON tasks(due_date);
 - **Priority:** LOW - Nice-to-have preference
 - **Target:** Settings/Preferences phase
 
+### Filter & View Management
+**Status:** Deferred from Phase 3.6A planning (Jan 9, 2026)
+**Target:** Future phase (Phase 6+ or dedicated UX enhancement phase)
+
+**Saved Filter Views:**
+- Save filter presets (e.g., "Work tasks", "Due today", "Urgent")
+- Dropdown to select saved views
+- Default view preference setting (like Todoist's default to "Today" view)
+- User-configurable default task list view
+- **Rationale:** More sophisticated than basic filtering, needs dedicated UX design
+- **Priority:** MEDIUM - High user value, but requires thoughtful UX
+- **Decision:** Focus Phase 3.6A on core filtering, defer saved views to future
+
+**Reorder Mode Icon Replacement:**
+- Current: Hamburger icon (≡) for reorder mode
+- Problem: Confusing - looks like a menu icon, not clear it's for reordering
+- Proposed: List with arrow icon (list items + directional arrow)
+- User (BlueKitty) to research alternative reorder icons
+- **Priority:** LOW-MEDIUM - UX clarity improvement
+- **Target:** Future UX polish phase
+
 ---
 
 ## Phase 4: Journal & Daybook View

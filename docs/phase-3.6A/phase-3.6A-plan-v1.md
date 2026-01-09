@@ -211,9 +211,10 @@ class TaskProvider extends ChangeNotifier {
 ### 4. UI/UX Details
 
 **Filter Icon:**
-- Material Icons: `Icons.filter_list` or `Icons.label` (tag icon)
+- Material Icons: `Icons.filter_alt` (funnel shape - classic filter icon)
 - Positioned in app bar (top right, before settings)
 - Badge/indicator when filters are active
+- Tooltip: "Filter tasks"
 
 **Active Filter Bar:**
 - Background: `Theme.colorScheme.surfaceContainerHighest`
@@ -233,6 +234,14 @@ class TaskProvider extends ChangeNotifier {
 - Tooltip explaining difference:
   - AND: "Show tasks with ALL selected tags"
   - OR: "Show tasks with ANY selected tags"
+
+**Empty Results State:**
+- Show when filters return no tasks
+- Message: "No tasks match your filters"
+- Centered in task list area
+- "Clear Filters" button below message
+- Muted text color for message
+- Material 3 styling for button
 
 ---
 
@@ -359,7 +368,11 @@ class TaskProvider extends ChangeNotifier {
 **Nice to have (stretch goals):**
 - ⏸️ Search field within tag filter dialog (if many tags)
 - ⏸️ Smooth animations (filter bar slide in/out)
-- ⏸️ Filter state persistence across app restarts (SharedPreferences)
+
+**Out of Scope (deferred to future):**
+- ❌ Filter state persistence (deferred - no auto-save)
+- ❌ Saved filter views/presets (deferred to Phase 6+)
+- ❌ Default view preference setting (deferred to Phase 6+)
 
 ---
 
@@ -398,17 +411,21 @@ class TaskProvider extends ChangeNotifier {
 ## Open Questions
 
 **For BlueKitty:**
-1. Should filter state persist across app restarts? (SharedPreferences)
-   - Pro: User doesn't lose their filter when closing app
-   - Con: Might be confusing if they forgot they had filters active
+1. ✅ **ANSWERED:** Should filter state persist across app restarts?
+   - **Decision:** NO auto-persistence (filters clear on app restart)
+   - **Future:** Saved filter views/presets with dropdown selection (deferred to Phase 6+)
+   - **Future:** User preference for default task list view (deferred to Phase 6+)
+   - **Rationale:** Keep Phase 3.6A focused on core filtering; saved views need dedicated UX design
+   - See: `docs/future/future.md` - "Filter & View Management" section
 
-2. Should we show a "no results" message when filters return empty?
-   - Current: Just shows empty list
-   - Alternative: "No tasks match your filters" with "Clear filters" button
+2. ✅ **ANSWERED:** Should we show a "no results" message when filters return empty?
+   - **Decision:** YES - Show "No tasks match your filters" with "Clear filters" button
+   - Better UX than empty screen with no context
 
-3. What icon for the filter button?
-   - Option A: `Icons.filter_list` (traditional filter icon)
-   - Option B: `Icons.label` (tag icon, more specific to tags)
+3. ✅ **ANSWERED:** What icon for the filter button?
+   - **Decision:** `Icons.filter_alt` (funnel shape icon)
+   - **Rationale:** Classic filter shape, clearer than hamburger lines or tag icon
+   - **Note:** Hamburger icon (≡) for reorder mode is also confusing - will replace in future UX polish phase
 
 ---
 
