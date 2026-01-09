@@ -226,13 +226,14 @@ void main() {
         expect(tags, isEmpty);
       });
 
-      test('returns false when association does not exist', () async {
+      test('returns true when association does not exist (idempotent)', () async {
         final task = await taskService.createTask('Test task');
         final tag = await tagService.createTag('work');
 
         final removed = await tagService.removeTagFromTask(task.id, tag.id);
 
-        expect(removed, isFalse);
+        // Phase 3.5 Fix #M1: Idempotent removal always returns true
+        expect(removed, isTrue);
       });
 
       test('removes tag from one task without affecting others', () async {
@@ -412,6 +413,158 @@ void main() {
         expect(result[tasks[800].id]?.length, equals(1)); // Task 800 has tag2
         expect(result[tasks[800].id]?.first.name, equals('priority'));
         expect(result[tasks[600].id], isNull); // Task 600 has no tags
+      });
+    });
+
+    group('getTaskCountsByTag (Phase 3.6A)', () {
+      test('returns empty map when no tasks exist', () async {
+        await tagService.createTag('work');
+
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+
+        expect(counts, isEmpty);
+      });
+
+      test('returns empty map when no tags exist', () async {
+        await taskService.createTask('Task 1');
+
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+
+        expect(counts, isEmpty);
+      });
+
+      test('returns empty map when tasks have no tags', () async {
+        await taskService.createTask('Task 1');
+        await taskService.createTask('Task 2');
+        await tagService.createTag('work');
+
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+
+        expect(counts, isEmpty);
+      });
+
+      test('returns correct counts for active tasks', () async {
+        // Create tags
+        final tag1 = await tagService.createTag('work');
+        final tag2 = await tagService.createTag('urgent');
+        final tag3 = await tagService.createTag('personal');
+
+        // Create active tasks
+        final task1 = await taskService.createTask('Task 1');
+        final task2 = await taskService.createTask('Task 2');
+        final task3 = await taskService.createTask('Task 3');
+        final task4 = await taskService.createTask('Task 4');
+
+        // Add tags
+        await tagService.addTagToTask(task1.id, tag1.id); // work: 1
+        await tagService.addTagToTask(task2.id, tag1.id); // work: 2
+        await tagService.addTagToTask(task3.id, tag1.id); // work: 3
+        await tagService.addTagToTask(task2.id, tag2.id); // urgent: 1
+        await tagService.addTagToTask(task4.id, tag2.id); // urgent: 2
+
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+
+        expect(counts[tag1.id], equals(3)); // work: 3 tasks
+        expect(counts[tag2.id], equals(2)); // urgent: 2 tasks
+        expect(counts[tag3.id], isNull); // personal: no tasks
+      });
+
+      test('returns correct counts for completed tasks', () async {
+        final tag = await tagService.createTag('work');
+
+        // Create and tag active tasks
+        final task1 = await taskService.createTask('Task 1');
+        await tagService.addTagToTask(task1.id, tag.id);
+
+        // Create and tag completed tasks
+        final task2 = await taskService.createTask('Task 2');
+        await tagService.addTagToTask(task2.id, tag.id);
+        await taskService.toggleTaskCompletion(task2);
+
+        final task3 = await taskService.createTask('Task 3');
+        await tagService.addTagToTask(task3.id, tag.id);
+        await taskService.toggleTaskCompletion(task3);
+
+        // Count completed tasks only
+        final completedCounts = await tagService.getTaskCountsByTag(completed: true);
+        expect(completedCounts[tag.id], equals(2));
+
+        // Count active tasks only
+        final activeCounts = await tagService.getTaskCountsByTag(completed: false);
+        expect(activeCounts[tag.id], equals(1));
+      });
+
+      test('excludes deleted tasks from counts', () async {
+        final tag = await tagService.createTag('work');
+
+        // Create active tasks
+        final task1 = await taskService.createTask('Task 1');
+        await tagService.addTagToTask(task1.id, tag.id);
+
+        final task2 = await taskService.createTask('Task 2');
+        await tagService.addTagToTask(task2.id, tag.id);
+
+        // Delete one task
+        await taskService.softDeleteTask(task2.id);
+
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+
+        expect(counts[tag.id], equals(1)); // Only counts non-deleted task
+      });
+
+      test('handles task with multiple tags correctly', () async {
+        final tag1 = await tagService.createTag('work');
+        final tag2 = await tagService.createTag('urgent');
+
+        final task = await taskService.createTask('Task 1');
+        await tagService.addTagToTask(task.id, tag1.id);
+        await tagService.addTagToTask(task.id, tag2.id);
+
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+
+        // Both tags should count the same task
+        expect(counts[tag1.id], equals(1));
+        expect(counts[tag2.id], equals(1));
+      });
+
+      test('performance: single query for all tags', () async {
+        // Create 50 tags
+        final tags = <String>[];
+        for (int i = 0; i < 50; i++) {
+          final tag = await tagService.createTag('tag-$i');
+          tags.add(tag.id);
+        }
+
+        // Create 100 tasks with random tags
+        for (int i = 0; i < 100; i++) {
+          final task = await taskService.createTask('Task $i');
+          // Add 1-3 random tags per task
+          for (int j = 0; j < (i % 3) + 1; j++) {
+            await tagService.addTagToTask(task.id, tags[i % tags.length]);
+          }
+        }
+
+        // This should execute in <50ms even with 50 tags × 100 tasks
+        final stopwatch = Stopwatch()..start();
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+        stopwatch.stop();
+
+        // Verify it completed quickly (single query)
+        expect(stopwatch.elapsedMilliseconds, lessThan(100));
+        expect(counts, isNotEmpty);
+      });
+
+      test('does not include tags with zero tasks', () async {
+        final tag1 = await tagService.createTag('has-tasks');
+        final tag2 = await tagService.createTag('no-tasks');
+
+        final task = await taskService.createTask('Task 1');
+        await tagService.addTagToTask(task.id, tag1.id);
+
+        final counts = await tagService.getTaskCountsByTag(completed: false);
+
+        expect(counts[tag1.id], equals(1));
+        expect(counts.containsKey(tag2.id), isFalse); // Not in map at all
       });
     });
   });
