@@ -180,11 +180,21 @@ class FilterState {
   /// FIX #1 (Codex v2): Factory constructor ensures all instances have
   /// unmodifiable lists, even when created with `FilterState(selectedTagIds: myList)`.
   /// This prevents accidental mutations that would break immutability.
+  ///
+  /// M1: Returns the const `FilterState.empty` singleton when called with
+  /// default parameters to avoid unnecessary allocations.
   factory FilterState({
     List<String> selectedTagIds = const [],
     FilterLogic logic = FilterLogic.or,
     TagPresenceFilter presenceFilter = TagPresenceFilter.any,
   }) {
+    // M1: Optimization - return const empty for default parameters
+    if (selectedTagIds.isEmpty &&
+        logic == FilterLogic.or &&
+        presenceFilter == TagPresenceFilter.any) {
+      return FilterState.empty;
+    }
+
     return FilterState._(
       List<String>.unmodifiable(selectedTagIds),
       logic,
@@ -231,14 +241,20 @@ class FilterState {
   /// Deserialize from JSON for future persistence (Phase 6+).
   ///
   /// Factory constructor ensures list immutability.
+  /// L1: Handles invalid enum names gracefully (defensive programming).
   factory FilterState.fromJson(Map<String, dynamic> json) {
-    return FilterState(
-      selectedTagIds: List<String>.from(json['selectedTagIds'] ?? []),
-      logic: FilterLogic.values.byName(json['logic'] ?? 'or'),
-      presenceFilter: TagPresenceFilter.values.byName(
-        json['presenceFilter'] ?? 'any',
-      ),
-    );
+    try {
+      return FilterState(
+        selectedTagIds: List<String>.from(json['selectedTagIds'] ?? []),
+        logic: FilterLogic.values.byName(json['logic'] ?? 'or'),
+        presenceFilter: TagPresenceFilter.values.byName(
+          json['presenceFilter'] ?? 'any',
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error deserializing FilterState, returning empty: $e');
+      return FilterState.empty;
+    }
   }
 
   // Equality implementation for early-return optimization in setFilter
@@ -458,6 +474,15 @@ Future<Map<String, int>> getTaskCountsByTag({required bool completed}) async {
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService;
   final TagService _tagService;
+  final TagProvider _tagProvider;  // M2: Injected for fast tag validation
+
+  TaskProvider({
+    required TaskService taskService,
+    required TagService tagService,
+    required TagProvider tagProvider,  // M2
+  })  : _taskService = taskService,
+        _tagService = tagService,
+        _tagProvider = tagProvider;
 
   List<Task> _tasks = [];
   List<Task> _completedTasks = [];
@@ -561,9 +586,9 @@ class TaskProvider extends ChangeNotifier {
       return; // Already filtered by this tag
     }
 
-    // FIX #5: Validate tag exists in database
-    final tag = await _tagService.getTag(tagId);
-    if (tag == null) {
+    // FIX #5 + M2: Validate tag exists (use TagProvider - faster, in-memory)
+    final tagExists = _tagProvider.tags.any((tag) => tag.id == tagId);
+    if (!tagExists) {
       debugPrint('addTagFilter: tag $tagId does not exist');
       return; // Reject invalid tag IDs
     }
@@ -675,11 +700,13 @@ import 'package:flutter/services.dart'; // For HapticFeedback
 class TagFilterDialog extends StatefulWidget {
   final FilterState initialFilter;
   final List<Tag> allTags;
+  final bool showCompletedCounts;  // M3: Which counts to show
 
   const TagFilterDialog({
     Key? key,
     required this.initialFilter,
     required this.allTags,
+    required this.showCompletedCounts,  // M3
   }) : super(key: key);
 
   @override
@@ -710,7 +737,10 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
   Future<void> _loadTagCounts() async {
     try {
       final tagService = context.read<TagService>();
-      final counts = await tagService.getTaskCountsByTag(completed: false);
+      // M3: Use widget parameter to show correct counts (active vs completed)
+      final counts = await tagService.getTaskCountsByTag(
+        completed: widget.showCompletedCounts,
+      );
 
       if (mounted) {
         setState(() {
@@ -820,50 +850,62 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
             const SizedBox(height: 16),
 
             // Tag list (scrollable)
+            // M5: Show empty state when no tags exist or search returns nothing
             Expanded(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _displayedTags.length,
-                itemBuilder: (context, index) {
-                  final tag = _displayedTags[index];
-                  final isChecked = _selectedTagIds.contains(tag.id);
+              child: _displayedTags.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _displayedTags.length,
+                      itemBuilder: (context, index) {
+                        final tag = _displayedTags[index];
+                        final isChecked = _selectedTagIds.contains(tag.id);
 
-                  return CheckboxListTile(
-                    enabled: !_tagSelectionDisabled,
-                    value: isChecked,
-                    title: Text(tag.name),
-                    // FIX #2: Direct access to preloaded counts (no FutureBuilder!)
-                    subtitle: Text('${_tagCounts[tag.id] ?? 0} tasks'),
-                    secondary: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: Color(tag.color),
-                        shape: BoxShape.circle,
-                      ),
+                        return CheckboxListTile(
+                          enabled: !_tagSelectionDisabled,
+                          value: isChecked,
+                          title: Text(tag.name),
+                          // FIX #2: Direct access to preloaded counts (no FutureBuilder!)
+                          subtitle: Text('${_tagCounts[tag.id] ?? 0} tasks'),
+                          secondary: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Color(tag.color),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          onChanged: _tagSelectionDisabled
+                              ? null
+                              : (bool? value) {
+                                  // UX POLISH: Light haptic feedback for checkbox toggle
+                                  HapticFeedback.lightImpact();
+
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedTagIds.add(tag.id);
+                                    } else {
+                                      _selectedTagIds.remove(tag.id);
+                                    }
+                                  });
+                                },
+                        );
+                      },
                     ),
-                    onChanged: _tagSelectionDisabled
-                        ? null
-                        : (bool? value) {
-                            // UX POLISH: Light haptic feedback for checkbox toggle
-                            HapticFeedback.lightImpact();
-
-                            setState(() {
-                              if (value == true) {
-                                _selectedTagIds.add(tag.id);
-                              } else {
-                                _selectedTagIds.remove(tag.id);
-                              }
-                            });
-                          },
-                  );
-                },
-              ),
             ),
           ],
         ),
       ),
       actions: [
+        // M4: Add Clear All button for easy filter reset from dialog
+        TextButton(
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            Navigator.pop(context, FilterState.empty);
+          },
+          child: const Text('Clear All'),
+        ),
+        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context), // Cancel
           child: const Text('Cancel'),
@@ -888,6 +930,47 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
 
   // FIX #2: Removed _getTaskCount method - no longer needed!
   // Tag counts are now preloaded in initState with a single query.
+
+  // M5: Helper method for empty state
+  Widget _buildEmptyState() {
+    final noTagsAtAll = widget.allTags.isEmpty;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              noTagsAtAll ? Icons.label_off : Icons.search_off,
+              size: 48,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              noTagsAtAll
+                  ? 'No tags yet'
+                  : 'No tags match "$_searchQuery"',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (noTagsAtAll) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Create tags in Tag Management',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 ```
 
@@ -947,8 +1030,10 @@ class ActiveFilterBar extends StatelessWidget {
 
     // UX POLISH: Filter out ghost tags (deleted tags that are still in filter state)
     // Instead of showing "Unknown", we hide them gracefully (self-healing UI)
+    // L2: Optimization - use Set for O(n+m) instead of O(n*m)
+    final allTagIds = allTags.map((t) => t.id).toSet();  // O(m)
     final validTagIds = filterState.selectedTagIds
-        .where((id) => allTags.any((t) => t.id == id))
+        .where((id) => allTagIds.contains(id))  // O(n) with Set lookup
         .toList();
 
     return Container(
@@ -1204,6 +1289,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       builder: (_) => TagFilterDialog(
         initialFilter: taskProvider.filterState,
         allTags: tagProvider.tags,
+        showCompletedCounts: false,  // M3: Active tasks screen
       ),
     );
 
@@ -1274,6 +1360,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
 ```
 
 **CompletedTasksScreen** - Same changes as TaskListScreen (shared global filter)
+- M3: Use `showCompletedCounts: true` in dialog invocation to show correct counts
 
 ---
 
@@ -1525,11 +1612,32 @@ void main() {
     });
 
     test('performance: <50ms for 1000 tasks', () async {
-      // Create 1000 tasks with various tags
+      // L3: Create 1000 tasks with batch inserts (much faster than loop)
+      final batch = db.batch();
+
       for (int i = 0; i < 1000; i++) {
-        await _createTask(db, 'task$i', tags: ['tag${i % 10}']);
+        final taskId = 'task$i';
+        final tagId = 'tag${i % 10}';
+
+        batch.insert('tasks', {
+          'id': taskId,
+          'title': 'Task $i',
+          'completed': 0,
+          'deleted_at': null,
+          'position': i,
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+
+        batch.insert('task_tags', {
+          'task_id': taskId,
+          'tag_id': tagId,
+        });
       }
 
+      await batch.commit(noResult: true);
+
+      // Now test query performance
       const filter = FilterState(selectedTagIds: ['tag1', 'tag2', 'tag3']);
 
       final stopwatch = Stopwatch()..start();
