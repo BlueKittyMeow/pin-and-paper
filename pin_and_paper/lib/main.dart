@@ -42,11 +42,18 @@ class PinAndPaperApp extends StatelessWidget {
   Widget build(BuildContext context) {
     // Phase 2: MultiProvider for multiple state management
     // Phase 3.5: Added TagProvider for tag management
-    // Order matters: SettingsProvider must be created before BrainDumpProvider
+    // Phase 3.6A: TaskProvider now depends on TagProvider (for filter validation)
+    // Order matters: TagProvider must be created before TaskProvider
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => TaskProvider()..loadPreferences()),
         ChangeNotifierProvider(create: (_) => TagProvider()), // Phase 3.5
+        ChangeNotifierProxyProvider<TagProvider, TaskProvider>(
+          create: (context) => TaskProvider(
+            tagProvider: Provider.of<TagProvider>(context, listen: false),
+          )..loadPreferences(),
+          update: (context, tagProvider, previous) =>
+              previous ?? TaskProvider(tagProvider: tagProvider)..loadPreferences(),
+        ),
         ChangeNotifierProvider(create: (_) => SettingsProvider()..initialize()),
         ChangeNotifierProxyProvider<SettingsProvider, BrainDumpProvider>(
           create: (context) => BrainDumpProvider(

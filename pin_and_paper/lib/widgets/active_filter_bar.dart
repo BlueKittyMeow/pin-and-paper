@@ -105,13 +105,26 @@ class ActiveFilterBar extends StatelessWidget {
     // Safe to use firstWhere without orElse since we filtered validTagIds above
     final tag = allTags.firstWhere((t) => t.id == tagId);
 
+    // Parse hex color string to int (default to grey if null/invalid)
+    final colorInt = _parseHexColor(tag.color) ?? 0xFF9E9E9E;
+
     return Chip(
       label: Text(tag.name),
       deleteIcon: const Icon(Icons.close, size: 18),
       onDeleted: () => onRemoveTag(tagId),
-      backgroundColor: Color(tag.color).withOpacity(0.2),
-      side: BorderSide(color: Color(tag.color)),
+      backgroundColor: Color(colorInt).withValues(alpha: 0.2),
+      side: BorderSide(color: Color(colorInt)),
     );
+  }
+
+  /// Parse hex color string (#RRGGBB) to int
+  int? _parseHexColor(String? hexColor) {
+    if (hexColor == null) return null;
+    try {
+      return int.parse(hexColor.replaceFirst('#', '0xFF'));
+    } catch (e) {
+      return null;
+    }
   }
 
   Widget _buildPresenceChip(BuildContext context) {

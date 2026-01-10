@@ -186,6 +186,9 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
                         final tag = _displayedTags[index];
                         final isChecked = _selectedTagIds.contains(tag.id);
 
+                        // Parse hex color string to int (default to grey if null/invalid)
+                        final colorInt = _parseHexColor(tag.color) ?? 0xFF9E9E9E;
+
                         return CheckboxListTile(
                           enabled: !_tagSelectionDisabled,
                           value: isChecked,
@@ -198,7 +201,7 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
                             width: 24,
                             height: 24,
                             decoration: BoxDecoration(
-                              color: Color(tag.color),
+                              color: Color(colorInt),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -253,6 +256,16 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
         ),
       ],
     );
+  }
+
+  /// Parse hex color string (#RRGGBB) to int
+  int? _parseHexColor(String? hexColor) {
+    if (hexColor == null) return null;
+    try {
+      return int.parse(hexColor.replaceFirst('#', '0xFF'));
+    } catch (e) {
+      return null;
+    }
   }
 
   // M5: Helper method for empty state

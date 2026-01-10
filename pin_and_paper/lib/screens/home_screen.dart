@@ -3,9 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/task.dart';
 import '../providers/task_provider.dart';
+import '../providers/tag_provider.dart'; // Phase 3.6A
+import '../services/tag_service.dart'; // Phase 3.6A
 import '../widgets/task_input.dart';
 import '../widgets/task_item.dart';
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2
+import '../widgets/active_filter_bar.dart'; // Phase 3.6A
+import '../widgets/tag_filter_dialog.dart'; // Phase 3.6A
 import 'brain_dump_screen.dart'; // Phase 2
 import 'settings_screen.dart'; // Phase 2
 import 'quick_complete_screen.dart'; // Phase 2 Stretch
@@ -36,6 +40,19 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
         actions: [
+          // Phase 3.6A: Filter button
+          Consumer<TaskProvider>(
+            builder: (context, taskProvider, _) {
+              final hasActiveFilters = taskProvider.hasActiveFilters;
+              return IconButton(
+                icon: Icon(
+                  hasActiveFilters ? Icons.filter_alt : Icons.filter_alt_outlined,
+                ),
+                tooltip: 'Filter Tasks',
+                onPressed: () => _showFilterDialog(context),
+              );
+            },
+          ),
           // Phase 3.2: Reorder mode toggle
           Consumer<TaskProvider>(
             builder: (context, taskProvider, _) {
@@ -77,6 +94,17 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Column(
         children: [
           const TaskInput(),
+          // Phase 3.6A: Active filter bar
+          Consumer2<TaskProvider, TagProvider>(
+            builder: (context, taskProvider, tagProvider, _) {
+              return ActiveFilterBar(
+                filterState: taskProvider.filterState,
+                allTags: tagProvider.tags,
+                onClearAll: () => taskProvider.clearFilters(),
+                onRemoveTag: (tagId) => taskProvider.removeTagFilter(tagId),
+              );
+            },
+          ),
           Expanded(
             child: Consumer<TaskProvider>(
               builder: (context, taskProvider, child) {
@@ -196,5 +224,32 @@ class _HomeScreenState extends State<HomeScreen> {
         tooltip: 'Complete a task naturally',
       ),
     );
+  }
+
+  /// Phase 3.6A: Show tag filter dialog
+  Future<void> _showFilterDialog(BuildContext context) async {
+    final taskProvider = context.read<TaskProvider>();
+    final tagProvider = context.read<TagProvider>();
+
+    // Load tags if not already loaded
+    if (tagProvider.tags.isEmpty) {
+      await tagProvider.loadTags();
+    }
+
+    // Show dialog
+    final result = await showDialog(
+      context: context,
+      builder: (context) => TagFilterDialog(
+        initialFilter: taskProvider.filterState,
+        allTags: tagProvider.tags,
+        showCompletedCounts: false, // M3: Show active task counts
+        tagService: TagService(), // L5: Inject service
+      ),
+    );
+
+    // Apply filter if user clicked "Apply" or "Clear All"
+    if (result != null && context.mounted) {
+      await taskProvider.setFilter(result);
+    }
   }
 }
