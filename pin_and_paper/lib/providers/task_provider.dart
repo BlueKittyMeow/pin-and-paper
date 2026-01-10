@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
+import '../models/filter_state.dart'; // Phase 3.6A
 import '../models/task.dart';
 import '../models/tag.dart'; // Phase 3.5
 import '../models/task_suggestion.dart'; // Phase 2
+import '../providers/tag_provider.dart'; // Phase 3.6A
 import '../services/task_service.dart';
 import '../services/tag_service.dart'; // Phase 3.5
 import '../services/preferences_service.dart'; // Phase 2 Stretch
@@ -12,14 +14,17 @@ class TaskProvider extends ChangeNotifier {
   final TaskService _taskService;
   final PreferencesService _preferencesService;
   final TagService _tagService; // Phase 3.5
+  final TagProvider _tagProvider; // Phase 3.6A
 
   TaskProvider({
     TaskService? taskService,
     PreferencesService? preferencesService,
     TagService? tagService, // Phase 3.5
+    TagProvider? tagProvider, // Phase 3.6A
   })  : _taskService = taskService ?? TaskService(),
         _preferencesService = preferencesService ?? PreferencesService(),
-        _tagService = tagService ?? TagService() { // Phase 3.5
+        _tagService = tagService ?? TagService(), // Phase 3.5
+        _tagProvider = tagProvider ?? TagProvider() { // Phase 3.6A
     // Phase 3.2: Initialize TreeController for hierarchical view
     _treeController = TreeController<Task>(
       roots: [],  // Start empty, populated in loadTasks
@@ -41,6 +46,10 @@ class TaskProvider extends ChangeNotifier {
 
   // Phase 3.5: Codex review - reentrant guard for loadTasks()
   Future<void>? _loadTasksFuture;
+
+  // Phase 3.6A: Filter state
+  FilterState _filterState = FilterState.empty;
+  int _filterOperationId = 0; // Race condition prevention
 
   // Phase 3.2: Hierarchy state
   bool _isReorderMode = false;
@@ -93,6 +102,10 @@ class TaskProvider extends ChangeNotifier {
   List<Tag> getTagsForTask(String taskId) {
     return _taskTags[taskId] ?? [];
   }
+
+  // Phase 3.6A: Filter state getters
+  FilterState get filterState => _filterState;
+  bool get hasActiveFilters => _filterState.isActive;
 
   // Phase 3.2: Helper to find parent task by ID
   Task? _findParent(String? parentId) {
@@ -715,5 +728,137 @@ class TaskProvider extends ChangeNotifier {
       debugPrint('Failed to get recently deleted tasks: $e');
       return [];
     }
+  }
+
+  // ============================================
+  // PHASE 3.6A: TAG FILTERING METHODS
+  // ============================================
+
+  /// Apply a new filter to the task lists.
+  ///
+  /// Uses an operation ID pattern to prevent race conditions when the user
+  /// changes filters rapidly. Only the most recent operation's results are applied.
+  ///
+  /// When filter is active: Loads filtered tasks from database
+  /// When filter is cleared: Reloads all tasks with hierarchy
+  ///
+  /// H2 (v3.1): Rollback filter state on error to keep UI consistent
+  Future<void> setFilter(FilterState filter) async {
+    // Early return if filter unchanged (optimization)
+    if (_filterState == filter) return;
+
+    // H2: Capture previous state for rollback on error
+    final previousFilter = _filterState;
+
+    _filterState = filter;
+    _filterOperationId++; // Increment before async work
+    final currentOperation = _filterOperationId;
+
+    notifyListeners(); // Show filter bar immediately (optimistic update)
+
+    try {
+      if (filter.isActive) {
+        // Fetch filtered results (flat list, no hierarchy)
+        final activeFuture = _taskService.getFilteredTasks(
+          filter,
+          completed: false,
+        );
+        final completedFuture = _taskService.getFilteredTasks(
+          filter,
+          completed: true,
+        );
+
+        // Await both queries in parallel
+        final results = await Future.wait([activeFuture, completedFuture]);
+
+        // Only apply results if no newer operation started
+        if (currentOperation == _filterOperationId) {
+          _tasks = results[0];
+
+          // Load tags for filtered tasks
+          final taskIds = _tasks.map((t) => t.id).toList();
+          _taskTags = await _tagService.getTagsForAllTasks(taskIds);
+
+          // Re-categorize tasks with new filtered list
+          _categorizeTasks();
+
+          // Refresh tree controller (filtered view is flat, not hierarchical)
+          _refreshTreeController();
+
+          notifyListeners();
+        }
+        // Else discard stale results (newer filter already applied)
+      } else {
+        // No filter active - reload all tasks with hierarchy
+        await loadTasks();
+      }
+    } catch (e) {
+      // H2: Rollback to previous filter state on error
+      // Only rollback if no newer operation has started (fixes race condition)
+      if (currentOperation == _filterOperationId) {
+        _filterState = previousFilter;
+        notifyListeners();
+        debugPrint('Error applying filter: $e');
+      } else {
+        // Newer operation already running, don't touch state
+        debugPrint('Error applying filter (operation $currentOperation), but newer operation ($_filterOperationId) is active: $e');
+      }
+    }
+  }
+
+  /// Add a tag to the current filter.
+  ///
+  /// Validates the tag ID and prevents duplicates.
+  /// Used when user clicks a tag chip for quick filtering.
+  ///
+  /// M2 (v3.1): Validate tag existence using TagProvider (in-memory, faster than DB query)
+  Future<void> addTagFilter(String tagId) async {
+    // Validate input
+    if (tagId.isEmpty) {
+      debugPrint('addTagFilter: empty tagId');
+      return;
+    }
+
+    if (_filterState.selectedTagIds.contains(tagId)) {
+      debugPrint('addTagFilter: tag $tagId already in filter');
+      return; // Already filtered by this tag
+    }
+
+    // M2: Validate tag exists (use TagProvider - faster, in-memory)
+    final tagExists = _tagProvider.tags.any((tag) => tag.id == tagId);
+    if (!tagExists) {
+      debugPrint('addTagFilter: tag $tagId does not exist');
+      return; // Reject invalid tag IDs (prevents SQL errors)
+    }
+
+    // Create new filter with added tag
+    final newTags = List<String>.from(_filterState.selectedTagIds)..add(tagId);
+    final newFilter = _filterState.copyWith(selectedTagIds: newTags);
+
+    await setFilter(newFilter);
+  }
+
+  /// Remove a tag from the current filter.
+  ///
+  /// If no filters remain after removal, clears the filter entirely.
+  Future<void> removeTagFilter(String tagId) async {
+    final newTags = _filterState.selectedTagIds
+        .where((id) => id != tagId)
+        .toList();
+
+    // If no filters left, clear entirely
+    if (newTags.isEmpty && _filterState.presenceFilter == TagPresenceFilter.any) {
+      await clearFilters();
+    } else {
+      final newFilter = _filterState.copyWith(selectedTagIds: newTags);
+      await setFilter(newFilter);
+    }
+  }
+
+  /// Clear all filters and show all tasks.
+  ///
+  /// Reloads tasks with full hierarchy.
+  Future<void> clearFilters() async {
+    await setFilter(FilterState.empty);
   }
 }
