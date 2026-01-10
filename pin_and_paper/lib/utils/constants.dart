@@ -18,7 +18,7 @@ class AppConstants {
 
   // App metadata
   static const String appName = 'Pin and Paper';
-  static const String appVersion = '0.2.0'; // Phase 2: AI Integration
+  static const String appVersion = '3.6.0'; // Phase 3.6A: Tag Filtering
 
   // Performance targets
   static const int maxTasksInMemory = 500;
