@@ -64,7 +64,7 @@ ls docs/archive/phase-XX/
 ### 3. Read Planning Context
 
 **Required reading:**
-- `PROJECT_SPEC.md` - What's in Phase X? (authoritative source)
+- `docs/PROJECT_SPEC.md` - What's in Phase X? (authoritative source)
 - `README.md` - Current project status
 - `docs/archive/phase-0X-1/phase-0X-1-summary.md` - Previous phase context
 - [documentation-workflow.md](./documentation-workflow.md) - How docs should be maintained
@@ -98,7 +98,7 @@ ls docs/archive/phase-XX/
 
 ## Scope
 
-[Extracted from project_spec.md]
+[Extracted from docs/PROJECT_SPEC.md]
 
 **Subphases:**
 - X.1: [Feature name]
@@ -243,7 +243,7 @@ CLAUDE:
 Checking archive... No Phase 4 archive (new phase).
 
 Reading planning context:
-- project_spec.md → Phase 4 scope
+- docs/PROJECT_SPEC.md → Phase 4 scope
 - phase-03-summary.md → Previous phase learnings
 
 Phase 4 includes subphases:

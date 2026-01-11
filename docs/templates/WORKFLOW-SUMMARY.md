@@ -128,7 +128,7 @@
 
 START PHASE (see phase-start-checklist.md)
 ├─ 1. Create docs/phase-XX/ directory
-├─ 2. Read project_spec.md for Phase XX scope
+├─ 2. Read docs/PROJECT_SPEC.md for Phase XX scope
 ├─ 3. Create phase-XX-plan-v1.md (high-level)
 ├─ 4. Iterate: v1 → v2 → v3 (archive old versions)
 └─ 5. Ready for grouping/implementation

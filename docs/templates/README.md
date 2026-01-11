@@ -167,7 +167,7 @@ cp docs/templates/validation-template.md docs/phase-03/phase-3.5-validation-v1.m
 **Process:**
 1. Create `docs/phase-XX/` directory
 2. Check archive for context from previous phases
-3. Read planning context (project_spec.md, etc.)
+3. Read planning context (`docs/PROJECT_SPEC.md`, etc.)
 4. Create `phase-XX-plan-v1.md` with high-level scope
 5. Initialize bug hunting docs when implementation starts
 
