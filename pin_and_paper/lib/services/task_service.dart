@@ -257,6 +257,92 @@ class TaskService {
     return maps.map((map) => Task.fromMap(map)).toList();
   }
 
+  /// Phase 3.6A: Count tasks matching filter (for UX preview)
+  ///
+  /// Similar to getFilteredTasks but returns count instead of full list.
+  /// Used in TagFilterDialog to show "X tasks match" preview.
+  ///
+  /// Performance: Much faster than loading full list, typically <5ms
+  Future<int> countFilteredTasks(
+    FilterState filter, {
+    required bool completed,
+  }) async {
+    final db = await _dbService.database;
+
+    // Base WHERE conditions (always apply)
+    final baseConditions = [
+      'tasks.deleted_at IS NULL',
+      'tasks.completed = ?',
+    ];
+    final baseArgs = [completed ? 1 : 0];
+
+    // Build query based on filter state
+    String query;
+    List<dynamic> args;
+
+    if (filter.selectedTagIds.isNotEmpty) {
+      // Specific tag filter
+      if (filter.logic == FilterLogic.or) {
+        // OR logic: tasks with ANY of the selected tags
+        query = '''
+          SELECT COUNT(DISTINCT tasks.id) as count
+          FROM ${AppConstants.tasksTable} tasks
+          INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+          WHERE task_tags.tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            AND ${baseConditions.join(' AND ')}
+        ''';
+        args = [...filter.selectedTagIds, ...baseArgs];
+      } else {
+        // AND logic: tasks with ALL of the selected tags
+        query = '''
+          SELECT COUNT(*) as count
+          FROM ${AppConstants.tasksTable} tasks
+          WHERE tasks.id IN (
+            SELECT task_id
+            FROM ${AppConstants.taskTagsTable}
+            WHERE tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            GROUP BY task_id
+            HAVING COUNT(DISTINCT tag_id) = ?
+          )
+            AND ${baseConditions.join(' AND ')}
+        ''';
+        args = [...filter.selectedTagIds, filter.selectedTagIds.length, ...baseArgs];
+      }
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyTagged) {
+      // Show only tasks with at least one tag
+      query = '''
+        SELECT COUNT(DISTINCT tasks.id) as count
+        FROM ${AppConstants.tasksTable} tasks
+        INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+        WHERE ${baseConditions.join(' AND ')}
+      ''';
+      args = baseArgs;
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyUntagged) {
+      // Show only tasks with no tags
+      query = '''
+        SELECT COUNT(*) as count
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE tasks.id NOT IN (
+          SELECT DISTINCT task_id
+          FROM ${AppConstants.taskTagsTable}
+        )
+          AND ${baseConditions.join(' AND ')}
+      ''';
+      args = baseArgs;
+    } else {
+      // No filter active - return all tasks for this completed status
+      query = '''
+        SELECT COUNT(*) as count
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE ${baseConditions.join(' AND ')}
+      ''';
+      args = baseArgs;
+    }
+
+    final result = await db.rawQuery(query, args);
+    return result.first['count'] as int;
+  }
+
   // Toggle task completion status
   Future<Task> toggleTaskCompletion(Task task) async {
     final updatedTask = task.copyWith(

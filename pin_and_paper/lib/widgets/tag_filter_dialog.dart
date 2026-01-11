@@ -3,6 +3,7 @@ import 'package:flutter/services.dart'; // For HapticFeedback
 import '../models/filter_state.dart';
 import '../models/tag.dart';
 import '../services/tag_service.dart';
+import '../services/task_service.dart'; // UX7: For result count preview
 
 /// Phase 3.6A: Dialog for advanced tag filtering with multi-select and logic options.
 ///
@@ -43,10 +44,16 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
   late FilterLogic _logic;
   late TagPresenceFilter _presenceFilter;
   String _searchQuery = '';
+  Set<String> _savedSelections = {}; // UX7: Remember selections when switching to Untagged
+  final TextEditingController _searchController = TextEditingController(); // UX1: For clear button
 
   // FIX #2 (Codex v2): Preload tag counts instead of N×FutureBuilder
   Map<String, int> _tagCounts = {};
   bool _countsLoading = true;
+
+  // UX7: Result count preview
+  int? _resultCount;
+  bool _countLoading = false;
 
   @override
   void initState() {
@@ -57,6 +64,11 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
 
     // FIX #2: Load all tag counts in one query
     _loadTagCounts();
+
+    // UX7: Load initial result count if filter is active
+    if (widget.initialFilter.isActive) {
+      _updateResultCount();
+    }
   }
 
   Future<void> _loadTagCounts() async {
@@ -83,14 +95,75 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
     }
   }
 
-  // Filter displayed tags based on search query
-  List<Tag> get _displayedTags {
-    if (_searchQuery.isEmpty) return widget.allTags;
+  /// UX7: Update result count preview based on current filter selections
+  Future<void> _updateResultCount() async {
+    // Only show count for specific tag selections (not for "Any" or "Untagged")
+    if (_selectedTagIds.isEmpty) {
+      setState(() {
+        _resultCount = null;
+        _countLoading = false;
+      });
+      return;
+    }
 
-    final query = _searchQuery.toLowerCase();
-    return widget.allTags
-        .where((tag) => tag.name.toLowerCase().contains(query))
-        .toList();
+    setState(() {
+      _countLoading = true;
+    });
+
+    try {
+      final filter = FilterState(
+        selectedTagIds: _selectedTagIds.toList(),
+        logic: _logic,
+        presenceFilter: _presenceFilter,
+      );
+
+      final taskService = TaskService();
+      final count = await taskService.countFilteredTasks(
+        filter,
+        completed: widget.showCompletedCounts,
+      );
+
+      if (mounted) {
+        setState(() {
+          _resultCount = count;
+          _countLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error counting filtered tasks: $e');
+      if (mounted) {
+        setState(() {
+          _resultCount = null;
+          _countLoading = false;
+        });
+      }
+    }
+  }
+
+  // Filter displayed tags based on search query
+  // UX6: Sort by usage count (most used first)
+  List<Tag> get _displayedTags {
+    List<Tag> filtered;
+    if (_searchQuery.isEmpty) {
+      filtered = widget.allTags;
+    } else {
+      final query = _searchQuery.toLowerCase();
+      filtered = widget.allTags
+          .where((tag) => tag.name.toLowerCase().contains(query))
+          .toList();
+    }
+
+    // Sort by usage count (descending), then alphabetically
+    filtered.sort((a, b) {
+      final countA = _tagCounts[a.id] ?? 0;
+      final countB = _tagCounts[b.id] ?? 0;
+      if (countA != countB) {
+        return countB.compareTo(countA); // Higher counts first
+      }
+      return a.name.compareTo(b.name); // Alphabetically as tiebreaker
+    });
+
+    return filtered;
   }
 
   // Check if specific tag selection should be disabled
@@ -108,10 +181,24 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Search field
+            // UX1: Clear button for search
             TextField(
-              decoration: const InputDecoration(
+              controller: _searchController,
+              decoration: InputDecoration(
                 labelText: 'Search tags',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
               ),
               onChanged: (value) {
                 setState(() {
@@ -122,28 +209,42 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
             const SizedBox(height: 16),
 
             // Tag presence filter (segmented buttons)
+            // UX2: Tooltips for each option
             SegmentedButton<TagPresenceFilter>(
               segments: const [
                 ButtonSegment(
                   value: TagPresenceFilter.any,
                   label: Text('Any'),
+                  tooltip: 'Show all tasks (no tag filter)',
                 ),
                 ButtonSegment(
                   value: TagPresenceFilter.onlyTagged,
                   label: Text('Tagged'),
+                  tooltip: 'Show tasks that have at least one tag',
                 ),
                 ButtonSegment(
                   value: TagPresenceFilter.onlyUntagged,
                   label: Text('Untagged'),
+                  tooltip: 'Show only tasks with no tags',
                 ),
               ],
               selected: {_presenceFilter},
               onSelectionChanged: (Set<TagPresenceFilter> selected) {
                 setState(() {
+                  final oldFilter = _presenceFilter;
                   _presenceFilter = selected.first;
-                  // If "untagged" selected, clear specific tag selections
+
+                  // UX7: Save selections when switching TO untagged
                   if (_presenceFilter == TagPresenceFilter.onlyUntagged) {
+                    _savedSelections = Set.from(_selectedTagIds);
                     _selectedTagIds.clear();
+                  }
+
+                  // UX7: Restore selections when switching FROM untagged
+                  if (oldFilter == TagPresenceFilter.onlyUntagged &&
+                      _presenceFilter != TagPresenceFilter.onlyUntagged &&
+                      _savedSelections.isNotEmpty) {
+                    _selectedTagIds = Set.from(_savedSelections);
                   }
                 });
               },
@@ -170,59 +271,167 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
                   setState(() {
                     _logic = selected.first;
                   });
+                  // UX7: Update result count when logic changes
+                  _updateResultCount();
                 },
               ),
             const SizedBox(height: 16),
 
             // Tag list (scrollable)
             // M5: Show empty state when no tags exist or search returns nothing
+            // UX3: Scroll indicator with fade effect
             Expanded(
               child: _displayedTags.isEmpty
                   ? _buildEmptyState()
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _displayedTags.length,
-                      itemBuilder: (context, index) {
+                  : ShaderMask(
+                      shaderCallback: (Rect bounds) {
+                        return LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: const [
+                            Colors.transparent,
+                            Colors.black,
+                          ],
+                          stops: const [0.7, 1.0],
+                        ).createShader(bounds);
+                      },
+                      blendMode: BlendMode.dstOut,
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _displayedTags.length,
+                        itemBuilder: (context, index) {
                         final tag = _displayedTags[index];
                         final isChecked = _selectedTagIds.contains(tag.id);
 
                         // Parse hex color string to int (default to grey if null/invalid)
                         final colorInt = _parseHexColor(tag.color) ?? 0xFF9E9E9E;
 
-                        return CheckboxListTile(
+                        return ListTile(
                           enabled: !_tagSelectionDisabled,
-                          value: isChecked,
                           title: Text(tag.name),
                           // FIX #2: Direct access to preloaded counts (no FutureBuilder!)
                           subtitle: _countsLoading
                               ? const Text('...')
                               : Text('${_tagCounts[tag.id] ?? 0} tasks'),
-                          secondary: Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Color(colorInt),
-                              shape: BoxShape.circle,
+                          leading: Opacity(
+                            opacity: _tagSelectionDisabled ? 0.3 : 1.0,
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Color(colorInt),
+                                shape: BoxShape.circle,
+                              ),
                             ),
                           ),
-                          onChanged: _tagSelectionDisabled
+                          trailing: Opacity(
+                            opacity: _tagSelectionDisabled ? 0.38 : 1.0,
+                            child: Checkbox(
+                              value: isChecked,
+                              onChanged: _tagSelectionDisabled
+                                  ? null
+                                  : (bool? value) {
+                                      // UX POLISH: Light haptic feedback for checkbox toggle
+                                      HapticFeedback.lightImpact();
+
+                                      setState(() {
+                                        if (value == true) {
+                                          _selectedTagIds.add(tag.id);
+                                        } else {
+                                          _selectedTagIds.remove(tag.id);
+                                        }
+                                      });
+
+                                      // UX7: Update result count when selections change
+                                      _updateResultCount();
+                                    },
+                            ),
+                          ),
+                          // UX5: Visual bounding box for selected tags
+                          tileColor: isChecked
+                              ? Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer
+                                  .withValues(alpha: 0.3)
+                              : null,
+                          shape: isChecked
+                              ? RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    width: 2,
+                                  ),
+                                )
+                              : null,
+                          onTap: _tagSelectionDisabled
                               ? null
-                              : (bool? value) {
+                              : () {
                                   // UX POLISH: Light haptic feedback for checkbox toggle
                                   HapticFeedback.lightImpact();
 
                                   setState(() {
-                                    if (value == true) {
-                                      _selectedTagIds.add(tag.id);
-                                    } else {
+                                    if (isChecked) {
                                       _selectedTagIds.remove(tag.id);
+                                    } else {
+                                      _selectedTagIds.add(tag.id);
                                     }
                                   });
+
+                                  // UX7: Update result count when selections change
+                                  _updateResultCount();
                                 },
                         );
                       },
                     ),
+                  ),
             ),
+
+            // UX7: Result count preview (only show when tags are selected)
+            if (_selectedTagIds.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: _countLoading
+                    ? const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.filter_list,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _resultCount == null
+                                  ? 'Counting...'
+                                  : '$_resultCount ${_resultCount == 1 ? 'task' : 'tasks'} match',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
           ],
         ),
       ),

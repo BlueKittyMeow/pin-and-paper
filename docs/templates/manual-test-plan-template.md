@@ -14,6 +14,7 @@
 - [X] : Completed successfully
 - [0] : Failed
 - [/] : Neither successful nor failure
+- [?] : Test instructions unclear
 - [NA] : Not applicable
 
 ** : When appended to a line of a task, it contains my notes clarifying the behavior
