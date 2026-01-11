@@ -7,7 +7,9 @@ import '../models/task_suggestion.dart'; // Phase 2
 import '../providers/tag_provider.dart'; // Phase 3.6A
 import '../services/task_service.dart';
 import '../services/tag_service.dart'; // Phase 3.5
+import '../services/database_service.dart'; // Phase 3.6A: For database access
 import '../services/preferences_service.dart'; // Phase 2 Stretch
+import '../utils/constants.dart'; // Phase 3.6A: For AppConstants table names
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
 
 class TaskProvider extends ChangeNotifier {
@@ -180,11 +182,26 @@ class TaskProvider extends ChangeNotifier {
   // Phase 3.2: Refresh TreeController with active tasks
   // Active = incomplete OR (completed but has incomplete descendants)
   void _refreshTreeController() {
+    // Phase 3.6A: Build task ID set for efficient lookup
+    final taskIds = _tasks.map((t) => t.id).toSet();
+
     final activeRoots = _tasks.where((t) {
-      if (t.parentId != null) return false; // Only roots
+      // Phase 3.6A: In filtered views, treat as root if parent not in filtered results
+      if (t.parentId != null) {
+        // If parent exists in current task list, this is not a root
+        if (taskIds.contains(t.parentId)) {
+          debugPrint('[TreeRefresh] Task "${t.title}" (${t.id.substring(0, 8)}) has parent ${t.parentId?.substring(0, 8)} in filtered results - NOT a root');
+          return false;
+        }
+        // Parent not in filtered results - treat as root
+        debugPrint('[TreeRefresh] Task "${t.title}" (${t.id.substring(0, 8)}) has parent ${t.parentId?.substring(0, 8)} NOT in filtered results - treating as root');
+      }
+      // Original logic: true root (parentId == null) or orphaned in filtered view
       if (!t.completed) return true; // Incomplete tasks always active
       return _hasIncompleteDescendants(t); // Completed with incomplete children
     });
+
+    debugPrint('[TreeRefresh] Setting ${activeRoots.length} roots from ${_tasks.length} total tasks');
     _treeController.roots = activeRoots;
     _treeController.rebuild();
   }
@@ -519,7 +536,12 @@ class TaskProvider extends ChangeNotifier {
       }
 
       // Reload tasks to reflect changes
-      await loadTasks();
+      // Phase 3.6A: Preserve filter state after drag/drop
+      if (_filterState.isActive) {
+        await _reapplyCurrentFilter();
+      } else {
+        await loadTasks();
+      }
     } catch (e) {
       _errorMessage = 'Failed to move task: $e';
       debugPrint(_errorMessage);
@@ -534,6 +556,7 @@ class TaskProvider extends ChangeNotifier {
     String? newParentId;
     int newPosition = 0;
     int newDepth = 0;
+    bool needsDbQuery = false; // Track if we need to query actual sibling count
 
     // Determine drop location based on hover zone (30/40/30 split)
     // Uses extension from drag_and_drop_task_tile.dart
@@ -542,18 +565,16 @@ class TaskProvider extends ChangeNotifier {
         // Insert as previous sibling of target
         newParentId = details.targetNode.parentId;
 
-        // CRITICAL: Calculate actual index in current sibling list, not stored position
-        final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
-        final targetIndex = siblings.indexWhere((t) => t.id == details.targetNode.id);
-        newPosition = targetIndex >= 0 ? targetIndex : 0;
+        // Phase 3.6A: In filtered views, we can't reliably calculate position
+        // Use position 0 and let database reindexing handle it
+        newPosition = 0;
         newDepth = details.targetNode.depth;
       },
       whenInside: () {
         // Insert as last child of target
         newParentId = details.targetNode.id;
-        final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
-        newPosition = siblings.length;
         newDepth = details.targetNode.depth + 1;
+        needsDbQuery = true; // Need to get actual child count
 
         // Auto-expand target to show new child
         _treeController.setExpansionState(details.targetNode, true);
@@ -562,13 +583,26 @@ class TaskProvider extends ChangeNotifier {
         // Insert as next sibling of target
         newParentId = details.targetNode.parentId;
 
-        // CRITICAL: Calculate actual index in current sibling list, not stored position
-        final siblings = _tasks.where((t) => t.parentId == newParentId).toList();
-        final targetIndex = siblings.indexWhere((t) => t.id == details.targetNode.id);
-        newPosition = targetIndex >= 0 ? targetIndex + 1 : 0;
+        // Phase 3.6A: In filtered views, use position 0
+        newPosition = 0;
         newDepth = details.targetNode.depth;
       },
     );
+
+    // Phase 3.6A: If dropping "inside" and filters active, query actual sibling count
+    if (needsDbQuery && _filterState.isActive) {
+      final db = await DatabaseService.instance.database;
+      final result = await db.rawQuery('''
+        SELECT COUNT(*) as count
+        FROM ${AppConstants.tasksTable}
+        WHERE ${newParentId == null ? 'parent_id IS NULL' : 'parent_id = ?'}
+          AND deleted_at IS NULL
+      ''', newParentId == null ? [] : [newParentId]);
+      newPosition = result.first['count'] as int;
+    } else if (needsDbQuery) {
+      // No filter - use in-memory count
+      newPosition = _tasks.where((t) => t.parentId == newParentId).length;
+    }
 
     // Validate depth limit (max 4 levels: 0, 1, 2, 3)
     if (newDepth >= 4) {
@@ -733,6 +767,49 @@ class TaskProvider extends ChangeNotifier {
   // ============================================
   // PHASE 3.6A: TAG FILTERING METHODS
   // ============================================
+
+  /// Reapply the current filter to refresh task list after drag/drop operations.
+  ///
+  /// This is like setFilter() but without the early return check, ensuring
+  /// the filter is always reapplied even if the FilterState object is the same.
+  Future<void> _reapplyCurrentFilter() async {
+    if (!_filterState.isActive) {
+      await loadTasks();
+      return;
+    }
+
+    try {
+      // Fetch filtered results
+      final activeFuture = _taskService.getFilteredTasks(
+        _filterState,
+        completed: false,
+      );
+      final completedFuture = _taskService.getFilteredTasks(
+        _filterState,
+        completed: true,
+      );
+
+      final results = await Future.wait([activeFuture, completedFuture]);
+
+      _tasks = results[0];
+
+      // Load tags for filtered tasks
+      final taskIds = _tasks.map((t) => t.id).toList();
+      _taskTags = await _tagService.getTagsForAllTasks(taskIds);
+
+      // Re-categorize tasks with new filtered list
+      _categorizeTasks();
+
+      // Refresh tree controller
+      _refreshTreeController();
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error reapplying filter: $e');
+      // On error, try to reload all tasks
+      await loadTasks();
+    }
+  }
 
   /// Apply a new filter to the task lists.
   ///

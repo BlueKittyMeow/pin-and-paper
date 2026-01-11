@@ -226,33 +226,39 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
           ],
         ),
       ),
+      actionsOverflowButtonSpacing: 8,
       actions: [
-        // M4: Add Clear All button for easy filter reset from dialog
-        TextButton(
-          onPressed: () {
-            HapticFeedback.mediumImpact();
-            Navigator.pop(context, FilterState.empty);
-          },
-          child: const Text('Clear All'),
-        ),
-        const Spacer(),
-        TextButton(
-          onPressed: () => Navigator.pop(context), // Cancel
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            // UX POLISH: Medium haptic feedback for major action
-            HapticFeedback.mediumImpact();
+        // M4: Clear All button on the left side
+        Row(
+          children: [
+            TextButton(
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                Navigator.pop(context, FilterState.empty);
+              },
+              child: const Text('Clear All'),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.pop(context), // Cancel
+              child: const Text('Cancel'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                // UX POLISH: Medium haptic feedback for major action
+                HapticFeedback.mediumImpact();
 
-            final filter = FilterState(
-              selectedTagIds: _selectedTagIds.toList(),
-              logic: _logic,
-              presenceFilter: _presenceFilter,
-            );
-            Navigator.pop(context, filter);
-          },
-          child: const Text('Apply'),
+                final filter = FilterState(
+                  selectedTagIds: _selectedTagIds.toList(),
+                  logic: _logic,
+                  presenceFilter: _presenceFilter,
+                );
+                Navigator.pop(context, filter);
+              },
+              child: const Text('Apply'),
+            ),
+          ],
         ),
       ],
     );

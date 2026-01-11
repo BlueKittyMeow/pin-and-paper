@@ -174,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           return TaskItem(
                             key: ValueKey(entry.node.id),
                             task: entry.node,
-                            depth: entry.node.depth,
+                            depth: entry.level, // Phase 3.6A: Use visible tree depth
                             hasChildren: entry.hasChildren,
                             isExpanded: entry.isExpanded,
                             onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
