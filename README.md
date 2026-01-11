@@ -84,7 +84,7 @@ Muted Lavender:#9B8FA5  (dried flowers, soft accents)
   - 6 schema migrations (v1 → v6)
   - Supports task hierarchy, tags, soft delete, due dates
 - **Provider** - Simple state management (upgrading to Riverpod later)
-- **154 comprehensive tests** - Models, services, utilities, migrations, widgets (95%+ pass rate)
+- **180+ comprehensive tests** - Models, services, utilities, migrations, widgets (99%+ pass rate)
 
 ### AI Integration
 - **Claude API** (Phase 2) - Natural language task extraction from brain dumps
@@ -138,12 +138,19 @@ Data Layer (SQLite)
   - Performance optimized for 60+ hierarchical completed tasks
   - Breadcrumbs with visual indicators (↳ icon + italic text)
   - Validation complete with future enhancements identified
+- ✅ **Phase 3.6A:** Tag Filtering Polish & Validation (Jan 2026)
+  - 22 comprehensive automated tests (100% passing)
+  - 6 critical bugs discovered and fixed (filter persistence, hierarchy display, indentation)
+  - 7 UX improvements (clear button, tooltips, scroll fade, usage-based sorting, visual highlights, selection preservation, result count preview)
+  - Performance validated (<10ms filtering, <5ms counting)
+  - Production-ready tag filtering with multi-select and AND/OR logic
+  - Active filter bar with chip removal and clear all
 
 **Next Up:**
-- 🔜 **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
-  - Universal search (active + completed tasks)
-  - Tag-based filtering with multi-select
-  - Clickable tag chips throughout app
+- 🔜 **Phase 3.6B:** Universal Search Implementation (1-2 weeks)
+  - Search across active + completed tasks
+  - Include titles, notes, and tags in search
+  - Magnifying glass icon in app bar
 - ⚠️ **Phase 3.6.5:** Edit Task Modal Rework (1 week) - **Required before 3.7**
   - Comprehensive edit modal with all task fields
   - **Completed task metadata view** (created/completed timestamps, full details)
@@ -268,18 +275,27 @@ Each phase builds on the previous:
   - Database v6
   - **Dual AI code review:** All 11 findings addressed (6 UX + 5 technical)
 
+- [x] **Phase 3.6A:** Tag Filtering Polish & Validation (Jan 2026)
+  - **22 comprehensive automated tests** (100% passing)
+  - **6 critical bugs** discovered and resolved (filter persistence, hierarchy, indentation)
+  - **7 UX improvements** (clear button, tooltips, scroll fade, sorting, highlights, state preservation, result preview)
+  - **Performance validated:** <10ms filtering, <5ms counting
+  - Production-ready tag filtering with AND/OR logic
+  - Active filter bar with chip interactions
+
 ### Current Stats
-- **~8,000+ lines of production code**
-- **160+ tests passing** (100% pass rate)
+- **~8,500+ lines of production code**
+- **180+ tests passing** (99%+ pass rate, 257/258)
 - **Database:** v6 (6 migrations complete)
-- **Phases completed:** 2 full phases + 5 subphases
-- **Fix #C3 validated:** Completed task hierarchy preserved for Phase 4 daybook
+- **Phases completed:** 2 full phases + 6 subphases
+- **Latest:** Phase 3.6A - Tag filtering production-ready with comprehensive testing
 
 ### Next Up
-- **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
-  - Universal search with magnifying glass icon (active + completed)
-  - Tag filtering with clickable chips and multi-select
-  - Search includes titles, notes, tags
+- **Phase 3.6B:** Universal Search Implementation (1-2 weeks)
+  - Search across active + completed tasks
+  - Include titles, notes, and tags in search
+  - Magnifying glass icon in app bar
+  - Combined with filter state for powerful queries
 - **Phase 3.6.5:** Edit Task Modal Rework (1 week) ⚠️ **Blocking for Phase 3.7**
   - Current edit modal only allows title changes
   - Need comprehensive modal with due date picker, notes, tags, parent selector
