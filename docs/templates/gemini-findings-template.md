@@ -31,6 +31,20 @@ This document is for **Gemini** to document findings during Phase [X.Y] review/v
 
 **⚠️ CRITICAL:** These build commands and methodology are here to guide your review. Follow them!
 
+**🚫 NEVER SIMULATE OTHER AGENTS' RESPONSES 🚫**
+**DO NOT write feedback on behalf of Codex, Claude, or anyone else!**
+**ONLY document YOUR OWN findings in this document.**
+
+If you want to reference another agent's work:
+- ✅ "See Codex's findings in codex-findings.md for architecture concerns"
+- ❌ DO NOT write "Codex found..." in this doc
+- ❌ DO NOT create sections for other agents
+- ❌ DO NOT simulate what other agents might say
+
+**This is YOUR document. Other agents have their own documents.**
+
+---
+
 ### Review Focus Areas
 
 1. **Build Verification:**

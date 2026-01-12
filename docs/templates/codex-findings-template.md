@@ -31,6 +31,20 @@ This document is for **Codex** to document findings during Phase [X.Y] review/va
 
 **⚠️ CRITICAL:** These instructions are here to help you navigate the codebase efficiently. Use these commands and patterns!
 
+**🚫 NEVER SIMULATE OTHER AGENTS' RESPONSES 🚫**
+**DO NOT write feedback on behalf of Gemini, Claude, or anyone else!**
+**ONLY document YOUR OWN findings in this document.**
+
+If you want to reference another agent's work:
+- ✅ "See Gemini's findings in gemini-findings.md for additional SQL issues"
+- ❌ DO NOT write "Gemini found..." in this doc
+- ❌ DO NOT create sections for other agents
+- ❌ DO NOT simulate what other agents might say
+
+**This is YOUR document. Other agents have their own documents.**
+
+---
+
 ### Review Focus Areas
 
 1. **Code Quality & Architecture:**
