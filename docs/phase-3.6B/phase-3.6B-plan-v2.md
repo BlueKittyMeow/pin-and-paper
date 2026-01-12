@@ -1,13 +1,25 @@
 # Phase 3.6B Plan - Universal Search (v2)
 
-**Version:** 2
+**Version:** 2 (Updated with BlueKitty's feedback)
 **Created:** 2026-01-11
-**Status:** Draft
-**Estimated Duration:** 1-2 weeks (7-10 working days)
+**Updated:** 2026-01-11 (BlueKitty review incorporated)
+**Status:** Updated with user feedback - Ready for Gemini/Codex review
+**Estimated Duration:** 8-11 working days (updated from 7-10 for new features)
 
 ---
 
 ## Change Log
+
+**v2 (BlueKitty feedback incorporated):**
+- **Search persistence:** Only clear state on app launch, NOT on dialog close
+- **Tag filter integration:** OPTIONAL and explicit (not automatic)
+  - Added "Apply active tags" button
+  - Added tag selector dropdown
+  - Default: search NOT constrained by active filters
+- **Default scope:** Changed to "Current" (was "All tasks")
+- **Clear All button:** Reset all search parameters (query + scope + tags)
+- **Future priorities:** Marked advanced search syntax and result count as HIGH priority
+- **Timeline:** Updated to 8-11 days (from 7-10) for new features
 
 **v1 → v2:**
 - Expanded scope to match PROJECT_SPEC.md requirements
@@ -110,13 +122,16 @@ class SearchService {
 
   /// Performs fuzzy search across tasks
   /// Returns results with relevance scores
+  ///
+  /// NEW (BlueKitty): Tag filters are OPTIONAL and explicit only,
+  /// not automatically applied from active filter state
   Future<List<SearchResult>> search({
     required String query,
-    required SearchScope scope,  // All, Current, RecentlyCompleted, Completed
-    FilterState? tagFilters,     // Optional: combine with Phase 3.6A filters
+    required SearchScope scope,    // All, Current, RecentlyCompleted, Completed
+    List<String>? tagIds,           // Optional: explicitly selected tag IDs
   }) async {
     // 1. Get all potential matches from database
-    final candidates = await _getCandidates(query, scope, tagFilters);
+    final candidates = await _getCandidates(query, scope, tagIds);
 
     // 2. Score each candidate with fuzzy matching
     final scored = _scoreResults(candidates, query);
@@ -130,7 +145,7 @@ class SearchService {
   Future<List<Task>> _getCandidates(
     String query,
     SearchScope scope,
-    FilterState? tagFilters,
+    List<String>? tagIds,
   ) async {
     // Use SQL LIKE for initial filtering (fast with indexes)
     // Then apply fuzzy matching in Dart for scoring
@@ -172,11 +187,12 @@ class SearchService {
       args.addAll([pattern, pattern, pattern]);
     }
 
-    // Tag filters from Phase 3.6A (if provided)
-    if (tagFilters != null && tagFilters.selectedTagIds.isNotEmpty) {
-      // Apply tag filtering logic from TaskService
-      // (AND/OR logic, presence filters)
-      _applyTagFilters(conditions, args, tagFilters);
+    // Tag filters (if explicitly selected by user) - NEW BlueKitty
+    if (tagIds != null && tagIds.isNotEmpty) {
+      // Simple OR logic for search: task has ANY of the selected tags
+      // (Simpler than Phase 3.6A AND/OR logic - search is more permissive)
+      conditions.add('tags.id IN (${tagIds.map((_) => '?').join(',')})');
+      args.addAll(tagIds);
     }
 
     final sql = '''
@@ -302,9 +318,24 @@ class SearchDialog extends StatefulWidget {
 
 class _SearchDialogState extends State<SearchDialog> {
   final _searchController = TextEditingController();
-  SearchScope _scope = SearchScope.all;
+  SearchScope _scope = SearchScope.current;  // DEFAULT: Current (BlueKitty)
   List<SearchResult> _results = [];
+  List<String> _selectedTagIds = [];  // NEW: Optional tag filter
   bool _isSearching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Restore search state from session (if any)
+    _restoreSearchState();
+  }
+
+  @override
+  void dispose() {
+    // Save search state for next open (cleared only on app launch)
+    _saveSearchState();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -314,14 +345,17 @@ class _SearchDialogState extends State<SearchDialog> {
         height: MediaQuery.of(context).size.height * 0.8,
         child: Column(
           children: [
-            // Header with close button
+            // Header with close and clear all buttons
             _buildHeader(),
 
             // Search field
             _buildSearchField(),
 
-            // Filter checkboxes
+            // Scope filter chips
             _buildScopeFilters(),
+
+            // Tag filters (optional) - NEW
+            _buildTagFilters(),
 
             // Results list (or loading/empty state)
             Expanded(
@@ -341,12 +375,29 @@ class _SearchDialogState extends State<SearchDialog> {
     return AppBar(
       title: Text('Search Tasks'),
       actions: [
+        // Clear All button - NEW (BlueKitty)
+        if (_searchController.text.isNotEmpty ||
+            _selectedTagIds.isNotEmpty ||
+            _scope != SearchScope.current)
+          TextButton(
+            onPressed: _clearAll,
+            child: Text('Clear All', style: TextStyle(color: Colors.white)),
+          ),
         IconButton(
           icon: Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
       ],
     );
+  }
+
+  void _clearAll() {
+    setState(() {
+      _searchController.clear();
+      _scope = SearchScope.current;
+      _selectedTagIds.clear();
+      _results = [];
+    });
   }
 
   Widget _buildSearchField() {
@@ -376,31 +427,128 @@ class _SearchDialogState extends State<SearchDialog> {
   }
 
   Widget _buildScopeFilters() {
-    return Wrap(
-      spacing: 8,
-      children: [
-        FilterChip(
-          label: Text('All tasks'),
-          selected: _scope == SearchScope.all,
-          onSelected: (_) => _setScope(SearchScope.all),
-        ),
-        FilterChip(
-          label: Text('Current'),
-          selected: _scope == SearchScope.current,
-          onSelected: (_) => _setScope(SearchScope.current),
-        ),
-        FilterChip(
-          label: Text('Recently completed'),
-          selected: _scope == SearchScope.recentlyCompleted,
-          onSelected: (_) => _setScope(SearchScope.recentlyCompleted),
-        ),
-        FilterChip(
-          label: Text('Completed'),
-          selected: _scope == SearchScope.completed,
-          onSelected: (_) => _setScope(SearchScope.completed),
-        ),
-      ],
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          FilterChip(
+            label: Text('All tasks'),
+            selected: _scope == SearchScope.all,
+            onSelected: (_) => _setScope(SearchScope.all),
+          ),
+          FilterChip(
+            label: Text('Current'),
+            selected: _scope == SearchScope.current,
+            onSelected: (_) => _setScope(SearchScope.current),
+          ),
+          FilterChip(
+            label: Text('Recently completed'),
+            selected: _scope == SearchScope.recentlyCompleted,
+            onSelected: (_) => _setScope(SearchScope.recentlyCompleted),
+          ),
+          FilterChip(
+            label: Text('Completed'),
+            selected: _scope == SearchScope.completed,
+            onSelected: (_) => _setScope(SearchScope.completed),
+          ),
+        ],
+      ),
     );
+  }
+
+  // NEW: Tag filter section (optional, explicit) - BlueKitty requirement
+  Widget _buildTagFilters() {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // "Apply active tags" button
+              ElevatedButton.icon(
+                onPressed: _applyActiveTagFilters,
+                icon: Icon(Icons.filter_list),
+                label: Text('Apply active tags'),
+              ),
+              SizedBox(width: 8),
+              // "Add tags" button
+              OutlinedButton.icon(
+                onPressed: _selectTags,
+                icon: Icon(Icons.add),
+                label: Text('Add tags'),
+              ),
+            ],
+          ),
+          // Show selected tag chips
+          if (_selectedTagIds.isNotEmpty) ...[
+            SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _selectedTagIds.map((tagId) {
+                return FutureBuilder<Tag?>(
+                  future: TagService().getTagById(tagId),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return SizedBox.shrink();
+                    final tag = snapshot.data!;
+                    return Chip(
+                      label: Text(tag.name),
+                      deleteIcon: Icon(Icons.close, size: 18),
+                      onDeleted: () => _removeTagFilter(tagId),
+                      backgroundColor: Color(tag.color).withOpacity(0.2),
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _applyActiveTagFilters() {
+    // Get current tag filters from TaskProvider
+    final taskProvider = context.read<TaskProvider>();
+    final activeFilters = taskProvider.filterState;
+
+    if (activeFilters.selectedTagIds.isEmpty) {
+      // Show snackbar: "No active tag filters to apply"
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No active tag filters to apply')),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedTagIds = List.from(activeFilters.selectedTagIds);
+      _performSearch();
+    });
+  }
+
+  void _selectTags() async {
+    // Open tag selection dialog (similar to TagFilterDialog)
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => TagSelectionDialog(
+        initialSelectedIds: _selectedTagIds,
+      ),
+    );
+
+    if (selected != null) {
+      setState(() {
+        _selectedTagIds = selected;
+        _performSearch();
+      });
+    }
+  }
+
+  void _removeTagFilter(String tagId) {
+    setState(() {
+      _selectedTagIds.remove(tagId);
+      _performSearch();
+    });
   }
 
   Widget _buildResults() {
@@ -454,12 +602,12 @@ class _SearchDialogState extends State<SearchDialog> {
     setState(() => _isSearching = true);
 
     final searchService = SearchService(/* ... */);
-    final tagFilters = context.read<TaskProvider>().filterState;
 
+    // NEW: Use ONLY explicit tag filters (not automatic) - BlueKitty
     final results = await searchService.search(
       query: query,
       scope: _scope,
-      tagFilters: tagFilters.isActive ? tagFilters : null,
+      tagIds: _selectedTagIds.isNotEmpty ? _selectedTagIds : null,
     );
 
     setState(() {
@@ -469,12 +617,40 @@ class _SearchDialogState extends State<SearchDialog> {
   }
 
   void _navigateToTask(Task task) {
-    // Close dialog
+    // Close dialog - BlueKitty confirmed
     Navigator.pop(context);
 
     // Navigate to task in main list
     // Scroll to task and highlight it
     context.read<TaskProvider>().navigateToTask(task.id);
+  }
+
+  // NEW: Search state persistence (cleared only on app launch) - BlueKitty
+  void _saveSearchState() {
+    // Save to app session storage (not permanent database)
+    // Cleared when app restarts
+    final state = {
+      'query': _searchController.text,
+      'scope': _scope.index,
+      'tagIds': _selectedTagIds,
+    };
+    // Store in TaskProvider or shared preferences (session only)
+    context.read<TaskProvider>().saveSearchState(state);
+  }
+
+  void _restoreSearchState() {
+    // Restore from app session if available
+    final state = context.read<TaskProvider>().getSearchState();
+    if (state != null) {
+      _searchController.text = state['query'] as String? ?? '';
+      _scope = SearchScope.values[state['scope'] as int? ?? SearchScope.current.index];
+      _selectedTagIds = List<String>.from(state['tagIds'] as List? ?? []);
+
+      // Trigger search if query exists
+      if (_searchController.text.isNotEmpty) {
+        _performSearch();
+      }
+    }
   }
 }
 ```
@@ -624,70 +800,63 @@ class SearchResultTile extends StatelessWidget {
 
 ### 5. Integration with Phase 3.6A Tag Filters
 
-**Combine search with existing filters:**
+**NEW DESIGN (BlueKitty):** Tag filters are OPTIONAL and EXPLICIT, not automatic
 
+**Key principle:** By default, search is NOT constrained by active tag filters. Users can choose to apply them.
+
+**In SearchDialog:**
 ```dart
-// In SearchDialog:
-void _performSearch() async {
-  final query = _searchController.text.trim();
-
-  // Get current tag filters from TaskProvider
+// "Apply active tags" button
+void _applyActiveTagFilters() {
   final taskProvider = context.read<TaskProvider>();
-  final tagFilters = taskProvider.filterState;
+  final activeFilters = taskProvider.filterState;
 
-  // Pass tag filters to search service
-  final results = await searchService.search(
-    query: query,
-    scope: _scope,
-    tagFilters: tagFilters.isActive ? tagFilters : null,
+  if (activeFilters.selectedTagIds.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('No active tag filters to apply')),
+    );
+    return;
+  }
+
+  setState(() {
+    _selectedTagIds = List.from(activeFilters.selectedTagIds);
+    _performSearch();
+  });
+}
+
+// Tag selector dialog
+void _selectTags() async {
+  final selected = await showDialog<List<String>>(
+    context: context,
+    builder: (context) => TagSelectionDialog(
+      initialSelectedIds: _selectedTagIds,
+    ),
   );
 
-  setState(() => _results = results);
+  if (selected != null) {
+    setState(() {
+      _selectedTagIds = selected;
+      _performSearch();
+    });
+  }
 }
 ```
 
 **In SearchService:**
 ```dart
-void _applyTagFilters(
-  List<String> conditions,
-  List<dynamic> args,
-  FilterState tagFilters,
-) {
-  // Reuse exact logic from TaskService.getFilteredTasks()
-  // This ensures consistency between search and filter behavior
-
-  if (tagFilters.selectedTagIds.isEmpty) return;
-
-  if (tagFilters.logic == FilterLogic.or) {
-    // OR logic: task has any of the selected tags
-    conditions.add('tags.id IN (${tagFilters.selectedTagIds.map((_) => '?').join(',')})');
-    args.addAll(tagFilters.selectedTagIds);
-  } else {
-    // AND logic: task has all of the selected tags
-    // (More complex - requires subquery or GROUP BY HAVING)
-    // ... (use Phase 3.6A implementation)
-  }
-
-  // Tag presence filter
-  switch (tagFilters.presenceFilter) {
-    case TagPresenceFilter.any:
-      // No filter
-      break;
-    case TagPresenceFilter.tagged:
-      conditions.add('tags.id IS NOT NULL');
-      break;
-    case TagPresenceFilter.untagged:
-      conditions.add('tags.id IS NULL');
-      break;
-  }
+// Simple OR logic for tag filtering in search
+if (tagIds != null && tagIds.isNotEmpty) {
+  conditions.add('tags.id IN (${tagIds.map((_) => '?').join(',')})');
+  args.addAll(tagIds);
 }
 ```
 
 **Why this approach?**
-- **Seamless integration:** Search respects active tag filters automatically
-- **Consistent logic:** Reuses Phase 3.6A filter implementation
-- **Combined power:** "Search 'meeting' + Filter by 'Work' tag" = work meetings only
-- **No UI changes needed:** Tag filters applied transparently
+- **Maximum flexibility:** Search everything by default, constrain only when desired
+- **User control:** Explicit "Apply active tags" or "Add tags" buttons
+- **Simpler logic:** OR-only for search (more permissive than Phase 3.6A AND/OR)
+- **Better UX:** Users aren't surprised by hidden constraints
+- **Reusable UI:** Tag selector can be reused from Phase 3.6A
 
 ---
 
@@ -807,8 +976,8 @@ Future<void> _migrateV6ToV7(Database db) async {
 ### Nice-to-Have (Future):
 - ⏸️ Search history/recent searches
 - ⏸️ Suggested queries based on tags/frequent searches
-- ⏸️ Advanced search syntax (e.g., `tag:work due:today`)
-- ⏸️ Search result count before opening dialog
+- 🔥 **PRIORITY:** Advanced search syntax (e.g., `tag:work due:today`) - BlueKitty high priority
+- 🔥 **PRIORITY:** Search result count before opening dialog - BlueKitty high priority
 - ⏸️ Keyboard shortcuts (Ctrl+F to open search)
 - ⏸️ Search within search (refine results)
 
@@ -1003,34 +1172,41 @@ void main() {
    - Should search query persist when dialog closed/reopened?
    - Or clear query each time (start fresh)?
    - **Recommendation:** Clear on close (fresh start)
+   - A: Likely clear on close - but I want to test it out from a UX pov first before fully committing to that. It depends - if I'm searching and I surface say, four tasks but I'm not positive which one I REALLY need, I may click to it and then find it's not the one I'm looking for and then have to return to search again. It would be very frustrating to have to enter it again. Maybe we only do a clear state when the app LAUNCHES. How's that sound? 
 
 2. **Recently completed timeframe:**
    - Currently 30 days - is this correct?
    - Or should it be 7 days / 14 days / configurable?
    - **Recommendation:** 30 days (matches Recently Deleted)
+   - A: This is user configurable. 30 days is our default but when we implement the natural date and time processing, that involves our user onboarding quiz and we will have the user config for this setting be more visible (It's currently actually configurable on settings page anyway)
 
 3. **Search scope default:**
    - Should default be "All tasks" or "Current"?
    - **Recommendation:** "All tasks" (most comprehensive)
+   - A: Default: "Current"
 
 4. **Minimum query length:**
    - Search immediately when typing, or require 2-3 characters?
    - **Recommendation:** Search on any input (even 1 char)
+   - A: Agree with your recommendation
 
 5. **Tag filter visibility in search dialog:**
    - Should search dialog show active tag filters?
    - Or just apply them silently in background?
    - **Recommendation:** Show active filters with "Clear filters" button
+   - A: I don't think we should be searching within tag filtered results. I think we could have an "apply active tags" button, but by default search should just search all tasks without prefiltering by tags. Users CAN explicitly choose to add their current active tags from their filtered view AND to add more from a dropdown but let's not constrain. 
 
 6. **Match highlighting color:**
    - Yellow with 30% opacity (current)
    - Or different color (orange, blue, green)?
    - **Recommendation:** Yellow (standard search highlighting)
+   - A: agreed with recommendation
 
 7. **Navigation behavior:**
    - Close dialog immediately on result tap?
    - Or keep dialog open and highlight result in background?
    - **Recommendation:** Close immediately (standard behavior)
+   - A: Close I suppose, so long as we are saving the entire search config for the user to go right back to. We should also have a "clear all" to reset the search paramaters. 
 
 ---
 
