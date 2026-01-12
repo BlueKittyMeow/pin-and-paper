@@ -1,16 +1,35 @@
 # Codex Findings - Phase [X.Y] Validation
 
+**⚠️ TEMPLATE USAGE INSTRUCTIONS ⚠️**
+**DO NOT edit this template directly!**
+**ALWAYS copy to `docs/phase-XX/codex-findings.md` and customize.**
+
+```bash
+# Correct usage:
+cp docs/templates/codex-findings-template.md docs/phase-3.6B/codex-findings.md
+# Then edit codex-findings.md to fill in phase details
+```
+
+**This template is used for BOTH:**
+- Pre-implementation review (reviewing plans before coding)
+- Post-implementation validation (reviewing code after implementation)
+
+---
+
 **Phase:** [X.Y - Brief Description]
-**Validation Document:** [Link to phase-X.Y-validation-vN.md]
+**Plan/Validation Document:** [Link to phase-X.Y-plan-vN.md OR phase-X.Y-validation-vN.md]
 **Review Date:** [YYYY-MM-DD]
 **Reviewer:** Codex
+**Review Type:** [Pre-Implementation Review / Post-Implementation Validation]
 **Status:** ⏳ Pending Review
 
 ---
 
 ## Instructions
 
-This document is for **Codex** to document findings during Phase [X.Y] validation.
+This document is for **Codex** to document findings during Phase [X.Y] review/validation.
+
+**⚠️ CRITICAL:** These instructions are here to help you navigate the codebase efficiently. Use these commands and patterns!
 
 ### Review Focus Areas
 

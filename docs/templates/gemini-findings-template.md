@@ -1,16 +1,35 @@
 # Gemini Findings - Phase [X.Y] Validation
 
+**⚠️ TEMPLATE USAGE INSTRUCTIONS ⚠️**
+**DO NOT edit this template directly!**
+**ALWAYS copy to `docs/phase-XX/gemini-findings.md` and customize.**
+
+```bash
+# Correct usage:
+cp docs/templates/gemini-findings-template.md docs/phase-3.6B/gemini-findings.md
+# Then edit gemini-findings.md to fill in phase details
+```
+
+**This template is used for BOTH:**
+- Pre-implementation review (reviewing plans before coding)
+- Post-implementation validation (reviewing code after implementation)
+
+---
+
 **Phase:** [X.Y - Brief Description]
-**Validation Document:** [Link to phase-X.Y-validation-vN.md]
+**Plan/Validation Document:** [Link to phase-X.Y-plan-vN.md OR phase-X.Y-validation-vN.md]
 **Review Date:** [YYYY-MM-DD]
 **Reviewer:** Gemini
+**Review Type:** [Pre-Implementation Review / Post-Implementation Validation]
 **Status:** ⏳ Pending Review
 
 ---
 
 ## Instructions
 
-This document is for **Gemini** to document findings during Phase [X.Y] validation.
+This document is for **Gemini** to document findings during Phase [X.Y] review/validation.
+
+**⚠️ CRITICAL:** These build commands and methodology are here to guide your review. Follow them!
 
 ### Review Focus Areas
 

@@ -150,66 +150,78 @@ ls docs/archive/phase-XX/
 
 **Then create:**
 - `phase-XXA-plan.md` (detailed spec for specified subphases)
-- `phase-XXA-review-v1.md` (team review doc)
+- `phase-XXA-review-v1.md` (team review doc) - OPTIONAL, often skipped
+- **CRITICAL:** `codex-findings.md` from codex-findings-template.md
+- **CRITICAL:** `gemini-findings.md` from gemini-findings-template.md
 
 **Process:**
 1. Read final phase-XX-plan-vN.md
 2. Extract subphase grouping (e.g., 3.1-3.3 = Phase 03A)
 3. Create detailed plan for that group
-4. Create review doc from review-template.md
-5. Notify team for feedback
+4. **CREATE agent findings docs from templates** (see step 6a below)
+5. Create agent review prompts explaining what to review
+6. Notify team for feedback
+
+**⚠️ IMPORTANT:** Always create individual agent findings docs, even for pre-implementation review!
 
 ---
 
-### 7. Initialize Bug Hunting Docs
+### 6a. Initialize Agent Findings Docs (CRITICAL - Don't Skip!)
 
-**When implementation starts:**
+**When:** IMMEDIATELY when starting pre-implementation review OR implementation
 
-Create tracking docs:
+**⚠️ MUST use templates - don't create from scratch!**
+
+**Create from templates:**
 ```bash
-touch docs/phase-XX/codex-findings.md
-touch docs/phase-XX/gemini-findings.md
-touch docs/phase-XX/claude-findings.md
+# Copy templates and customize for this phase
+cp docs/templates/codex-findings-template.md docs/phase-XX/codex-findings.md
+cp docs/templates/gemini-findings-template.md docs/phase-XX/gemini-findings.md
+
+# Edit each file to fill in:
+# - Phase number and description
+# - Validation document link (if post-implementation) or plan link (if pre-implementation)
+# - Review date
+# - Key files to review
 ```
 
-**Initial content for each:**
-```markdown
-# [Agent] Findings - Phase X
+**Why use templates:**
+- Templates contain detailed methodology instructions
+- Agents (especially Codex) need command examples for codebase exploration
+- Templates have structured feedback formats
+- Ensures consistency across phases
 
-**Phase:** X
-**Started:** [DATE]
-**Status:** Active
+**What to customize in templates:**
+- Replace `[X.Y - Brief Description]` with actual phase (e.g., "3.6B - Universal Search")
+- Update `[Link to phase-X.Y-validation-vN.md]` or point to plan doc for pre-implementation
+- Set `**Review Date:**` to current date
+- List key files/modules to review in "Review Focus Areas"
+- Update status from "⏳ Pending Review" as agents work
+
+**For pre-implementation review:**
+- Change "Validation" to "Pre-Implementation Review" in title
+- Focus agents on reviewing the PLAN, not code
+- Ask them to check for design flaws, not bugs
+
+**Confirm:** "Created codex-findings.md and gemini-findings.md from templates for Phase X"
 
 ---
 
-## Instructions
+### 7. Create Agent Review Prompts (Optional but Helpful)
 
-This document tracks bugs, issues, and improvements found during Phase X implementation.
+**When:** After creating findings docs
 
-**Format for each finding:**
-```markdown
-## Issue: [Brief Title]
-**File:** path/to/file.dart:line
-**Type:** [Bug / Performance / Architecture / Documentation]
-**Found:** [DATE]
+**Create prompts to guide agents:**
+- `CODEX-REVIEW-PROMPT.md` - What Codex should focus on
+- `GEMINI-REVIEW-PROMPT.md` - What Gemini should focus on
 
-**Description:**
-[What's wrong]
+**These prompts:**
+- Direct agents to their findings doc
+- Explain what to review (plan vs code)
+- Provide context and priorities
+- Set time expectations
 
-**Suggested Fix:**
-[How to fix]
-
-**Impact:** [High / Medium / Low]
-```
-
-Add findings as you discover them. Claude will periodically review and address.
-
----
-
-[Findings added below as discovered]
-```
-
-**Confirm:** "Bug tracking docs initialized for Phase X"
+**Note:** Agents will work in their OWN findings docs (codex-findings.md, gemini-findings.md), not in a shared review doc!
 
 ---
 

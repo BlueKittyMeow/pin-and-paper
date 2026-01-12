@@ -10,11 +10,11 @@
 
 | Template | Purpose | When to Use | Output File |
 |----------|---------|-------------|-------------|
-| [review-template.md](./review-template.md) | Pre-implementation review | Before coding starts | `phase-XXA-review-v1.md` |
+| [review-template.md](./review-template.md) | Pre-implementation review | Before coding starts (OPTIONAL) | `phase-XXA-review-v1.md` |
 | [validation-template.md](./validation-template.md) | Post-implementation validation | After coding complete | `phase-X.Y-validation-v1.md` |
 | [manual-test-plan-template.md](./manual-test-plan-template.md) | Manual testing checklist | During validation | `phase-X.Y-manual-test-plan.md` |
-| [codex-findings-template.md](./codex-findings-template.md) | Codex code review findings | During validation | `codex-findings-phase-X.Y.md` |
-| [gemini-findings-template.md](./gemini-findings-template.md) | Gemini build/analysis findings | During validation | `gemini-findings-phase-X.Y.md` |
+| **[codex-findings-template.md](./codex-findings-template.md)** | **Codex review/validation** | **ALWAYS for agent reviews** | **`codex-findings.md`** |
+| **[gemini-findings-template.md](./gemini-findings-template.md)** | **Gemini review/validation** | **ALWAYS for agent reviews** | **`gemini-findings.md`** |
 | [phase-start-checklist.md](./phase-start-checklist.md) | Phase initialization | Starting new phase | Follow checklist steps |
 | [phase-end-checklist.md](./phase-end-checklist.md) | Phase closeout | Finishing phase | `phase-XX-summary.md` + archive |
 | [build-and-release.md](./build-and-release.md) | Build and release guide | Before building release | Version updates + testing |
@@ -22,6 +22,35 @@
 | [WORKFLOW-SUMMARY.md](./WORKFLOW-SUMMARY.md) | Development cycle overview | Reference anytime | N/A (reference only) |
 | [agent-prompts-cheatsheet.md](./agent-prompts-cheatsheet.md) | Agent interaction guide | Reference for prompting | N/A (reference only) |
 | [agent-feedback-guide.md](./agent-feedback-guide.md) | How to provide feedback | Giving feedback | N/A (guide only) |
+
+---
+
+## ⚠️ CRITICAL: Agent Findings Templates
+
+**ALWAYS create individual agent findings docs from templates!**
+
+**DO THIS:**
+```bash
+cp docs/templates/codex-findings-template.md docs/phase-3.6B/codex-findings.md
+cp docs/templates/gemini-findings-template.md docs/phase-3.6B/gemini-findings.md
+```
+
+**DON'T DO THIS:**
+- ❌ Create findings docs from scratch
+- ❌ Use review-template.md for agent reviews
+- ❌ Have agents add feedback to a shared doc
+- ❌ Skip the template instructions
+
+**Why it matters:**
+- Templates contain critical methodology (grep commands, codebase navigation)
+- Codex especially needs these instructions to explore code effectively
+- Ensures consistent feedback format
+- Prevents agents from getting lost
+
+**When to create:**
+- ✅ Pre-implementation review (reviewing plans)
+- ✅ Post-implementation validation (reviewing code)
+- ✅ Ongoing bug hunting during implementation
 
 ---
 
