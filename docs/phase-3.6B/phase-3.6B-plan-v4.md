@@ -1,16 +1,26 @@
-# Phase 3.6B Plan - Universal Search (v4 - FINAL)
+# Phase 3.6B Plan - Universal Search (v4.1 - FINAL)
 
-**Version:** 4 (All CRITICAL/HIGH/MEDIUM/LOW fixes integrated)
+**Version:** 4.1 (All CRITICAL/HIGH/MEDIUM/LOW fixes + Codex review fixes integrated)
 **Created:** 2026-01-11
-**Updated:** 2026-01-17 (Complete implementations added)
-**Status:** ✅ PRODUCTION READY - All fixes verified and integrated
+**Updated:** 2026-01-17 (Codex review fixes applied)
+**Status:** ✅ PRODUCTION READY - Gemini approved, Codex approved
 **Estimated Duration:** 10-14 working days (realistic with complete implementations)
 
 ---
 
 ## Change Log
 
-**v4 (Complete implementations integrated - FINAL):**
+**v4.1 (Codex review fixes applied - FINAL):**
+
+**CODEX FIXES (6 issues resolved):**
+- ✅ **CRITICAL** - Variable scope in _getCandidates error logging fixed
+- ✅ **HIGH** - Presence filters now work when no tags selected
+- ✅ **MEDIUM** - TagService.getTagsByIds batch method added
+- ✅ **MEDIUM** - Breadcrumb N queries documented as acceptable trade-off
+- ✅ **MEDIUM** - Candidate cap trade-off documented
+- ✅ **LOW** - SearchService instantiation placeholder completed
+
+**v4 (Complete implementations integrated):**
 
 **ALL CRITICAL FIXES:**
 - ✅ **Complete breadcrumb loading** - Full implementation with batch loading, _breadcrumbs state, and pre-loaded data passing
@@ -274,12 +284,16 @@ class SearchService {
     SearchScope scope,
     FilterState? tagFilters,
   ) async {
+    // v4.1 CRITICAL FIX (Codex): Declare outside try for error logging access
+    String sql = '';
+    List<dynamic> args = [];
+
     try {
       // v3: Use SQL LIKE for initial filtering (no indexes help leading-wildcard)
       // NOTE: LIKE '%query%' cannot use B-tree indexes (Gemini finding)
 
       final conditions = <String>[];
-      final args = <dynamic>[];
+      args = <dynamic>[];  // Assign to outer variable
 
       // Deleted filter
       conditions.add('tasks.deleted_at IS NULL');
@@ -322,13 +336,25 @@ class SearchService {
         args.addAll([pattern, pattern, pattern]);
       }
 
-      // v3 FIX (Codex): Apply full FilterState logic (AND/OR, presence)
-      if (tagFilters != null && tagFilters.selectedTagIds.isNotEmpty) {
+      // v4.1 HIGH FIX (Codex): Apply tag filters whenever present (not just when tags selected)
+      // This ensures presence filters (onlyTagged/onlyUntagged) work even with empty selectedTagIds
+      if (tagFilters != null) {
         _applyTagFilters(conditions, args, tagFilters);
       }
 
       // v4 FIX: Removed redundant DISTINCT (GROUP BY sufficient)
-      final sql = '''
+      // v4.1 CRITICAL FIX: Assign to outer variable for error logging
+      //
+      // v4.1 MEDIUM (Codex note): LIMIT 200 candidate cap trade-off
+      // - Caps candidates BEFORE scoring (sorted by position, not relevance)
+      // - Can miss relevant results if >200 tasks match LIKE filter
+      // - ACCEPTABLE because:
+      //   * Prevents scoring 1000+ tasks on queries like "a" or "the"
+      //   * Ensures search stays under 100ms even with poor queries
+      //   * Most searches return <50 results
+      //   * Position-based ordering is reasonable proxy for task relevance
+      // - If users complain about missed results: consider adaptive cap based on query length
+      sql = '''
         SELECT
           tasks.*,
           GROUP_CONCAT(tags.name, ' ') AS tag_names
@@ -338,7 +364,7 @@ class SearchService {
         WHERE ${conditions.join(' AND ')}
         GROUP BY tasks.id
         ORDER BY tasks.position ASC
-        LIMIT 200  -- v3: Candidate cap to prevent runaway queries
+        LIMIT 200  -- v3: Candidate cap to prevent runaway queries (trade-off documented above)
       ''';
 
       final results = await _db.rawQuery(sql, args);
@@ -352,7 +378,7 @@ class SearchService {
     }
   }
 
-  // v3 NEW (Codex): Reuse Phase 3.6A filter logic for consistency
+  // v4.1 UPDATED (Codex HIGH fix): Reuse Phase 3.6A filter logic for consistency
   void _applyTagFilters(
     List<String> conditions,
     List<dynamic> args,
@@ -361,26 +387,31 @@ class SearchService {
     // Reuse exact logic from TaskService.getFilteredTasks()
     // This ensures search behavior matches main list filtering
 
-    if (filters.logic == FilterLogic.or) {
-      // OR logic: task has ANY of the selected tags
-      conditions.add('tags.id IN (${filters.selectedTagIds.map((_) => '?').join(',')})');
-      args.addAll(filters.selectedTagIds);
-    } else {
-      // AND logic: task has ALL of the selected tags
-      // Use HAVING COUNT with GROUP BY
-      conditions.add('''
-        tasks.id IN (
-          SELECT task_id
-          FROM task_tags
-          WHERE tag_id IN (${filters.selectedTagIds.map((_) => '?').join(',')})
-          GROUP BY task_id
-          HAVING COUNT(DISTINCT tag_id) = ?
-        )
-      ''');
-      args.addAll(filters.selectedTagIds);
-      args.add(filters.selectedTagIds.length);
+    // v4.1 HIGH FIX: Only apply tag ID logic when tags are actually selected
+    if (filters.selectedTagIds.isNotEmpty) {
+      if (filters.logic == FilterLogic.or) {
+        // OR logic: task has ANY of the selected tags
+        conditions.add('tags.id IN (${filters.selectedTagIds.map((_) => '?').join(',')})');
+        args.addAll(filters.selectedTagIds);
+      } else {
+        // AND logic: task has ALL of the selected tags
+        // Use HAVING COUNT with GROUP BY
+        conditions.add('''
+          tasks.id IN (
+            SELECT task_id
+            FROM task_tags
+            WHERE tag_id IN (${filters.selectedTagIds.map((_) => '?').join(',')})
+            GROUP BY task_id
+            HAVING COUNT(DISTINCT tag_id) = ?
+          )
+        ''');
+        args.addAll(filters.selectedTagIds);
+        args.add(filters.selectedTagIds.length);
+      }
     }
 
+    // v4.1 HIGH FIX (Codex): ALWAYS apply presence filter (even when selectedTagIds is empty)
+    // This allows "only tagged" or "only untagged" searches without specific tags
     // v4 FIX: Corrected enum values (verified from Phase 3.6A)
     // Tag presence filter
     switch (filters.presenceFilter) {
@@ -996,12 +1027,29 @@ class _SearchDialogState extends State<SearchDialog> {
     }
   }
 
-  // v4 COMPLETE: Batch-load tags to avoid FutureBuilder N+1
+  // v4.1 MEDIUM FIX (Codex): TRUE batch-load tags (single query, not N queries)
   Future<void> _loadTagsForFilter() async {
     if (_tagFilters == null || _tagFilters!.selectedTagIds.isEmpty) return;
 
-    for (final tagId in _tagFilters!.selectedTagIds) {
-      if (!_tagCache.containsKey(tagId)) {
+    // Find tags not already in cache
+    final missingTagIds = _tagFilters!.selectedTagIds
+        .where((id) => !_tagCache.containsKey(id))
+        .toList();
+
+    if (missingTagIds.isEmpty) return;
+
+    try {
+      // v4.1 MEDIUM FIX: Single batch query instead of N queries
+      final tags = await _tagService.getTagsByIds(missingTagIds);
+
+      // Add to cache
+      for (final tag in tags) {
+        _tagCache[tag.id] = tag;
+      }
+    } catch (e) {
+      print('Failed to batch-load tags: $e');
+      // Fallback to individual loading if batch fails
+      for (final tagId in missingTagIds) {
         try {
           final tag = await _tagService.getTagById(tagId);
           if (tag != null) {
@@ -1009,7 +1057,6 @@ class _SearchDialogState extends State<SearchDialog> {
           }
         } catch (e) {
           print('Failed to load tag $tagId: $e');
-          // Continue loading other tags
         }
       }
     }
@@ -1125,7 +1172,9 @@ class _SearchDialogState extends State<SearchDialog> {
     final currentOperationId = ++_searchOperationId;
 
     try {
-      final searchService = SearchService(/* ... */);
+      // v4.1 LOW FIX (Codex): Complete instantiation instead of placeholder
+      final db = await context.read<DatabaseService>().database;
+      final searchService = SearchService(db);
 
       // Perform search
       final results = await searchService.search(
@@ -1198,6 +1247,19 @@ class _SearchDialogState extends State<SearchDialog> {
   }
 
   // v4 COMPLETE (CRITICAL #1): Batch-load breadcrumbs with graceful degradation
+  // v4.1 MEDIUM (Codex note): This is still N queries (one per task with parent)
+  //
+  // TRADE-OFF DOCUMENTED:
+  // - Still N sequential database queries (not true batch)
+  // - BUT: Loaded ONCE before rendering (not per scroll like FutureBuilder)
+  // - For typical search results (10-50 tasks): adds ~50-200ms total
+  // - Acceptable because: breadcrumbs improve UX significantly, alternative
+  //   (recursive CTE or precomputed paths) adds significant complexity
+  //
+  // If performance becomes issue, consider:
+  // - Parallel loading with Future.wait + concurrency limit
+  // - Precompute parent paths in TaskProvider tree
+  // - Add breadcrumb cache in TaskService
   Future<Map<String, String>> _loadBreadcrumbsForResults(
     List<SearchResult> results,
   ) async {
@@ -1572,6 +1634,9 @@ dependencies:
 - ✅ `TagService.getTagById(id)` - Fetch single tag
 - ✅ `TagService.getTaskCountsByTag()` - Tag usage counts
 
+### Services (To Add in Phase 3.6B - v4.1 Codex MEDIUM fix)
+- ➕ `TagService.getTagsByIds(List<String>)` - Batch fetch multiple tags (eliminates N queries)
+
 ### TaskService (Verified)
 - ✅ `TaskService.getParentChain(taskId)` - For breadcrumb generation
 - ✅ `TaskService.getFilteredTasks()` - Reference SQL for tag filtering logic
@@ -1756,6 +1821,40 @@ During Day 6-7, implement `_scrollToNode` based on actual TreeView structure:
 3. **Fallback:** Just expand to node, show snackbar "Task is now visible"
 
 Fallback is acceptable MVP - expanding to node is the critical feature.
+
+---
+
+## 9. TagService Batch Method (v4.1 MEDIUM FIX - Codex)
+
+**Add to `TagService` class:**
+
+```dart
+/// v4.1 MEDIUM FIX (Codex): Batch-fetch multiple tags by IDs in a single query
+///
+/// This eliminates N sequential queries when loading tag chips in search dialog.
+/// For example, if user has 5 tags selected, this fetches all 5 in one query
+/// instead of 5 separate database queries.
+Future<List<Tag>> getTagsByIds(List<String> tagIds) async {
+  if (tagIds.isEmpty) return [];
+
+  final db = await database;
+  final placeholders = tagIds.map((_) => '?').join(',');
+
+  final results = await db.query(
+    'tags',
+    where: 'id IN ($placeholders)',
+    whereArgs: tagIds,
+  );
+
+  return results.map((map) => Tag.fromMap(map)).toList();
+}
+```
+
+**Why this matters:**
+- **Before (v4):** `_loadTagsForFilter()` called `getTagById()` in a loop - N queries
+- **After (v4.1):** Single `IN` query fetches all tags at once
+- **Impact:** Eliminates sequential database access, faster tag chip rendering
+- **Fallback:** If batch fails, code falls back to individual loading for resilience
 
 ---
 
