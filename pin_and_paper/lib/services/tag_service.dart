@@ -116,6 +116,30 @@ class TagService {
     return Tag.fromMap(maps.first);
   }
 
+  /// Batch-fetch multiple tags by IDs in a single query
+  ///
+  /// Phase 3.6B v4.1 MEDIUM FIX (Codex): Eliminates N sequential queries
+  /// when loading tag chips in search dialog.
+  ///
+  /// Example: If user has 5 tags selected, this fetches all 5 in one query
+  /// instead of 5 separate database queries.
+  ///
+  /// Returns list of tags (may be smaller than input if some IDs don't exist)
+  Future<List<Tag>> getTagsByIds(List<String> tagIds) async {
+    if (tagIds.isEmpty) return [];
+
+    final db = await _dbService.database;
+    final placeholders = tagIds.map((_) => '?').join(',');
+
+    final results = await db.query(
+      AppConstants.tagsTable,
+      where: 'id IN ($placeholders) AND deleted_at IS NULL',
+      whereArgs: tagIds,
+    );
+
+    return results.map((map) => Tag.fromMap(map)).toList();
+  }
+
   // ===================================================================
   // Tag-Task Associations
   // ===================================================================

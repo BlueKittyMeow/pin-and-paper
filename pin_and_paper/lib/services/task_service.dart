@@ -158,6 +158,43 @@ class TaskService {
     return maps.map((map) => Task.fromMap(map)).toList();
   }
 
+  /// Get parent chain for a task (for breadcrumb generation)
+  ///
+  /// Phase 3.6B: Returns list of parent tasks from immediate parent up to root.
+  /// Used for generating breadcrumb navigation in search results.
+  ///
+  /// Example: If task hierarchy is: Root > Parent > Child > Target
+  /// This returns: [Child, Parent, Root] (immediate parent first)
+  ///
+  /// Returns empty list if task has no parent (is root-level task).
+  /// Excludes soft-deleted tasks from the chain.
+  Future<List<Task>> getParentChain(String taskId) async {
+    final db = await _dbService.database;
+
+    // Use recursive CTE to walk up the parent chain
+    final maps = await db.rawQuery('''
+      WITH RECURSIVE ancestors AS (
+        SELECT id, parent_id, 0 as depth
+        FROM ${AppConstants.tasksTable}
+        WHERE id = ?
+
+        UNION ALL
+
+        SELECT t.id, t.parent_id, a.depth + 1
+        FROM ${AppConstants.tasksTable} t
+        INNER JOIN ancestors a ON t.id = a.parent_id
+        WHERE t.deleted_at IS NULL
+      )
+      SELECT t.*
+      FROM ${AppConstants.tasksTable} t
+      INNER JOIN ancestors a ON t.id = a.id
+      WHERE a.depth > 0
+      ORDER BY a.depth ASC
+    ''', [taskId]);
+
+    return maps.map((map) => Task.fromMap(map)).toList();
+  }
+
   /// Phase 3.6A: Get filtered tasks by tags and presence
   ///
   /// Returns tasks matching the filter criteria:

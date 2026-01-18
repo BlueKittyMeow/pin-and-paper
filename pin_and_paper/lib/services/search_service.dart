@@ -74,7 +74,7 @@ class SearchService {
       return scored;
     } on DatabaseException catch (e) {
       print('Database error during search: $e');
-      throw SearchException('Failed to query database: ${e.message}');
+      throw SearchException('Failed to query database: ${e.toString()}');
     } on FormatException catch (e) {
       print('Format error during search (likely bad query): $e');
       throw SearchException('Invalid search query: ${e.message}');

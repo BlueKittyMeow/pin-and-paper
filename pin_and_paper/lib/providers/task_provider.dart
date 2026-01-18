@@ -1,3 +1,4 @@
+import 'dart:async'; // Phase 3.6B: For Timer (highlight functionality)
 import 'package:flutter/foundation.dart';
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/filter_state.dart'; // Phase 3.6A
@@ -937,5 +938,94 @@ class TaskProvider extends ChangeNotifier {
   /// Reloads tasks with full hierarchy.
   Future<void> clearFilters() async {
     await setFilter(FilterState.empty);
+  }
+
+  // ==========================================================================
+  // Phase 3.6B: Search functionality
+  // ==========================================================================
+
+  /// Phase 3.6B: Search state persistence (session only)
+  Map<String, dynamic>? _searchState;
+
+  /// Save search state for next dialog open (cleared on app restart)
+  void saveSearchState(Map<String, dynamic> state) {
+    _searchState = state;
+    // NO notifyListeners() - this is internal state
+  }
+
+  /// Get saved search state (returns null if not saved or app restarted)
+  Map<String, dynamic>? getSearchState() {
+    return _searchState;
+  }
+
+  /// Phase 3.6B: Navigate to task from search results
+  ///
+  /// This method:
+  /// 1. Finds the task in the task list
+  /// 2. Expands all parent tasks to make it visible
+  /// 3. Scrolls to the task (implementation TBD based on TreeView structure)
+  /// 4. Highlights it for 2 seconds
+  Future<void> navigateToTask(String taskId) async {
+    // Step 1: Find task
+    final task = _tasks.firstWhere(
+      (t) => t.id == taskId,
+      orElse: () => throw Exception('Task not found'),
+    );
+
+    // Step 2: Expand all ancestors to make task visible
+    await _expandAncestors(task);
+
+    // Step 3: Scroll to node
+    // TODO: Implement during Day 6-7 based on actual TreeView structure
+    // Options:
+    // - Calculate index and use scrollToIndex if available
+    // - Calculate pixel offset and use ScrollController.animateTo
+    // - Fallback: Just expand (user scrolls manually)
+
+    // Step 4: Highlight temporarily
+    _highlightTask(taskId, duration: Duration(seconds: 2));
+
+    notifyListeners();
+  }
+
+  /// Expand all ancestors of a task to make it visible in the tree
+  Future<void> _expandAncestors(Task task) async {
+    // Walk up the parent chain and expand each parent
+    Task? current = task;
+    while (current != null && current.parentId != null) {
+      // Find parent task
+      final parent = _findParent(current.parentId);
+      if (parent == null) break;
+
+      // Expand parent node using TreeController
+      _treeController.expand(parent);
+
+      current = parent;
+    }
+  }
+
+  /// Highlight state for temporary task highlighting
+  String? _highlightedTaskId;
+  Timer? _highlightTimer;
+
+  void _highlightTask(String taskId, {required Duration duration}) {
+    _highlightedTaskId = taskId;
+    notifyListeners();
+
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(duration, () {
+      _highlightedTaskId = null;
+      notifyListeners();
+    });
+  }
+
+  bool isTaskHighlighted(String taskId) {
+    return _highlightedTaskId == taskId;
+  }
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    super.dispose();
   }
 }
