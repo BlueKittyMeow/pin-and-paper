@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 6; // Phase 3.5: Tags (hybrid deletion)
+  static const int databaseVersion = 7; // Phase 3.6B: Universal Search (no schema changes, FTS5 reserved)
 
   // Table names
   static const String tasksTable = 'tasks';

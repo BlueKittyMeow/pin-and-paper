@@ -385,6 +385,11 @@ class DatabaseService {
     if (oldVersion < 6) {
       await _migrateToV6(db);
     }
+
+    // Migrate from version 6 to 7: Phase 3.6B - Universal Search (no schema changes)
+    if (oldVersion < 7) {
+      await _migrateToV7(db);
+    }
   }
 
   /// Phase 3 Migration: v3 → v4
@@ -887,6 +892,32 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v6 successfully (case-insensitive tags + soft delete)');
+  }
+
+  /// Phase 3.6B Migration: v6 → v7
+  ///
+  /// No schema changes for Phase 3.6B Universal Search.
+  /// This migration is reserved for future FTS5 (Full-Text Search) implementation
+  /// if performance testing shows the LIKE queries don't meet the <100ms target.
+  ///
+  /// Current approach (v7):
+  /// - Uses SQL LIKE '%query%' for candidate selection
+  /// - No B-tree indexes (they don't help leading-wildcard LIKE)
+  /// - Dart fuzzy scoring with string_similarity package
+  /// - Candidate cap (LIMIT 200) prevents runaway queries
+  ///
+  /// Future FTS5 approach (if needed):
+  /// - Create FTS5 virtual table for tasks (title, notes)
+  /// - Create triggers to keep FTS5 in sync with tasks table
+  /// - Migrate to BM25 relevance ranking
+  /// - Expected performance: 10-50ms for 1000 tasks
+  ///
+  /// See docs/phase-3.6B/fts5-analysis.md for FTS5 migration plan.
+  Future<void> _migrateToV7(Database db) async {
+    debugPrint('Migrating database from v6 to v7: No schema changes (FTS5 reserved)');
+    // No operations needed - this is a version bump to track Phase 3.6B completion
+    // and reserve v7 for future FTS5 implementation if performance requires it
+    debugPrint('✅ Database migrated to v7 successfully');
   }
 
   Future<void> close() async {
