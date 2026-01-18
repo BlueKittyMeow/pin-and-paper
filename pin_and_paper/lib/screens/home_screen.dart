@@ -10,6 +10,7 @@ import '../widgets/task_item.dart';
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2
 import '../widgets/active_filter_bar.dart'; // Phase 3.6A
 import '../widgets/tag_filter_dialog.dart'; // Phase 3.6A
+import '../widgets/search_dialog.dart'; // Phase 3.6B
 import 'brain_dump_screen.dart'; // Phase 2
 import 'settings_screen.dart'; // Phase 2
 import 'quick_complete_screen.dart'; // Phase 2 Stretch
@@ -40,6 +41,17 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
         actions: [
+          // Phase 3.6B: Search button
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Search Tasks',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => SearchDialog(),
+              );
+            },
+          ),
           // Phase 3.6A: Filter button
           Consumer<TaskProvider>(
             builder: (context, taskProvider, _) {
