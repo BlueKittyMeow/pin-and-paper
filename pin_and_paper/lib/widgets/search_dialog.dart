@@ -23,6 +23,7 @@ class SearchDialog extends StatefulWidget {
 class _SearchDialogState extends State<SearchDialog> {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode(); // Phase 3.6B: For Enter key shortcut
+  final _keyboardListenerFocusNode = FocusNode(); // Phase 3.6B: For KeyboardListener
   final _tagService = TagService();  // v4: Cache service instance
   SearchScope _scope = SearchScope.current;  // DEFAULT: Current (BlueKitty)
   List<SearchResult> _results = [];
@@ -52,6 +53,7 @@ class _SearchDialogState extends State<SearchDialog> {
     _debounceTimer?.cancel();  // v3: Clean up timer
     _searchController.dispose();
     _searchFocusNode.dispose(); // Phase 3.6B
+    _keyboardListenerFocusNode.dispose(); // Phase 3.6B
     // Save search state for next open (cleared only on app launch)
     _saveSearchState();
     super.dispose();
@@ -59,18 +61,18 @@ class _SearchDialogState extends State<SearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return CallbackShortcuts(
+    return KeyboardListener(
       // Phase 3.6B: Handle Enter key when search field not focused
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.enter): () {
-          if (!_searchFocusNode.hasFocus) {
-            _applyActiveTagFilters();
-          }
-        },
+      focusNode: _keyboardListenerFocusNode,
+      autofocus: true,
+      onKeyEvent: (KeyEvent event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.enter &&
+            !_searchFocusNode.hasFocus) {
+          _applyActiveTagFilters();
+        }
       },
-      child: Focus(
-        autofocus: true,
-        child: Dialog(
+      child: Dialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -103,9 +105,8 @@ class _SearchDialogState extends State<SearchDialog> {
           ],
         ),
       ),
-        ), // Close Dialog
-      ), // Close Focus
-    ); // Close CallbackShortcuts
+      ), // Close Dialog
+    ); // Close KeyboardListener
   }
 
   Widget _buildHeader() {
