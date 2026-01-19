@@ -60,6 +60,7 @@ class _SearchDialogState extends State<SearchDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
+      clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
       child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
@@ -229,51 +230,53 @@ class _SearchDialogState extends State<SearchDialog> {
           // v4 COMPLETE: Show FilterState controls if tags selected
           if (_tagFilters != null && _tagFilters!.selectedTagIds.isNotEmpty) ...[
             SizedBox(height: 12),
-            // AND/OR toggle (Codex requirement - must be visible and changeable)
             Row(
               children: [
-                Text('Match: ', style: TextStyle(fontSize: 14)),
-                SegmentedButton<FilterLogic>(
-                  segments: [
-                    ButtonSegment(
-                      value: FilterLogic.or,
-                      label: Text('Any'),
-                      icon: Icon(Icons.filter_alt_outlined, size: 16),
-                    ),
-                    ButtonSegment(
-                      value: FilterLogic.and,
-                      label: Text('All'),
-                      icon: Icon(Icons.filter_alt, size: 16),
-                    ),
-                  ],
-                  selected: {_tagFilters!.logic},
-                  onSelectionChanged: (Set<FilterLogic> selected) {
-                    setState(() {
-                      _tagFilters = _tagFilters!.copyWith(logic: selected.first);
-                    });
-                    _debouncedSearch();
-                  },
-                ),
-                SizedBox(width: 16),
+                // AND/OR toggle - only show when MORE THAN ONE tag selected
+                if (_tagFilters!.selectedTagIds.length > 1) ...[
+                  Text('Match: ', style: TextStyle(fontSize: 14)),
+                  SegmentedButton<FilterLogic>(
+                    segments: [
+                      ButtonSegment(
+                        value: FilterLogic.or,
+                        label: Text('Any'),
+                        icon: Icon(Icons.filter_alt_outlined, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: FilterLogic.and,
+                        label: Text('All'),
+                        icon: Icon(Icons.filter_alt, size: 16),
+                      ),
+                    ],
+                    selected: {_tagFilters!.logic},
+                    onSelectionChanged: (Set<FilterLogic> selected) {
+                      setState(() {
+                        _tagFilters = _tagFilters!.copyWith(logic: selected.first);
+                      });
+                      _debouncedSearch();
+                    },
+                  ),
+                  SizedBox(width: 16),
+                ],
 
-                // v4 HIGH FIX #1: Disable "untagged" when tags are selected
+                // Additional presence filter dropdown (when tags are selected)
+                Text('Also require: ', style: TextStyle(fontSize: 14)),
                 DropdownButton<TagPresenceFilter>(
                   value: _tagFilters!.presenceFilter,
                   items: [
                     DropdownMenuItem(
                       value: TagPresenceFilter.any,
-                      child: Text('Any presence'),
+                      child: Text('No additional filter'),
                     ),
                     DropdownMenuItem(
                       value: TagPresenceFilter.onlyTagged,
-                      child: Text('Only tagged'),
+                      child: Text('Has any tag'),
                     ),
-                    // CRITICAL FIX: Only show "untagged" if no tags selected
-                    // (Can't have tasks with specific tags that are also untagged!)
+                    // Don't show "has no tags" when specific tags are selected (contradiction)
                     if (_tagFilters!.selectedTagIds.isEmpty)
                       DropdownMenuItem(
                         value: TagPresenceFilter.onlyUntagged,
-                        child: Text('Only untagged'),
+                        child: Text('Has no tags'),
                       ),
                   ],
                   onChanged: (value) {
@@ -281,7 +284,7 @@ class _SearchDialogState extends State<SearchDialog> {
                       setState(() {
                         _tagFilters = _tagFilters!.copyWith(presenceFilter: value);
 
-                        // v4 HIGH FIX: Defense in depth - clear tags if "untagged" selected
+                        // Clear tags if "has no tags" selected (contradiction)
                         if (value == TagPresenceFilter.onlyUntagged) {
                           _tagFilters = FilterState(
                             selectedTagIds: [],
@@ -321,34 +324,41 @@ class _SearchDialogState extends State<SearchDialog> {
           // Allows "only untagged" or "only tagged (any tag)" filters
           if (_tagFilters == null || _tagFilters!.selectedTagIds.isEmpty) ...[
             SizedBox(height: 12),
-            Text('Show: ', style: TextStyle(fontSize: 14)),
-            SegmentedButton<TagPresenceFilter>(
-              segments: [
-                ButtonSegment(
-                  value: TagPresenceFilter.any,
-                  label: Text('All tasks'),
-                ),
-                ButtonSegment(
-                  value: TagPresenceFilter.onlyTagged,
-                  label: Text('Only tagged'),
-                  tooltip: 'Tasks with ANY tag',
-                ),
-                ButtonSegment(
-                  value: TagPresenceFilter.onlyUntagged,
-                  label: Text('Only untagged'),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                Text('Additional filter:', style: TextStyle(fontSize: 14)),
+                SegmentedButton<TagPresenceFilter>(
+                  segments: [
+                    ButtonSegment(
+                      value: TagPresenceFilter.any,
+                      label: Text('None'),
+                    ),
+                    ButtonSegment(
+                      value: TagPresenceFilter.onlyTagged,
+                      label: Text('Has any tag'),
+                      tooltip: 'Show only tasks that have at least one tag',
+                    ),
+                    ButtonSegment(
+                      value: TagPresenceFilter.onlyUntagged,
+                      label: Text('Has no tags'),
+                      tooltip: 'Show only tasks with no tags',
+                    ),
+                  ],
+                  selected: {_tagFilters?.presenceFilter ?? TagPresenceFilter.any},
+                  onSelectionChanged: (Set<TagPresenceFilter> selected) {
+                    setState(() {
+                      _tagFilters = FilterState(
+                        selectedTagIds: [],
+                        logic: FilterLogic.or,
+                        presenceFilter: selected.first,
+                      );
+                    });
+                    _debouncedSearch();
+                  },
                 ),
               ],
-              selected: {_tagFilters?.presenceFilter ?? TagPresenceFilter.any},
-              onSelectionChanged: (Set<TagPresenceFilter> selected) {
-                setState(() {
-                  _tagFilters = FilterState(
-                    selectedTagIds: [],
-                    logic: FilterLogic.or,
-                    presenceFilter: selected.first,
-                  );
-                });
-                _debouncedSearch();
-              },
             ),
           ],
         ],

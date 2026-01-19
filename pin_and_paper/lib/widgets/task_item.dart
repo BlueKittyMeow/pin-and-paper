@@ -215,24 +215,37 @@ class TaskItem extends StatelessWidget {
     final effectiveDepth = depth ?? task.depth;
     final leftMargin = 16.0 + (effectiveDepth * 24.0); // 24px per level
 
-    final taskContainer = Container(
-      margin: EdgeInsets.only(
-        left: leftMargin,
-        right: 16,
-        top: 4,
-        bottom: 4,
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            offset: const Offset(0, 1),
-            blurRadius: 2,
+    // Phase 3.6B: Check if task is highlighted (for search navigation)
+    return Consumer<TaskProvider>(
+      builder: (context, taskProvider, child) {
+        final isHighlighted = taskProvider.isTaskHighlighted(task.id);
+
+        final taskContainer = Container(
+          margin: EdgeInsets.only(
+            left: leftMargin,
+            right: 16,
+            top: 4,
+            bottom: 4,
           ),
-        ],
-      ),
+          decoration: BoxDecoration(
+            color: isHighlighted
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: isHighlighted
+                ? Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 2,
+                  )
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                offset: const Offset(0, 1),
+                blurRadius: 2,
+              ),
+            ],
+          ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -365,36 +378,38 @@ class TaskItem extends StatelessWidget {
       ),
     );
 
-    // Only enable context menu (long-press/right-click) when NOT in reorder mode
-    // In reorder mode, TreeDraggable handles the long-press for dragging
-    if (isReorderMode) {
-      return taskContainer;
-    }
+        // Only enable context menu (long-press/right-click) when NOT in reorder mode
+        // In reorder mode, TreeDraggable handles the long-press for dragging
+        if (isReorderMode) {
+          return taskContainer;
+        }
 
-    return GestureDetector(
-      // Phase 3.2: Long-press (mobile) and right-click (desktop) to show context menu
-      onLongPressStart: (details) {
-        TaskContextMenu.show(
-          context: context,
-          task: task,
-          position: details.globalPosition,
-          onDelete: () => _handleDelete(context),
-          onEdit: () => _handleEdit(context), // Phase 3.4
-          onManageTags: () => _handleManageTags(context), // Phase 3.5
+        return GestureDetector(
+          // Phase 3.2: Long-press (mobile) and right-click (desktop) to show context menu
+          onLongPressStart: (details) {
+            TaskContextMenu.show(
+              context: context,
+              task: task,
+              position: details.globalPosition,
+              onDelete: () => _handleDelete(context),
+              onEdit: () => _handleEdit(context), // Phase 3.4
+              onManageTags: () => _handleManageTags(context), // Phase 3.5
+            );
+          },
+          // Add right-click support for desktop (Linux, Windows, macOS)
+          onSecondaryTapDown: (details) {
+            TaskContextMenu.show(
+              context: context,
+              task: task,
+              position: details.globalPosition,
+              onDelete: () => _handleDelete(context),
+              onEdit: () => _handleEdit(context),
+              onManageTags: () => _handleManageTags(context),
+            );
+          },
+          child: taskContainer,
         );
       },
-      // Add right-click support for desktop (Linux, Windows, macOS)
-      onSecondaryTapDown: (details) {
-        TaskContextMenu.show(
-          context: context,
-          task: task,
-          position: details.globalPosition,
-          onDelete: () => _handleDelete(context),
-          onEdit: () => _handleEdit(context),
-          onManageTags: () => _handleManageTags(context),
-        );
-      },
-      child: taskContainer,
     );
   }
 }
