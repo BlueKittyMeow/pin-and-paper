@@ -15,6 +15,11 @@ import '../utils/tag_colors.dart';
 import 'search_result_tile.dart';
 import 'tag_filter_dialog.dart';
 
+// Phase 3.6B: Custom intent for applying tags with Enter key
+class ApplyTagsIntent extends Intent {
+  const ApplyTagsIntent();
+}
+
 class SearchDialog extends StatefulWidget {
   @override
   _SearchDialogState createState() => _SearchDialogState();
@@ -23,7 +28,6 @@ class SearchDialog extends StatefulWidget {
 class _SearchDialogState extends State<SearchDialog> {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode(); // Phase 3.6B: For Enter key shortcut
-  final _keyboardListenerFocusNode = FocusNode(); // Phase 3.6B: For KeyboardListener
   final _tagService = TagService();  // v4: Cache service instance
   SearchScope _scope = SearchScope.current;  // DEFAULT: Current (BlueKitty)
   List<SearchResult> _results = [];
@@ -53,7 +57,6 @@ class _SearchDialogState extends State<SearchDialog> {
     _debounceTimer?.cancel();  // v3: Clean up timer
     _searchController.dispose();
     _searchFocusNode.dispose(); // Phase 3.6B
-    _keyboardListenerFocusNode.dispose(); // Phase 3.6B
     // Save search state for next open (cleared only on app launch)
     _saveSearchState();
     super.dispose();
@@ -61,22 +64,28 @@ class _SearchDialogState extends State<SearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return KeyboardListener(
-      // Phase 3.6B: Handle Enter key when search field not focused
-      focusNode: _keyboardListenerFocusNode,
-      autofocus: true,
-      onKeyEvent: (KeyEvent event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.enter &&
-            !_searchFocusNode.hasFocus) {
-          _applyActiveTagFilters();
-        }
+    // Phase 3.6B: Use Shortcuts + Actions (same pattern as Dialog uses for Escape)
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.enter): const ApplyTagsIntent(),
       },
-      child: Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          ApplyTagsIntent: CallbackAction<ApplyTagsIntent>(
+            onInvoke: (ApplyTagsIntent intent) {
+              // Only apply tags if search field is not focused
+              if (!_searchFocusNode.hasFocus) {
+                _applyActiveTagFilters();
+              }
+              return null;
+            },
+          ),
+        },
+        child: Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
         child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
@@ -105,8 +114,9 @@ class _SearchDialogState extends State<SearchDialog> {
           ],
         ),
       ),
-      ), // Close Dialog
-    ); // Close KeyboardListener
+        ), // Close Dialog
+      ), // Close Actions
+    ); // Close Shortcuts
   }
 
   Widget _buildHeader() {
