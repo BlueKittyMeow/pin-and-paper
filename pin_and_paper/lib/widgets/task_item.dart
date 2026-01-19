@@ -229,12 +229,12 @@ class TaskItem extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             color: isHighlighted
-                ? Theme.of(context).colorScheme.primaryContainer
+                ? Colors.amber.shade100 // Bright, visible highlight color
                 : Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: isHighlighted
                 ? Border.all(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: Colors.amber.shade700, // Darker amber border
                     width: 2,
                   )
                 : null,

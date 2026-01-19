@@ -230,10 +230,10 @@ class _SearchDialogState extends State<SearchDialog> {
           // v4 COMPLETE: Show FilterState controls if tags selected
           if (_tagFilters != null && _tagFilters!.selectedTagIds.isNotEmpty) ...[
             SizedBox(height: 12),
-            Row(
-              children: [
-                // AND/OR toggle - only show when MORE THAN ONE tag selected
-                if (_tagFilters!.selectedTagIds.length > 1) ...[
+            // AND/OR toggle - only show when MORE THAN ONE tag selected
+            if (_tagFilters!.selectedTagIds.length > 1)
+              Row(
+                children: [
                   Text('Match: ', style: TextStyle(fontSize: 14)),
                   SegmentedButton<FilterLogic>(
                     segments: [
@@ -256,49 +256,8 @@ class _SearchDialogState extends State<SearchDialog> {
                       _debouncedSearch();
                     },
                   ),
-                  SizedBox(width: 16),
                 ],
-
-                // Additional presence filter dropdown (when tags are selected)
-                Text('Also require: ', style: TextStyle(fontSize: 14)),
-                DropdownButton<TagPresenceFilter>(
-                  value: _tagFilters!.presenceFilter,
-                  items: [
-                    DropdownMenuItem(
-                      value: TagPresenceFilter.any,
-                      child: Text('No additional filter'),
-                    ),
-                    DropdownMenuItem(
-                      value: TagPresenceFilter.onlyTagged,
-                      child: Text('Has any tag'),
-                    ),
-                    // Don't show "has no tags" when specific tags are selected (contradiction)
-                    if (_tagFilters!.selectedTagIds.isEmpty)
-                      DropdownMenuItem(
-                        value: TagPresenceFilter.onlyUntagged,
-                        child: Text('Has no tags'),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _tagFilters = _tagFilters!.copyWith(presenceFilter: value);
-
-                        // Clear tags if "has no tags" selected (contradiction)
-                        if (value == TagPresenceFilter.onlyUntagged) {
-                          _tagFilters = FilterState(
-                            selectedTagIds: [],
-                            logic: FilterLogic.or,
-                            presenceFilter: TagPresenceFilter.onlyUntagged,
-                          );
-                        }
-                      });
-                      _debouncedSearch();
-                    }
-                  },
-                ),
-              ],
-            ),
+              ),
             SizedBox(height: 8),
 
             // v4 FIX (CRITICAL #1): Pre-loaded tag chips - NO FutureBuilder!
