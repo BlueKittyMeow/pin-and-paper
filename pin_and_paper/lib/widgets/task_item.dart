@@ -220,7 +220,9 @@ class TaskItem extends StatelessWidget {
       builder: (context, taskProvider, child) {
         final isHighlighted = taskProvider.isTaskHighlighted(task.id);
 
-        final taskContainer = Container(
+        final taskContainer = AnimatedContainer(
+          duration: Duration(milliseconds: 500), // Smooth fade animation
+          curve: Curves.easeInOut,
           margin: EdgeInsets.only(
             left: leftMargin,
             right: 16,

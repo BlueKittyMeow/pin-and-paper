@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Phase 3.6B: For keyboard events
 import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../models/tag.dart';
@@ -21,6 +22,7 @@ class SearchDialog extends StatefulWidget {
 
 class _SearchDialogState extends State<SearchDialog> {
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode(); // Phase 3.6B: For Enter key shortcut
   final _tagService = TagService();  // v4: Cache service instance
   SearchScope _scope = SearchScope.current;  // DEFAULT: Current (BlueKitty)
   List<SearchResult> _results = [];
@@ -49,6 +51,7 @@ class _SearchDialogState extends State<SearchDialog> {
   void dispose() {
     _debounceTimer?.cancel();  // v3: Clean up timer
     _searchController.dispose();
+    _searchFocusNode.dispose(); // Phase 3.6B
     // Save search state for next open (cleared only on app launch)
     _saveSearchState();
     super.dispose();
@@ -56,12 +59,23 @@ class _SearchDialogState extends State<SearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
-      child: Container(
+    return Focus(
+      // Phase 3.6B: Handle Enter key when search field not focused
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.enter &&
+            !_searchFocusNode.hasFocus) {
+          _applyActiveTagFilters();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
+        child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
         child: Column(
@@ -89,7 +103,8 @@ class _SearchDialogState extends State<SearchDialog> {
           ],
         ),
       ),
-    );
+      ), // Close Focus child (Dialog)
+    ); // Close Focus widget
   }
 
   Widget _buildHeader() {
@@ -127,6 +142,7 @@ class _SearchDialogState extends State<SearchDialog> {
       padding: EdgeInsets.all(16),
       child: TextField(
         controller: _searchController,
+        focusNode: _searchFocusNode, // Phase 3.6B: For Enter key shortcut
         autofocus: true,
         decoration: InputDecoration(
           hintText: 'Search titles, notes, tags...',
