@@ -1,5 +1,6 @@
 import 'dart:async'; // Phase 3.6B: For Timer (highlight functionality)
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'; // Phase 3.6B: For GlobalKey, Scrollable, Curves (scroll-to-task)
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/filter_state.dart'; // Phase 3.6A
 import '../models/task.dart';
@@ -947,6 +948,14 @@ class TaskProvider extends ChangeNotifier {
   /// Phase 3.6B: Search state persistence (session only)
   Map<String, dynamic>? _searchState;
 
+  /// Phase 3.6B: GlobalKeys for task widgets (for scroll-to-task)
+  final Map<String, GlobalKey> _taskKeys = {};
+
+  /// Get or create a GlobalKey for a task (for scrolling)
+  GlobalKey getKeyForTask(String taskId) {
+    return _taskKeys.putIfAbsent(taskId, () => GlobalKey());
+  }
+
   /// Save search state for next dialog open (cleared on app restart)
   void saveSearchState(Map<String, dynamic> state) {
     _searchState = state;
@@ -963,7 +972,7 @@ class TaskProvider extends ChangeNotifier {
   /// This method:
   /// 1. Finds the task in the task list
   /// 2. Expands all parent tasks to make it visible
-  /// 3. Scrolls to the task (implementation TBD based on TreeView structure)
+  /// 3. Scrolls to the task using Scrollable.ensureVisible
   /// 4. Highlights it for 2 seconds
   Future<void> navigateToTask(String taskId) async {
     // Step 1: Find task
@@ -975,17 +984,30 @@ class TaskProvider extends ChangeNotifier {
     // Step 2: Expand all ancestors to make task visible
     await _expandAncestors(task);
 
-    // Step 3: Scroll to node
-    // TODO: Implement during Day 6-7 based on actual TreeView structure
-    // Options:
-    // - Calculate index and use scrollToIndex if available
-    // - Calculate pixel offset and use ScrollController.animateTo
-    // - Fallback: Just expand (user scrolls manually)
-
-    // Step 4: Highlight temporarily
+    // Step 3: Highlight temporarily (before scroll for visual feedback)
     _highlightTask(taskId, duration: Duration(seconds: 2));
 
+    // Notify listeners to rebuild tree with expanded nodes
     notifyListeners();
+
+    // Step 4: Scroll to task (with small delay to ensure tree rebuilds)
+    // Wait for tree to rebuild with expanded nodes before scrolling
+    await Future.delayed(Duration(milliseconds: 100));
+
+    final taskKey = _taskKeys[taskId];
+    if (taskKey != null && taskKey.currentContext != null) {
+      try {
+        await Scrollable.ensureVisible(
+          taskKey.currentContext!,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.3, // Position task 30% from top of viewport
+        );
+      } catch (e) {
+        debugPrint('Failed to scroll to task: $e');
+        // Fallback: Task is expanded and highlighted, user can manually scroll
+      }
+    }
   }
 
   /// Expand all ancestors of a task to make it visible in the tree

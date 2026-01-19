@@ -171,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           // Use drag-and-drop tile in reorder mode, normal tile otherwise
                           if (taskProvider.isReorderMode) {
                             return DragAndDropTaskTile(
-                              key: ValueKey(entry.node.id),
+                              key: taskProvider.getKeyForTask(entry.node.id), // Phase 3.6B: GlobalKey for scroll-to-task
                               entry: entry,
                               onNodeAccepted: taskProvider.onNodeAccepted,
                               onToggleCollapse: () => taskProvider.toggleCollapse(entry.node),
@@ -184,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           }
 
                           return TaskItem(
-                            key: ValueKey(entry.node.id),
+                            key: taskProvider.getKeyForTask(entry.node.id), // Phase 3.6B: GlobalKey for scroll-to-task
                             task: entry.node,
                             depth: entry.level, // Phase 3.6A: Use visible tree depth
                             hasChildren: entry.hasChildren,
@@ -207,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ...taskProvider.completedTasksWithHierarchy.map((task) {
                         final breadcrumb = taskProvider.getBreadcrumb(task);
                         return TaskItem(
-                          key: ValueKey(task.id),
+                          key: taskProvider.getKeyForTask(task.id), // Phase 3.6B: GlobalKey for scroll-to-task
                           task: task,
                           depth: task.depth, // Phase 3.5 Fix #C3: Use real depth from DB
                           hasChildren: taskProvider.hasCompletedChildren(task.id), // Phase 3.5 Fix #C3: Check actual children
