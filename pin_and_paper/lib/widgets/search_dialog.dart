@@ -59,18 +59,18 @@ class _SearchDialogState extends State<SearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
+    return CallbackShortcuts(
       // Phase 3.6B: Handle Enter key when search field not focused
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.enter &&
-            !_searchFocusNode.hasFocus) {
-          _applyActiveTagFilters();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter): () {
+          if (!_searchFocusNode.hasFocus) {
+            _applyActiveTagFilters();
+          }
+        },
       },
-      child: Dialog(
+      child: Focus(
+        autofocus: true,
+        child: Dialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -103,8 +103,9 @@ class _SearchDialogState extends State<SearchDialog> {
           ],
         ),
       ),
-      ), // Close Focus child (Dialog)
-    ); // Close Focus widget
+        ), // Close Dialog
+      ), // Close Focus
+    ); // Close CallbackShortcuts
   }
 
   Widget _buildHeader() {

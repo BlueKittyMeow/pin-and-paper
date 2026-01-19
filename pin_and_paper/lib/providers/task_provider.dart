@@ -516,6 +516,37 @@ class TaskProvider extends ChangeNotifier {
     _treeController.toggleExpansion(task);
   }
 
+  /// Phase 3.6B: Expand all tasks in the tree
+  void expandAll() {
+    for (final task in _tasks.where((t) => !t.completed)) {
+      _treeController.expand(task);
+    }
+    notifyListeners();
+  }
+
+  /// Phase 3.6B: Collapse all tasks in the tree
+  void collapseAll() {
+    for (final task in _tasks.where((t) => !t.completed)) {
+      _treeController.collapse(task);
+    }
+    notifyListeners();
+  }
+
+  /// Phase 3.6B: Check if all tasks are expanded
+  bool get areAllExpanded {
+    // Get all incomplete tasks that have children
+    final tasksWithChildren = _tasks.where((task) {
+      if (task.completed) return false;
+      // Check if this task has any children
+      return _tasks.any((child) => child.parentId == task.id);
+    }).toList();
+
+    if (tasksWithChildren.isEmpty) return false;
+
+    // Check if all are expanded
+    return tasksWithChildren.every((task) => _treeController.getExpansionState(task));
+  }
+
   /// Move task to new parent (nest/unnest)
   Future<void> changeTaskParent({
     required String taskId,

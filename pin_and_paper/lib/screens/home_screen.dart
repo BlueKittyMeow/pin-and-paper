@@ -52,6 +52,25 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
+          // Phase 3.6B: Expand/Collapse all button
+          Consumer<TaskProvider>(
+            builder: (context, taskProvider, _) {
+              final allExpanded = taskProvider.areAllExpanded;
+              return IconButton(
+                icon: Icon(
+                  allExpanded ? Icons.unfold_less : Icons.unfold_more,
+                ),
+                tooltip: allExpanded ? 'Collapse All' : 'Expand All',
+                onPressed: () {
+                  if (allExpanded) {
+                    taskProvider.collapseAll();
+                  } else {
+                    taskProvider.expandAll();
+                  }
+                },
+              );
+            },
+          ),
           // Phase 3.6A: Filter button
           Consumer<TaskProvider>(
             builder: (context, taskProvider, _) {
