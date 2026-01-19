@@ -134,8 +134,8 @@ class SearchService {
       if (query.trim().isNotEmpty) {
         // NOTE: Task model doesn't have notes field yet, only searching title and tags
         conditions.add('''
-          (LOWER(tasks.title) LIKE ? ESCAPE '\\\\'
-           OR LOWER(tags.name) LIKE ? ESCAPE '\\\\')
+          (LOWER(tasks.title) LIKE ? ESCAPE '\\'
+           OR LOWER(tags.name) LIKE ? ESCAPE '\\')
         ''');
         final pattern = '%$escapedQuery%';
         args.addAll([pattern, pattern]);
