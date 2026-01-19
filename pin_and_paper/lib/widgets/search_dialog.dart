@@ -65,28 +65,30 @@ class _SearchDialogState extends State<SearchDialog> {
   @override
   Widget build(BuildContext context) {
     // Phase 3.6B: Use Shortcuts + Actions (same pattern as Dialog uses for Escape)
-    return Shortcuts(
-      shortcuts: <ShortcutActivator, Intent>{
-        const SingleActivator(LogicalKeyboardKey.enter): const ApplyTagsIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          ApplyTagsIntent: CallbackAction<ApplyTagsIntent>(
-            onInvoke: (ApplyTagsIntent intent) {
-              // Only apply tags if search field is not focused
-              if (!_searchFocusNode.hasFocus) {
-                _applyActiveTagFilters();
-              }
-              return null;
-            },
-          ),
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
+      child: Shortcuts(
+        shortcuts: <ShortcutActivator, Intent>{
+          const SingleActivator(LogicalKeyboardKey.enter): const ApplyTagsIntent(),
         },
-        child: Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
-        child: Container(
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            ApplyTagsIntent: CallbackAction<ApplyTagsIntent>(
+              onInvoke: (ApplyTagsIntent intent) {
+                // Only apply tags if search field is not focused
+                if (!_searchFocusNode.hasFocus) {
+                  _applyActiveTagFilters();
+                }
+                return null;
+              },
+            ),
+          },
+          child: Focus(
+            autofocus: true,
+            child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
         child: Column(
@@ -112,11 +114,12 @@ class _SearchDialogState extends State<SearchDialog> {
                       : _buildResults(),
             ),
           ],
-        ),
-      ),
-        ), // Close Dialog
-      ), // Close Actions
-    ); // Close Shortcuts
+        ), // Close Column
+      ), // Close Container
+          ), // Close Focus
+        ), // Close Actions
+      ), // Close Shortcuts
+    ); // Close Dialog
   }
 
   Widget _buildHeader() {
