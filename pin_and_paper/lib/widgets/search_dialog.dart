@@ -57,6 +57,9 @@ class _SearchDialogState extends State<SearchDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
@@ -571,7 +574,8 @@ class _SearchDialogState extends State<SearchDialog> {
 
     try {
       // v4.1 LOW FIX (Codex): Complete instantiation instead of placeholder
-      final db = await context.read<DatabaseService>().database;
+      // Use DatabaseService singleton (not from Provider)
+      final db = await DatabaseService.instance.database;
       final searchService = SearchService(db);
 
       // Perform search
