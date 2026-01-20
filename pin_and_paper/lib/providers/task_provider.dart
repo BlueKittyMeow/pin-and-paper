@@ -601,7 +601,10 @@ class TaskProvider extends ChangeNotifier {
       // Update in local list
       final index = _tasks.indexWhere((t) => t.id == task.id);
       if (index != -1) {
-        _tasks[index] = updatedTask;
+        // Phase 3.6.5 Fix: Preserve depth metadata
+        // uncompleteTask loads from DB without CTE, so depth=0
+        // Always preserve original depth since it's computed, not stored
+        _tasks[index] = updatedTask.copyWith(depth: task.depth);
         _categorizeTasks();  // Phase 2 Stretch: Re-categorize after toggle
 
         // Phase 3.6.5: Rebuild incomplete descendant cache for completed parent indicator
@@ -868,12 +871,9 @@ class TaskProvider extends ChangeNotifier {
     // Uses extension from drag_and_drop_task_tile.dart
     details.mapDropPosition(
       whenAbove: () {
-        // Insert as previous sibling of target
+        // Insert as previous sibling of target (take target's position)
         newParentId = details.targetNode.parentId;
-
-        // Phase 3.6A: In filtered views, we can't reliably calculate position
-        // Use position 0 and let database reindexing handle it
-        newPosition = 0;
+        newPosition = details.targetNode.position; // Insert at target's position
         newDepth = details.targetNode.depth;
       },
       whenInside: () {
@@ -886,11 +886,9 @@ class TaskProvider extends ChangeNotifier {
         _treeController.setExpansionState(details.targetNode, true);
       },
       whenBelow: () {
-        // Insert as next sibling of target
+        // Insert as next sibling of target (position after target)
         newParentId = details.targetNode.parentId;
-
-        // Phase 3.6A: In filtered views, use position 0
-        newPosition = 0;
+        newPosition = details.targetNode.position + 1; // Insert after target
         newDepth = details.targetNode.depth;
       },
     );
