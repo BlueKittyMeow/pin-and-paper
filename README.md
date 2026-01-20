@@ -155,9 +155,15 @@ Data Layer (SQLite)
   - Expand/collapse all functionality
   - App icon integration
   - Enter key functionality breakthrough (6 attempts documented)
+- ✅ **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix (Jan 2026)
+  - Custom TaskTreeController with ID-based expansion state tracking
+  - Comprehensive edit dialog (title, parent, date, time, tags, notes)
+  - Completed task metadata dialog with View in Context, Uncomplete, Delete
+  - Time picker with All Day toggle
+  - Bug fixes: depth preservation on uncomplete, reorder positioning
+  - 290 tests passing (15 new TreeController unit tests)
 
 **Next Up:**
-- ⚠️ **Phase 3.6.5:** Edit Task Modal Rework (1 week) - **Required before 3.7**
 - 🔜 **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
 - 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
 
@@ -286,32 +292,30 @@ Each phase builds on the previous:
   - Production-ready tag filtering with AND/OR logic
   - Active filter bar with chip interactions
 
+- [x] **Phase 3.6B:** Universal Search (Jan 2026)
+  - Two-stage search algorithm with fuzzy scoring
+  - Navigation with scroll-to-task and highlighting
+  - Advanced filtering with debounced search
+
+- [x] **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix (Jan 2026)
+  - **290 tests passing** (15 new TreeController tests)
+  - Custom TaskTreeController with ID-based expansion state
+  - Comprehensive edit dialog (title, parent, date, time, tags, notes)
+  - Completed task metadata dialog
+  - Time picker with All Day toggle
+  - Bug fixes: depth preservation, reorder positioning
+
 ### Current Stats
-- **~8,500+ lines of production code**
-- **180+ tests passing** (99%+ pass rate, 257/258)
+- **~9,000+ lines of production code**
+- **290 tests passing** (100% pass rate)
 - **Database:** v6 (6 migrations complete)
-- **Phases completed:** 2 full phases + 6 subphases
-- **Latest:** Phase 3.6A - Tag filtering production-ready with comprehensive testing
+- **Phases completed:** 2 full phases + 8 subphases
+- **Latest:** Phase 3.6.5 - Edit Task Modal Rework + TreeController Fix
 
 ### Next Up
-- **Phase 3.6B:** Universal Search Implementation (1-2 weeks)
-  - Search across active + completed tasks
-  - Include titles, notes, and tags in search
-  - Magnifying glass icon in app bar
-  - Combined with filter state for powerful queries
-- **Phase 3.6.5:** Edit Task Modal Rework (1 week) ⚠️ **Blocking for Phase 3.7**
-  - Current edit modal only allows title changes
-  - Need comprehensive modal with due date picker, notes, tags, parent selector
-  - **Completed task metadata view** - Click completed task to see full details:
-    - Created/completed timestamps, duration calculation
-    - Tags, notes, full hierarchy breadcrumb
-    - Actions: View in Context, Uncomplete, Delete
-    - Foundation for Phase 4 "card view" in desk GUI
-  - Show completed parents with incomplete children (visual indicator)
-  - Required before natural language date parsing features
 - **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
 - **Phase 3.8:** Due Date Notifications (1-2 weeks)
-- **Then:** Phase 4 (Spatial Workspace View)
+- **Phase 4:** Bounded Workspace View (4-5 weeks)
 
 ---
 

@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
-**Version:** 3.6B (Phase 3 In Progress)
-**Last Updated:** 2026-01-19
+**Version:** 3.6.5 (Phase 3 In Progress)
+**Last Updated:** 2026-01-20
 **Primary Device:** Samsung Galaxy S22 Ultra
-**Current Phase:** Phase 3.6B Complete - Universal Search
+**Current Phase:** Phase 3.6.5 Complete - Edit Task Modal Rework
 
 ---
 
@@ -34,7 +34,7 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.4:** Task Editing (Due Dates, Notes, etc.) - Complete (Dec 2025)
 ✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 9, 2026)
 ✅ **Phase 3.6B:** Universal Search - Complete (Jan 19, 2026)
-⚠️ **Phase 3.6.5:** Edit Task Modal Rework - Required Before 3.7 (1 week)
+✅ **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix - Complete (Jan 20, 2026)
 🔜 **Phase 3.7:** Natural Language Date Parsing - Planned (1-2 weeks)
 🔜 **Phase 3.8:** Due Date Notifications - Planned (1-2 weeks)
 
@@ -492,30 +492,14 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Date-based filtering (due today, this week, overdue) - Consider for 3.6B stretch goal or 3.7
 - See `docs/future/future.md` for full details and rationale
 
-**Phase 3.6.5: Edit Task Modal Rework** 🔜 ⚠️ **REQUIRED BEFORE PHASE 3.7** (1 week)
-- **Current limitation:** Edit modal only allows changing task title
-- **Need:** Comprehensive edit modal with all task fields
-  - Title (currently implemented)
-  - Due date picker (needed before Phase 3.7)
-  - Notes/description field
-  - Tag management (inline)
-  - Parent task selector (change nesting)
-- **Rationale:** Must have robust editing UI before adding natural language date parsing
-- **UX Decision:** Already agreed to remove confusing "+ Add Tag" chip; context menu only
-- **Priority:** Blocking for Phase 3.7 date features
-
-**New from Fix #C3 Validation (Jan 9, 2026):**
-- **Completed Task Metadata View** (HIGH priority)
-  - Click completed task to open read-only modal
-  - Show: created/completed timestamps, duration, tags, notes, full hierarchy
-  - Actions: "View in Context", "Uncomplete", "Delete Permanently"
-  - Use case: Task history, journaling, "temporal proof of existence"
-- **Show Completed Parents with Incomplete Children** (MEDIUM priority)
-  - Display completed parent in completed section even if children incomplete
-  - Visual indicator: dimmed text, icon, or "X incomplete children" badge
-  - Clicking navigates to active task list to show context
-  - Optional: Make this a user preference
-- See: `docs/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
+**Phase 3.6.5: Edit Task Modal Rework + TreeController Fix** ✅ (Jan 20, 2026)
+- **TaskTreeController:** Custom ID-based expansion state tracking (fixes object reference corruption)
+- **Edit Task Dialog:** Comprehensive task editing (title, parent, date, time, tags, notes)
+- **Completed Task Metadata Dialog:** Rich details view with View in Context, Uncomplete, Delete actions
+- **Time Picker:** All Day toggle + time selection for due dates
+- **Bug Fixes:** Depth preservation on uncomplete, reorder positioning, widget test TagProvider
+- **290 tests passing** (15 new TreeController tests)
+- **Deferred:** Parent selector filtered list issue (defer to Phase 3.7 if needed)
 
 **Phase 3.7: Natural Language Date Parsing** 🔜 (1-2 weeks)
 - Parse relative dates ("tomorrow", "next Tuesday", "in 3 days")
@@ -1053,39 +1037,36 @@ This section documents major architectural and scope decisions made during plann
 
 ## Next Steps
 
-**Current Phase:** Phase 3.6B Complete - Universal Search (Jan 19, 2026)
+**Current Phase:** Phase 3.6.5 Complete - Edit Task Modal Rework (Jan 20, 2026)
 
 **Completed Recently:**
-1. ✅ Phase 3.6B Universal Search implementation (Jan 11-19, 2026)
+1. ✅ Phase 3.6.5 Edit Task Modal Rework + TreeController Fix (Jan 19-20, 2026)
+   - Custom TaskTreeController with ID-based expansion state
+   - Comprehensive edit dialog (title, parent, date, time, tags, notes)
+   - Completed task metadata dialog with actions
+   - Time picker with All Day toggle
+   - Bug fixes: depth preservation, reorder positioning
+   - 290 tests passing (15 new TreeController tests)
+2. ✅ Phase 3.6B Universal Search implementation (Jan 11-19, 2026)
    - Two-stage search with fuzzy scoring
    - Advanced filtering (scope, tags, presence)
    - Navigation with scroll-to-task and highlighting
-   - Enter key functionality in tag filter dialog
-2. ✅ App icon integration (logo01.jpg → PNG)
-3. ✅ Expand/collapse all functionality
 
 **Next Up:**
-1. 🔜 Consider Phase 3.6.5 (Edit Task Modal Rework) if needed before 3.7
-2. 🔜 Plan Phase 3.7 (Natural Language Date Parsing)
-- ✅ Phase 3.5: Comprehensive Tagging System (Jan 5-6, 2026)
-  - 154+ tests passing (including 6 new hierarchy tests)
-  - Dual AI code review (Gemini + Codex)
-  - Fix #C3: Completed task hierarchy preserved (depth + hasChildren)
-  - UX improvements: breadcrumb icons, right-click support, removed confusing UI
-  - Database v6 migration complete
+1. 🔜 Plan Phase 3.7 (Natural Language Date Parsing)
+2. 🔜 Implement Phase 3.8 (Due Date Notifications)
+3. 🔜 Complete Phase 3 → Release v3.8.0
 
 **Upcoming Phases:**
-- Phase 3.6: Tag Search & Filtering (2-3 weeks)
-- **Phase 3.6.5: Edit Task Modal Rework (1 week)** ⚠️ BLOCKING for 3.7
 - Phase 3.7: Natural Language Date Parsing (1-2 weeks)
 - Phase 3.8: Due Date Notifications (1-2 weeks)
 - Phase 4: Bounded Workspace View (4-5 weeks)
 
 ---
 
-**Document Status:** ✅ Up to Date (Phase 3.5 Complete + 3.6.5 Planning Added)
-**Last Review:** January 6, 2026
-**Next Review:** After Phase 3.6.5-3.8 completion
+**Document Status:** ✅ Up to Date (Phase 3.6.5 Complete)
+**Last Review:** January 20, 2026
+**Next Review:** After Phase 3.7-3.8 completion
 
 **See Also:**
 - `visual-design.md` - Complete aesthetic specification
