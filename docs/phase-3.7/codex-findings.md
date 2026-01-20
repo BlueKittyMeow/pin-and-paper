@@ -111,7 +111,90 @@ This document is for **Codex** to research and evaluate date parsing packages fo
 
 ---
 
-## Findings
+## Research Task 1: Context-Aware Parsing Best Practices
+
+**Goal:** Understand how to prevent false positives like "May need" being parsed as "May (month)"
+
+### Questions to Answer:
+
+1. **How do other apps handle this?**
+   - Research Todoist's approach (if documented)
+   - Look at Things 3 date parsing
+   - Check TickTick implementation details
+   - Any blog posts or talks about their approaches?
+
+2. **NLP Techniques:**
+   - Part-of-speech tagging (is "May" a noun or verb?)
+   - Surrounding word context:
+     - Prepositions: "in May", "on Tuesday" (strong date indicators)
+     - Articles: "the May" (unlikely to be date)
+     - Common phrases: "May need", "May I" (skip these)
+   - Sentence position (start vs middle vs end)
+   - Capitalization patterns (mid-sentence capitalized = proper name?)
+
+3. **Existing Library Approaches:**
+   - `chrono` (JavaScript date parser) - how does it handle context?
+   - `dateparser` (Python) - any documented context-aware rules?
+   - Other popular NL date parsers - what heuristics do they use?
+
+4. **Confidence Scoring:**
+   - How to assign confidence scores to matches?
+   - What threshold should trigger parsing?
+   - Log low-confidence matches for improvement?
+
+5. **Word Lists & Heuristics:**
+   - Common phrases to skip: "May need", "May I", "Maybe", "with May [name]"
+   - Date indicators to require: "in", "on", "at", "by", "due"
+   - When to be aggressive vs conservative?
+
+### Research Deliverables:
+
+**1. Context Rules Document:**
+```markdown
+# Context-Aware Parsing Rules
+
+## Strong Date Indicators (DO parse)
+- [Pattern] → [Example] → [Why it's clear]
+- "in [month]" → "in May" → Preposition indicates time context
+- "[month] [number]" → "May 15" → Day number confirms date
+- ...
+
+## False Positive Patterns (DON'T parse)
+- [Pattern] → [Example] → [Why it's NOT a date]
+- "[month] need" → "May need" → Common verb phrase
+- "[month] I" → "May I" → Question construction
+- ...
+
+## Confidence Scoring
+- High confidence (always parse): [patterns]
+- Medium confidence (parse with caution): [patterns]
+- Low confidence (skip): [patterns]
+```
+
+**2. Recommended Implementation:**
+- Should we use regex with negative lookbehind/lookahead?
+- Should we implement a simple word-list based filter?
+- Do we need a more sophisticated NLP library?
+- Trade-offs between accuracy and complexity?
+
+**3. Test Cases:**
+```dart
+// False positives we MUST avoid:
+"May need to call dentist" → null
+"May I suggest..." → null
+"Meeting with April" → null
+"March forward with plans" → null
+
+// True positives we MUST catch:
+"Call dentist in May" → May
+"Meeting May 15" → May 15
+"Due by April" → April
+"March deadline" → March
+```
+
+---
+
+## Research Task 2: Package Evaluation
 
 ### Package 1: [Name]
 
@@ -128,6 +211,12 @@ This document is for **Codex** to research and evaluate date parsing packages fo
 - [ ] Time parsing (3pm, morning)
 - [ ] Combined parsing (tomorrow at 3pm)
 
+**Context Awareness:**
+- [ ] Handles "May need" correctly (doesn't parse as May)?
+- [ ] Requires date indicators (in, on, at)?
+- [ ] Has confidence scoring?
+- [ ] Documented approach to false positives?
+
 **Pros:**
 - [List benefits]
 
@@ -136,6 +225,7 @@ This document is for **Codex** to research and evaluate date parsing packages fo
 
 **Extensibility:**
 - [Can we add Today Window logic? How?]
+- [Can we add our own context rules?]
 
 **Recommendation:**
 - [Recommend / Don't recommend / Need more research]
@@ -150,9 +240,9 @@ This document is for **Codex** to research and evaluate date parsing packages fo
 
 ## Comparison Matrix
 
-| Package | Natural Lang | Extensible | Quality | Performance | Recommendation |
-|---------|-------------|------------|---------|-------------|----------------|
-| [Name]  | ⭐⭐⭐      | ⭐⭐       | ⭐⭐⭐  | ⭐⭐⭐      | [Yes/No/Maybe] |
+| Package | Natural Lang | Context Aware | Extensible | Quality | Recommendation |
+|---------|-------------|---------------|------------|---------|----------------|
+| [Name]  | ⭐⭐⭐      | ⭐⭐         | ⭐⭐       | ⭐⭐⭐  | [Yes/No/Maybe] |
 
 ---
 

@@ -160,18 +160,149 @@ flutter build apk --analyze-size
 
 ---
 
-## Performance Testing
+## Performance Testing (CRITICAL for Real-Time Parsing)
 
-**If time permits, test parsing speed:**
+**Goal:** Verify parsing is fast enough for real-time UI (<1ms per parse)
+
+### Test 1: Single Parse Speed
 
 ```dart
-// Benchmark: Parse 100 dates
+// Measure: Parse a single date phrase
 final stopwatch = Stopwatch()..start();
-for (int i = 0; i < 100; i++) {
-  parser.parse("tomorrow");
+final result = parser.parse("tomorrow at 3pm");
+stopwatch.stop();
+
+// Expected: <1ms (ideally <0.5ms)
+// Result: [X ms/μs]
+```
+
+**Test phrases:**
+- "tomorrow" (simple relative)
+- "next Tuesday" (day of week)
+- "tomorrow at 3pm" (combined date + time)
+- "in 3 days" (relative offset)
+- "Jan 15" (absolute date)
+- "May need to call dentist" (false positive test - should be fast to reject)
+
+### Test 2: Rapid Sequential Parsing (Typing Simulation)
+
+```dart
+// Simulate user typing rapidly
+final phrases = [
+  "t",
+  "to",
+  "tom",
+  "tomo",
+  "tomor",
+  "tomorr",
+  "tomorro",
+  "tomorrow",
+];
+
+final stopwatch = Stopwatch()..start();
+for (final phrase in phrases) {
+  parser.parse(phrase);
 }
 stopwatch.stop();
-// Time: [X ms]
+
+// Expected: <10ms total (8 parses)
+// Result: [X ms]
+```
+
+### Test 3: Debounced Parsing (Real-World)
+
+```dart
+// Test with 300ms debouncing (real implementation)
+// Type "tomorrow at 3pm" character by character
+// Measure actual parse calls (should be 1, not 18)
+
+// Expected: Only 1 parse call after typing stops
+// Result: [N parse calls]
+```
+
+### Test 4: UI Responsiveness
+
+**Manual testing required:**
+1. Open edit task dialog
+2. Type rapidly: "Call dentist tomorrow at 3pm"
+3. Observe:
+   - [ ] No UI jank or stuttering
+   - [ ] Highlighting appears smoothly
+   - [ ] TextField remains responsive
+   - [ ] No dropped keystrokes
+
+**Performance targets:**
+- Parse time: <1ms per parse
+- UI frame rate: 60 FPS maintained
+- No dropped keystrokes
+- Debouncing working (only parse after 300ms idle)
+
+---
+
+## Real-Time Parsing Verification
+
+**Test real-time parsing with various scenarios:**
+
+### Scenario 1: Incremental Parsing
+```
+Type: "C" → No match (too short)
+Type: "Ca" → No match
+Type: "Cal" → No match
+Type: "Call" → No match
+Type: "Call " → No match
+Type: "Call d" → No match
+...
+Type: "Call dentist t" → No match yet
+Type: "Call dentist to" → No match yet
+Type: "Call dentist tom" → Partial match? (check implementation)
+Type: "Call dentist tomorrow" → ✅ Match! Highlight appears
+
+Expected: Highlight appears smoothly, no false triggers
+```
+
+### Scenario 2: False Positive Check
+```
+Type: "May need to call"
+Expected: No highlight (context-aware parsing working)
+```
+
+### Scenario 3: Dismiss and Re-trigger
+```
+Type: "tomorrow" → Highlight appears
+Click "Remove due date" → Highlight removed
+Continue typing: "tomorrow at 3pm"
+Expected: Re-triggers for "at 3pm" addition
+```
+
+---
+
+## Build Impact Analysis
+
+### APK Size Impact
+
+**Measure before/after adding date parsing package:**
+
+```bash
+# Before adding package
+flutter build apk --analyze-size
+
+# After adding package
+flutter build apk --analyze-size
+
+# Compare: How many MB/KB added?
+```
+
+**Acceptable:** <500 KB for date parsing library
+**Concern if:** >1 MB added
+
+### Dependency Analysis
+
+```bash
+# Check dependency tree
+flutter pub deps
+
+# Count: How many dependencies does this package pull in?
+# Concern if: >5 transitive dependencies
 ```
 
 ---
@@ -185,11 +316,20 @@ stopwatch.stop();
 - [Address any concerns about dependencies or size]
 - [Note any platform-specific issues]
 
+**Performance Results:**
+- Single parse time: [X ms/μs]
+- Rapid parsing (8 calls): [X ms]
+- UI responsiveness: [✅ Smooth / ❌ Janky]
+- APK size impact: [+X KB]
+
 **Concerns:**
 - [List any red flags or blockers]
+- [Performance issues?]
+- [Build warnings?]
 
 **Cross-check with Codex:**
 - [Reference codex-findings.md for API quality assessment]
+- [Reference codex-findings.md for context-aware parsing research]
 - [Note if our findings agree or differ]
 
 ---
@@ -197,14 +337,19 @@ stopwatch.stop();
 ## Next Steps
 
 1. [ ] Complete build testing for all candidate packages
-2. [ ] Discuss findings with Codex and Claude
-3. [ ] Verify chosen package builds cleanly
-4. [ ] Test basic integration before full implementation
-5. [ ] Document any build quirks or gotchas
+2. [ ] Run performance benchmarks (targeting <1ms parse time)
+3. [ ] Test real-time parsing with debouncing
+4. [ ] Verify UI responsiveness (no jank)
+5. [ ] Measure APK size impact
+6. [ ] Discuss findings with Codex and Claude
+7. [ ] Make final decision on package vs custom vs hybrid
+8. [ ] Document any build quirks or gotchas
 
 ---
 
 **Notes:**
-- Gemini's focus: Build quality, compatibility, performance, size impact
-- Cross-check with Codex's findings for package selection
+- Gemini's focus: Build quality, compatibility, performance, size impact, real-time UX
+- **CRITICAL:** Must achieve <1ms parse time for real-time typing
+- Cross-check with Codex's findings for package selection and context-aware parsing
 - Document any warnings or issues for future reference
+- Performance is non-negotiable for this phase (Todoist-style real-time parsing)
