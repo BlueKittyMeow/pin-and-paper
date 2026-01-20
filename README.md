@@ -164,8 +164,9 @@ Data Layer (SQLite)
   - 290 tests passing (15 new TreeController unit tests)
 
 **Next Up:**
-- 🔜 **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
+- 🔜 **Phase 3.7:** Natural Language Date Parsing (1-1.5 weeks)
 - 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
+- 🔜 **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 
 **Deferred to Phase 6+:**
 - ⏸️ Voice input (speech-to-text)
@@ -313,8 +314,9 @@ Each phase builds on the previous:
 - **Latest:** Phase 3.6.5 - Edit Task Modal Rework + TreeController Fix
 
 ### Next Up
-- **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
+- **Phase 3.7:** Natural Language Date Parsing (1-1.5 weeks)
 - **Phase 3.8:** Due Date Notifications (1-2 weeks)
+- **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 - **Phase 4:** Bounded Workspace View (4-5 weeks)
 
 ---

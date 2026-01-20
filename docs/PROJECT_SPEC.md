@@ -35,8 +35,9 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 9, 2026)
 ✅ **Phase 3.6B:** Universal Search - Complete (Jan 19, 2026)
 ✅ **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix - Complete (Jan 20, 2026)
-🔜 **Phase 3.7:** Natural Language Date Parsing - Planned (1-2 weeks)
+🔜 **Phase 3.7:** Natural Language Date Parsing - Planned (1-1.5 weeks)
 🔜 **Phase 3.8:** Due Date Notifications - Planned (1-2 weeks)
+🔜 **Phase 3.9:** Onboarding Quiz & User Preferences - Planned (1 week)
 
 ---
 
@@ -501,12 +502,13 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - **290 tests passing** (15 new TreeController tests)
 - **Deferred:** Parent selector filtered list issue (defer to Phase 3.7 if needed)
 
-**Phase 3.7: Natural Language Date Parsing** 🔜 (1-2 weeks)
+**Phase 3.7: Natural Language Date Parsing** 🔜 (1-1.5 weeks)
 - Parse relative dates ("tomorrow", "next Tuesday", "in 3 days")
 - Parse absolute dates ("Jan 15", "March 3rd")
 - Time-of-day support ("3pm", "morning", "evening")
 - Night owl mode (configurable midnight boundary)
 - Integration with Brain Dump and task creation
+- Real-time Todoist-style highlighting in edit/create fields
 
 **Phase 3.8: Due Date Notifications** 🔜 (1-2 weeks)
 - flutter_local_notifications integration
@@ -515,13 +517,23 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Quick actions from notifications
 - Quiet hours setting
 
+**Phase 3.9: Onboarding Quiz & User Preferences** 🔜 (1 week)
+- Scenario-based quiz to infer user time perception preferences
+- Night owl mode cutoff configuration (from Phase 3.7)
+- Date parsing preferences (Quick Add toggle, time keywords)
+- Notification preferences (from Phase 3.8)
+- Week start day preference
+- Tag system preferences
+- "Retake quiz" and "Explain my settings" features
+- Skip option with sensible defaults
+
 **Phase 3 Completion:**
 - ✅ Git tag: `v3.5.0` (Phase 3.5 complete - Jan 9, 2026)
-- 📦 **Create GitHub Release when Phase 3 fully complete (after 3.8)**
+- 📦 **Create GitHub Release when Phase 3 fully complete (after 3.9)**
   - Milestone release: "Phase 3: Core Productivity Complete"
-  - Include full changelog of 3.1-3.8
+  - Include full changelog of 3.1-3.9
   - Mark as stable release for mobile workflows
-  - Tag: `v3.8.0` or `v3.0.0` (major milestone)
+  - Tag: `v3.9.0` or `v3.0.0` (major milestone)
 
 **Deferred to Phase 6+:**
 - Voice input (speech-to-text)
@@ -1055,18 +1067,20 @@ This section documents major architectural and scope decisions made during plann
 **Next Up:**
 1. 🔜 Plan Phase 3.7 (Natural Language Date Parsing)
 2. 🔜 Implement Phase 3.8 (Due Date Notifications)
-3. 🔜 Complete Phase 3 → Release v3.8.0
+3. 🔜 Implement Phase 3.9 (Onboarding Quiz & User Preferences)
+4. 🔜 Complete Phase 3 → Release v3.9.0
 
 **Upcoming Phases:**
-- Phase 3.7: Natural Language Date Parsing (1-2 weeks)
+- Phase 3.7: Natural Language Date Parsing (1-1.5 weeks)
 - Phase 3.8: Due Date Notifications (1-2 weeks)
+- Phase 3.9: Onboarding Quiz & User Preferences (1 week)
 - Phase 4: Bounded Workspace View (4-5 weeks)
 
 ---
 
 **Document Status:** ✅ Up to Date (Phase 3.6.5 Complete)
 **Last Review:** January 20, 2026
-**Next Review:** After Phase 3.7-3.8 completion
+**Next Review:** After Phase 3.7-3.9 completion
 
 **See Also:**
 - `visual-design.md` - Complete aesthetic specification
