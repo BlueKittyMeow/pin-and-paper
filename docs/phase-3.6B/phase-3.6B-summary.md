@@ -31,14 +31,14 @@
 
 3. **Navigation & UX Excellence**
    - Scroll-to-task with smooth animations
-   - Task highlighting with fade effect (500ms)
+   - Task highlighting with 2-second highlight and 500ms fade animation
    - Breadcrumb navigation showing task hierarchy
    - Expand/collapse all functionality for task tree
 
 4. **Major Technical Breakthrough**
    - Fixed Enter key in tag filter dialog after 6 failed attempts
    - Documented investigation and solution for future reference
-   - Gemini's CallbackShortcuts + Focus + autofocus approach successful
+   - Solution derived from collaborative investigation with Gemini's guidance on Flutter's focus system
 
 5. **Production Polish**
    - App icon integration (logo01.jpg → PNG)

@@ -1001,16 +1001,33 @@ class TaskProvider extends ChangeNotifier {
   /// Phase 3.6B: Navigate to task from search results
   ///
   /// This method:
-  /// 1. Finds the task in the task list
+  /// 1. Finds the task in the task list (clears filters if needed)
   /// 2. Expands all parent tasks to make it visible
   /// 3. Scrolls to the task using Scrollable.ensureVisible
   /// 4. Highlights it for 2 seconds
   Future<void> navigateToTask(String taskId) async {
-    // Step 1: Find task
-    final task = _tasks.firstWhere(
-      (t) => t.id == taskId,
-      orElse: () => throw Exception('Task not found'),
-    );
+    // Step 1: Find task (with filter clearing if needed)
+    // FIX (Codex/Gemini): Task might be filtered out, clear filters to find it
+    Task? task;
+    try {
+      task = _tasks.firstWhere((t) => t.id == taskId);
+    } catch (e) {
+      // Task not in current filtered list - clear filters and try again
+      if (hasActiveFilters) {
+        await clearFilters();
+        try {
+          task = _tasks.firstWhere((t) => t.id == taskId);
+        } catch (e) {
+          // Still not found after clearing filters - task might be deleted
+          debugPrint('Task $taskId not found even after clearing filters');
+          return;
+        }
+      } else {
+        // No filters active but task still not found - task might be deleted
+        debugPrint('Task $taskId not found in task list');
+        return;
+      }
+    }
 
     // Step 2: Expand all ancestors to make task visible
     await _expandAncestors(task);

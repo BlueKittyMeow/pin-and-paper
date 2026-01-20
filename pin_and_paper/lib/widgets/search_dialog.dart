@@ -366,7 +366,9 @@ class _SearchDialogState extends State<SearchDialog> {
     final taskProvider = context.read<TaskProvider>();
     final activeFilters = taskProvider.filterState;
 
-    if (activeFilters.selectedTagIds.isEmpty) {
+    // FIX (Codex): Check isActive instead of just selectedTagIds.isEmpty
+    // This allows presence-only filters (onlyTagged/onlyUntagged) to be applied
+    if (!activeFilters.isActive) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No active tag filters to apply')),
       );
@@ -564,9 +566,12 @@ class _SearchDialogState extends State<SearchDialog> {
   void _performSearch() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) {
+      // FIX (Codex): Cancel in-flight searches and reset loading state
+      _searchOperationId++; // Invalidate any in-flight searches
       setState(() {
         _results = [];
         _breadcrumbs = {};
+        _isSearching = false; // Clear loading spinner
       });
       return;
     }

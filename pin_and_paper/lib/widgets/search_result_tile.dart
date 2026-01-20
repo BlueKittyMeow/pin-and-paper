@@ -55,10 +55,13 @@ class SearchResultTile extends StatelessWidget {
           // ],
         ],
       ),
-      trailing: Text(
-        'Score: ${(result.score * 100).toStringAsFixed(0)}%',
-        style: TextStyle(fontSize: 12, color: Colors.grey),
-      ),
+      // FIX (Codex): Gate debug score display with kDebugMode
+      trailing: kDebugMode
+          ? Text(
+              'Score: ${(result.score * 100).toStringAsFixed(0)}%',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            )
+          : null,
       onTap: onTap,
     );
   }

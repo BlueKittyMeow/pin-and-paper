@@ -159,13 +159,14 @@ class SearchService {
       //   * Most searches return <50 results
       //   * Position-based ordering is reasonable proxy for task relevance
       // - If users complain about missed results: consider adaptive cap based on query length
+      // FIX (Codex): Exclude soft-deleted tags from search results
       sql = '''
         SELECT
           tasks.*,
           GROUP_CONCAT(tags.name, ' ') AS tag_names
         FROM tasks
         LEFT JOIN task_tags ON tasks.id = task_tags.task_id
-        LEFT JOIN tags ON task_tags.tag_id = tags.id
+        LEFT JOIN tags ON task_tags.tag_id = tags.id AND tags.deleted_at IS NULL
         WHERE ${conditions.join(' AND ')}
         GROUP BY tasks.id
         ORDER BY tasks.position ASC
