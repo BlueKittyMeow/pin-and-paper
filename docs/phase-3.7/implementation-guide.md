@@ -306,13 +306,13 @@ class DateParsingService {
 
     try {
       // Prepare JavaScript code to parse the text
-      // Escape single quotes in the text
-      final escapedText = text.replaceAll("'", "\\'");
-
+      // SECURITY FIX (Codex): Use jsonEncode() to safely escape user input
+      // This prevents JS injection from quotes, backslashes, newlines, etc.
       final jsCode = '''
         (function() {
+          const text = ${jsonEncode(text)};
           const referenceDate = new Date("${effectiveToday.toIso8601String()}");
-          const parsed = chrono.parse("$escapedText", referenceDate, { forwardDate: true });
+          const parsed = chrono.parse(text, referenceDate, { forwardDate: true });
 
           if (parsed.length === 0) return null;
 
@@ -375,6 +375,18 @@ class DateParsingService {
     return DateTime(now.year, now.month, now.day);
   }
 
+  /// Get effective today for current time (convenience method for widgets)
+  ///
+  /// CRITICAL (Codex): Widgets must use this for date formatting to match parsing logic
+  /// Otherwise at 2am, parsing uses "yesterday" but UI shows "today" - confusing!
+  DateTime getCurrentEffectiveToday() {
+    return getEffectiveToday(
+      DateTime.now(),
+      _todayCutoffHour,
+      _todayCutoffMinute,
+    );
+  }
+
   /// Load settings from SharedPreferences (will be implemented in Phase 3.9)
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -399,6 +411,8 @@ class DateParsingService {
 3. **Error handling** - Graceful fallback to null if parsing fails
 4. **Today Window fix** - Includes both hour AND minute (fixes v3 bug)
 5. **Settings preparation** - Ready for Phase 3.9 onboarding integration
+6. **JS String Safety (Codex)** - Uses `jsonEncode()` to prevent injection from user input
+7. **Effective Today Consistency (Codex)** - Exposes `getCurrentEffectiveToday()` for widgets to use same base date as parser
 
 ---
 
@@ -833,8 +847,10 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
 
   String _formatDate(DateTime date, bool isAllDay) {
     // Format: "Tomorrow, 3:00 PM (Tue, Jan 21)" or "Tomorrow (Tue, Jan 21)"
-    final now = DateTime.now();
-    final diff = date.difference(now);
+    // CRITICAL FIX (Codex): Use effectiveToday instead of DateTime.now()
+    // Otherwise at 2am, parsing uses "yesterday" but UI shows "today" - confusing!
+    final effectiveToday = DateParsingService().getCurrentEffectiveToday();
+    final diff = date.difference(effectiveToday);
 
     String relativeDay;
     if (diff.inDays == 0) {
@@ -968,20 +984,22 @@ class DateOptionsSheet extends StatelessWidget {
   }
 
   List<_DateAlternative> _generateAlternatives(DateTime current) {
-    final now = DateTime.now();
+    // CRITICAL FIX (Codex): Use effectiveToday instead of DateTime.now()
+    // Otherwise at 2am, alternatives use wrong base date (off by one day)
+    final effectiveToday = DateParsingService().getCurrentEffectiveToday();
     final alternatives = <_DateAlternative>[];
 
     // Add "Today" if not already today
-    if (current.day != now.day) {
+    if (current.day != effectiveToday.day) {
       alternatives.add(_DateAlternative(
-        date: DateTime(now.year, now.month, now.day),
+        date: DateTime(effectiveToday.year, effectiveToday.month, effectiveToday.day),
         isAllDay: true,
-        label: 'Today (${DateFormat('EEE, MMM d').format(now)})',
+        label: 'Today (${DateFormat('EEE, MMM d').format(effectiveToday)})',
       ));
     }
 
     // Add "Tomorrow" if not already tomorrow
-    final tomorrow = now.add(const Duration(days: 1));
+    final tomorrow = effectiveToday.add(const Duration(days: 1));
     if (current.day != tomorrow.day) {
       alternatives.add(_DateAlternative(
         date: DateTime(tomorrow.year, tomorrow.month, tomorrow.day),
@@ -991,8 +1009,8 @@ class DateOptionsSheet extends StatelessWidget {
     }
 
     // Add "Next week" if not already next week
-    final nextWeek = now.add(const Duration(days: 7));
-    if ((current.difference(now).inDays - 7).abs() > 1) {
+    final nextWeek = effectiveToday.add(const Duration(days: 7));
+    if ((current.difference(effectiveToday).inDays - 7).abs() > 1) {
       alternatives.add(_DateAlternative(
         date: DateTime(nextWeek.year, nextWeek.month, nextWeek.day),
         isAllDay: true,
@@ -1004,8 +1022,9 @@ class DateOptionsSheet extends StatelessWidget {
   }
 
   String _formatDate(DateTime date, bool isAllDay) {
-    final now = DateTime.now();
-    final diff = date.difference(now);
+    // CRITICAL FIX (Codex): Use effectiveToday instead of DateTime.now()
+    final effectiveToday = DateParsingService().getCurrentEffectiveToday();
+    final diff = date.difference(effectiveToday);
 
     String relativeDay;
     if (diff.inDays == 0) {
