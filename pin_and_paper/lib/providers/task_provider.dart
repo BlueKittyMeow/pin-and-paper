@@ -69,7 +69,9 @@ class TaskProvider extends ChangeNotifier {
     // Phase 3.6.5: Use TaskTreeController for ID-based expansion state (fixes corruption bug)
     _treeController = TaskTreeController(
       roots: [],  // Start empty, populated in loadTasks
-      childrenProvider: (Task task) => _tasks.where((t) => t.parentId == task.id),
+      childrenProvider: (Task task) {
+        return _tasks.where((t) => t.parentId == task.id).toList();
+      },
       parentProvider: (Task task) => _findParent(task.parentId),
     );
   }
@@ -98,6 +100,12 @@ class TaskProvider extends ChangeNotifier {
   // Phase 3.2: Hierarchy state
   bool _isReorderMode = false;
   late TaskTreeController _treeController; // Phase 3.6.5: Use custom controller for ID-based state
+
+  // Phase 3.6.5: Tree version counter to force AnimatedTreeView rebuild
+  // Incremented when tree structure changes (completion, etc.)
+  // Used as ValueKey to force Flutter to recreate the AnimatedTreeView widget
+  int _treeVersion = 0;
+  int get treeVersion => _treeVersion;
 
   // Phase 2 Stretch: Hide completed tasks settings
   bool _hideOldCompleted = true;
@@ -258,21 +266,20 @@ class TaskProvider extends ChangeNotifier {
       if (t.parentId != null) {
         // If parent exists in current task list, this is not a root
         if (taskIds.contains(t.parentId)) {
-          debugPrint('[TreeRefresh] Task "${t.title}" (${t.id.substring(0, 8)}) has parent ${t.parentId?.substring(0, 8)} in filtered results - NOT a root');
           return false;
         }
         // Parent not in filtered results - treat as root
-        debugPrint('[TreeRefresh] Task "${t.title}" (${t.id.substring(0, 8)}) has parent ${t.parentId?.substring(0, 8)} NOT in filtered results - treating as root');
       }
       // Original logic: true root (parentId == null) or orphaned in filtered view
       if (!t.completed) return true; // Incomplete tasks always active
       return _hasIncompleteDescendants(t); // Completed with incomplete children
     });
 
-    debugPrint('[TreeRefresh] Setting ${activeRoots.length} roots from ${_tasks.length} total tasks');
-    _treeController.roots = activeRoots;
+    _treeController.roots = activeRoots.toList();
     _treeController.rebuild();
-    // Done! Expansion state preserved automatically by TaskTreeController (ID-based)
+    // Phase 3.6.5: Increment tree version to force AnimatedTreeView widget recreation
+    _treeVersion++;
+    // Expansion state preserved automatically by TaskTreeController (ID-based)
   }
 
   // Phase 3.2: Get ALL visible completed tasks (with breadcrumbs for nested tasks)
@@ -600,11 +607,8 @@ class TaskProvider extends ChangeNotifier {
         // Phase 3.6.5: Rebuild incomplete descendant cache for completed parent indicator
         _rebuildIncompleteDescendantCache();
 
-        // Phase 3.2: Refresh TreeController to update visibility
-        _refreshTreeController();
-
-        // Phase 3.6.5 Fix: When uncompleting a task, auto-expand it so children are visible
-        // This prevents the confusing behavior where children seem to "disappear"
+        // Phase 3.6.5 Fix: Set expansion state BEFORE refreshing tree
+        // This ensures the tree is built with correct expansion state from the start
         if (wasCompleted && !updatedTask.completed) {
           // Task was uncompleted - expand it if it has children
           final hasChildren = _tasks.any((t) => t.parentId == updatedTask.id);
@@ -613,9 +617,8 @@ class TaskProvider extends ChangeNotifier {
           }
         }
 
-        // Phase 3.6.5 Fix: When completing a child task, expand its parent
-        // This keeps the completed child visible under its parent (crossed out)
         if (!wasCompleted && updatedTask.completed && updatedTask.parentId != null) {
+          // Task was completed - expand its parent so child stays visible
           try {
             final parent = _tasks.firstWhere((t) => t.id == updatedTask.parentId);
             _treeController.setExpansionState(parent, true);
@@ -623,6 +626,10 @@ class TaskProvider extends ChangeNotifier {
             // Parent not found, skip
           }
         }
+
+        // Phase 3.2: Refresh TreeController to update visibility
+        // Now the expansion state is already set correctly
+        _refreshTreeController();
 
         notifyListeners();
       }

@@ -161,7 +161,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 final completedTasks = taskProvider.visibleCompletedTasks;
                 final hasRecentlyCompleted = completedTasks.isNotEmpty;
 
-                if (!hasActiveTasks && !hasRecentlyCompleted) {
+                // Phase 3.6.5 Fix: Only show "No tasks yet" if tasks list is truly empty
+                // This prevents brief flash of empty state during completion transitions
+                if (!hasActiveTasks && !hasRecentlyCompleted && taskProvider.tasks.isEmpty) {
                   return Center(
                     child: Text(
                       'No tasks yet.\nAdd one above!',
@@ -183,6 +185,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Active tasks tree
                     if (hasActiveTasks)
                       AnimatedTreeView<Task>(
+                        // Phase 3.6.5: ValueKey forces Flutter to recreate widget when tree changes
+                        // This fixes the issue where completed children don't appear until scroll
+                        key: ValueKey('tree-${taskProvider.treeVersion}'),
                         treeController: taskProvider.treeController,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -223,10 +228,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
 
                       // Recently completed tasks (Phase 3.5 Fix #C3: with hierarchy preserved)
+                      // Phase 3.6.5: Use ValueKey instead of GlobalKey to avoid duplicate key conflict
+                      // When a completed child appears in BOTH tree (under expanded parent) AND here,
+                      // using same GlobalKey causes Flutter to "steal" widget when scrolling
                       ...taskProvider.completedTasksWithHierarchy.map((task) {
                         final breadcrumb = taskProvider.getBreadcrumb(task);
                         return TaskItem(
-                          key: taskProvider.getKeyForTask(task.id), // Phase 3.6B: GlobalKey for scroll-to-task
+                          key: ValueKey('completed-${task.id}'), // Phase 3.6.5: Unique key for completed section
                           task: task,
                           depth: task.depth, // Phase 3.5 Fix #C3: Use real depth from DB
                           hasChildren: taskProvider.hasCompletedChildren(task.id), // Phase 3.5 Fix #C3: Check actual children

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
@@ -7,6 +8,8 @@ import '../providers/tag_provider.dart';
 import 'task_context_menu.dart';
 import 'tag_picker_dialog.dart';
 import 'tag_chip.dart';
+import 'edit_task_dialog.dart'; // Phase 3.6.5
+import 'completed_task_metadata_dialog.dart'; // Phase 3.6.5 Day 5
 
 class TaskItem extends StatelessWidget {
   final Task task;
@@ -57,77 +60,60 @@ class TaskItem extends StatelessWidget {
     }
   }
 
-  // Phase 3.4: Handle task edit
+  // Phase 3.6.5: Handle comprehensive task edit
   Future<void> _handleEdit(BuildContext context) async {
-    final controller = TextEditingController(text: task.title);
-
-    // Select all text for easy replacement
-    controller.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: controller.text.length,
-    );
-
-    final result = await showDialog<String>(
+    // Show comprehensive edit dialog
+    final result = await EditTaskDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Task'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Task title',
-            border: OutlineInputBorder(),
-          ),
-          onSubmitted: (value) => Navigator.pop(context, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      task: task,
+      currentTags: tags ?? [],
     );
 
-    // Service layer handles validation and trimming (Gemini feedback)
-    if (result != null && context.mounted) {
-      try {
-        await context.read<TaskProvider>().updateTaskTitle(task.id, result);
+    // User cancelled
+    if (result == null || !context.mounted) return;
 
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Task updated'),
-              duration: Duration(seconds: 1),
-            ),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to update task: $e'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-        }
+    try {
+      final taskProvider = context.read<TaskProvider>();
+
+      // 1. Update task basic fields (title, dueDate, notes, tags)
+      await taskProvider.updateTask(
+        taskId: task.id,
+        title: result['title'] as String,
+        dueDate: result['dueDate'] as DateTime?,
+        notes: result['notes'] as String?,
+        tagIds: (result['tagIds'] as List<String>?) ?? [],
+      );
+
+      // 2. Handle parent changes (Day 4: Uses validated changeTaskParent)
+      final newParentId = result['parentId'] as String?;
+      if (newParentId != task.parentId) {
+        // Parent changed - use changeTaskParent which has cycle detection
+        // Position 0 = start of children list for new parent
+        await taskProvider.changeTaskParent(
+          taskId: task.id,
+          newParentId: newParentId,
+          newPosition: 0, // Insert at top of new parent's children
+        );
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Task updated'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update task: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     }
-
-    // Delayed disposal is required due to complex timing:
-    // 1. Dialog closes (animation starts)
-    // 2. updateTaskTitle() calls _categorizeTasks() + _refreshTreeController() + notifyListeners()
-    // 3. These trigger rebuilds while dialog is still animating
-    // 4. TextField tries to access controller during rebuild → crash
-    // Both try/finally and addPostFrameCallback dispose too early (tested & confirmed)
-    // The 300ms delay ensures dialog animation + all rebuilds complete before disposal
-    Future.delayed(const Duration(milliseconds: 300), () {
-      controller.dispose();
-    });
   }
 
   // Phase 3.5: Handle tag management
@@ -209,6 +195,49 @@ class TaskItem extends StatelessWidget {
     }
   }
 
+  // Phase 3.6.5 Day 5: Handle completed task tap to show metadata
+  Future<void> _handleCompletedTaskTap(BuildContext context) async {
+    if (!task.completed) return; // Only for completed tasks
+
+    final action = await CompletedTaskMetadataDialog.show(
+      context: context,
+      task: task,
+      tags: tags ?? [],
+      breadcrumb: breadcrumb,
+    );
+
+    if (action == null || !context.mounted) return;
+
+    final taskProvider = context.read<TaskProvider>();
+
+    switch (action) {
+      case 'view_in_context':
+        // Navigate to parent task (if exists) and highlight it
+        // For root tasks, just navigate to self
+        final targetId = task.parentId ?? task.id;
+        await taskProvider.navigateToTask(targetId);
+        break;
+
+      case 'uncomplete':
+        // Toggle completion (uses new position restore)
+        await taskProvider.toggleTaskCompletion(task);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Task "${task.title}" restored'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        break;
+
+      case 'delete':
+        // Show delete confirmation
+        await _handleDelete(context);
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Phase 3.2: Calculate indentation based on depth
@@ -248,7 +277,14 @@ class TaskItem extends StatelessWidget {
               ),
             ],
           ),
-      child: Column(
+      child: Builder(
+        builder: (context) {
+          // Phase 3.6.5: Get incomplete descendant info for completed parent detection
+          final incompleteInfo = taskProvider.getIncompleteDescendantInfo(task.id);
+          final isCompletedParent = task.completed && incompleteInfo != null;
+          final isTrulyComplete = task.completed && incompleteInfo == null;
+
+          return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Phase 3.2: Show breadcrumb if provided
@@ -322,11 +358,15 @@ class TaskItem extends StatelessWidget {
             title: Text(
               task.title,
               style: TextStyle(
-                decoration: task.completed
+                // Phase 3.6.5: Only strikethrough if TRULY complete (no incomplete descendants)
+                decoration: isTrulyComplete
                     ? TextDecoration.lineThrough
                     : TextDecoration.none,
+                // Phase 3.6.5: Dim more for completed parents (0.35) vs truly complete (0.5)
                 color: task.completed
-                    ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)
+                    ? Theme.of(context).colorScheme.onSurface.withValues(
+                        alpha: isCompletedParent ? 0.35 : 0.5,
+                      )
                     : Theme.of(context).colorScheme.onSurface,
               ),
             ),
@@ -339,44 +379,64 @@ class TaskItem extends StatelessWidget {
           // Phase 3.5: Display tags (only when tags exist)
           // Fix #C2: Show tags in reorder mode
           // UX Decision: No "+ Add Tag" chip - use context menu only
+          // Phase 3.6.5: Dim tags for completed tasks
           if (tags != null && tags!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(
-                left: 60, // Align with title (24px collapse + 24px checkbox + 12px padding)
-                right: 12,
-                bottom: 8,
-              ),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  // Show first 3 tags
-                  ...tags!.take(3).map((tag) {
-                    return CompactTagChip(tag: tag);
-                  }),
-                  // Show "+N more" chip if there are more than 3 tags
-                  if (tags!.length > 3)
-                    Material(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        child: Text(
-                          '+${tags!.length - 3} more',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: 12,
+            Opacity(
+              opacity: task.completed ? (isCompletedParent ? 0.4 : 0.6) : 1.0,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  left: 60, // Align with title (24px collapse + 24px checkbox + 12px padding)
+                  right: 12,
+                  bottom: 8,
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    // Show first 3 tags
+                    ...tags!.take(3).map((tag) {
+                      return CompactTagChip(tag: tag);
+                    }),
+                    // Show "+N more" chip if there are more than 3 tags
+                    if (tags!.length > 3)
+                      Material(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            '+${tags!.length - 3} more',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
+              ),
+            ),
+
+          // Phase 3.6.5: Depth indicator for completed parents with incomplete descendants
+          if (isCompletedParent)
+            Padding(
+              padding: const EdgeInsets.only(left: 60, right: 12, bottom: 8),
+              child: Text(
+                incompleteInfo!.displayText,  // "> 3 incomplete" or ">> 5 incomplete"
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
         ],
+      );
+        },
       ),
     );
 
@@ -387,6 +447,8 @@ class TaskItem extends StatelessWidget {
         }
 
         return GestureDetector(
+          // Phase 3.6.5: Tap on completed tasks shows metadata dialog
+          onTap: task.completed ? () => _handleCompletedTaskTap(context) : null,
           // Phase 3.2: Long-press (mobile) and right-click (desktop) to show context menu
           onLongPressStart: (details) {
             TaskContextMenu.show(
