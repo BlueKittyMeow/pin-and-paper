@@ -181,6 +181,12 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
 
   // Phase 3.6B: Apply filter and close dialog (same as Apply button)
   void _applyFilter() {
+    // Gemini suggestion: Guard clause to prevent double-triggering
+    // Only apply if search field is NOT focused (TextField.onSubmitted handles it when focused)
+    if (_searchFocusNode.hasFocus) {
+      return;
+    }
+
     HapticFeedback.mediumImpact();
     final filter = FilterState(
       selectedTagIds: _selectedTagIds.toList(),
@@ -194,34 +200,11 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Filter by Tags'),
-      content: GestureDetector(
-        // Phase 3.6B: Move focus away from search when tapping elsewhere
-        onTap: () {
-          if (_searchFocusNode.hasFocus) {
-            _searchFocusNode.unfocus();
-          }
-        },
-        behavior: HitTestBehavior.opaque,
-        child: FocusScope(
-          // Phase 3.6B: Intercept Enter key to apply filter
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent &&
-                (event.logicalKey == LogicalKeyboardKey.enter ||
-                 event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-              // Only apply if search field is not focused
-              if (FocusManager.instance.primaryFocus != _searchFocusNode) {
-                debugPrint('Enter pressed outside search field. Applying filter.');
-                _applyFilter();
-                return KeyEventResult.handled;
-              }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             // Search field
             // UX1: Clear button for search
             TextField(
@@ -476,10 +459,8 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
                       ),
               ),
           ],
-            ), // Close Column
-          ), // Close SizedBox
-        ), // Close FocusScope
-      ), // Close GestureDetector
+        ),
+      ),
       actionsOverflowButtonSpacing: 8,
       actions: [
         // M4: Clear All button on the left side
@@ -498,9 +479,19 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
               child: const Text('Cancel'),
             ),
             const SizedBox(width: 8),
-            FilledButton(
-              onPressed: _applyFilter, // Phase 3.6B: Use extracted method
-              child: const Text('Apply'),
+            // Phase 3.6B: Gemini solution - CallbackShortcuts on Apply button itself
+            CallbackShortcuts(
+              bindings: <ShortcutActivator, VoidCallback>{
+                const SingleActivator(LogicalKeyboardKey.enter): _applyFilter,
+                const SingleActivator(LogicalKeyboardKey.numpadEnter): _applyFilter,
+              },
+              child: Focus(
+                child: FilledButton(
+                  autofocus: true, // Get focus when search field unfocused
+                  onPressed: _applyFilter,
+                  child: const Text('Apply'),
+                ),
+              ),
             ),
           ],
         ),
