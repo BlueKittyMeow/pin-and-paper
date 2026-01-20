@@ -80,9 +80,9 @@ Muted Lavender:#9B8FA5  (dried flowers, soft accents)
 - **Custom rendering** - Skia engine for torn paper effects, dynamic lighting, shadows
 
 ### Data & State
-- **SQLite v6** (via sqflite) - Local-first, offline-capable, battle-tested
-  - 6 schema migrations (v1 → v6)
-  - Supports task hierarchy, tags, soft delete, due dates
+- **SQLite v7** (via sqflite) - Local-first, offline-capable, battle-tested
+  - 7 schema migrations (v1 → v7, FTS5 reserved)
+  - Supports task hierarchy, tags, soft delete, due dates, search
 - **Provider** - Simple state management (upgrading to Riverpod later)
 - **180+ comprehensive tests** - Models, services, utilities, migrations, widgets (99%+ pass rate)
 
@@ -145,16 +145,19 @@ Data Layer (SQLite)
   - Performance validated (<10ms filtering, <5ms counting)
   - Production-ready tag filtering with multi-select and AND/OR logic
   - Active filter bar with chip removal and clear all
+- ✅ **Phase 3.6B:** Universal Search (Jan 2026)
+  - Two-stage search algorithm (SQL LIKE + Dart fuzzy scoring)
+  - Weighted relevance scoring (title 70%, tags 30%)
+  - Advanced filtering (scope, tags, presence)
+  - Navigation with scroll-to-task and highlighting
+  - Debounced search with race condition protection
+  - Match highlighting and breadcrumb navigation
+  - Expand/collapse all functionality
+  - App icon integration
+  - Enter key functionality breakthrough (6 attempts documented)
 
 **Next Up:**
-- 🔜 **Phase 3.6B:** Universal Search Implementation (1-2 weeks)
-  - Search across active + completed tasks
-  - Include titles, notes, and tags in search
-  - Magnifying glass icon in app bar
 - ⚠️ **Phase 3.6.5:** Edit Task Modal Rework (1 week) - **Required before 3.7**
-  - Comprehensive edit modal with all task fields
-  - **Completed task metadata view** (created/completed timestamps, full details)
-  - Show completed parents with incomplete children (with visual indicator)
 - 🔜 **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
 - 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
 

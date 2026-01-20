@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
-**Version:** 3.5 (Phase 3 In Progress)
-**Last Updated:** 2026-01-06
+**Version:** 3.6B (Phase 3 In Progress)
+**Last Updated:** 2026-01-19
 **Primary Device:** Samsung Galaxy S22 Ultra
-**Current Phase:** Phase 3.5 Complete - Validation & Planning Phase 3.6
+**Current Phase:** Phase 3.6B Complete - Universal Search
 
 ---
 
@@ -33,8 +33,7 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.3:** Recently Deleted (Soft Delete) - Complete (Dec 27, 2025)
 ✅ **Phase 3.4:** Task Editing (Due Dates, Notes, etc.) - Complete (Dec 2025)
 ✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 9, 2026)
-🔜 **Phase 3.6A:** Tag Filtering - In Planning (1 week)
-🔜 **Phase 3.6B:** Universal Search - Planned (1-2 weeks)
+✅ **Phase 3.6B:** Universal Search - Complete (Jan 19, 2026)
 ⚠️ **Phase 3.6.5:** Edit Task Modal Rework - Required Before 3.7 (1 week)
 🔜 **Phase 3.7:** Natural Language Date Parsing - Planned (1-2 weeks)
 🔜 **Phase 3.8:** Due Date Notifications - Planned (1-2 weeks)
@@ -1054,16 +1053,20 @@ This section documents major architectural and scope decisions made during plann
 
 ## Next Steps
 
-**Current Phase:** Phase 3.5 Complete - Validation in Progress (Jan 6, 2026)
-
-**Immediate Actions:**
-1. ✅ Complete Phase 3.5 Fix #C3 validation (completed task hierarchy) - Jan 9, 2026
-2. ✅ Document UX decisions (removed "+ Add Tag" chip, context menu only) - Jan 9, 2026
-3. 🔜 Plan Phase 3.6A (Tag Filtering - 1 week)
-4. 🔜 Plan Phase 3.6B (Universal Search - 1-2 weeks)
-5. ⚠️ **Plan Phase 3.6.5 (Edit Task Modal Rework)** - Required before Phase 3.7
+**Current Phase:** Phase 3.6B Complete - Universal Search (Jan 19, 2026)
 
 **Completed Recently:**
+1. ✅ Phase 3.6B Universal Search implementation (Jan 11-19, 2026)
+   - Two-stage search with fuzzy scoring
+   - Advanced filtering (scope, tags, presence)
+   - Navigation with scroll-to-task and highlighting
+   - Enter key functionality in tag filter dialog
+2. ✅ App icon integration (logo01.jpg → PNG)
+3. ✅ Expand/collapse all functionality
+
+**Next Up:**
+1. 🔜 Consider Phase 3.6.5 (Edit Task Modal Rework) if needed before 3.7
+2. 🔜 Plan Phase 3.7 (Natural Language Date Parsing)
 - ✅ Phase 3.5: Comprehensive Tagging System (Jan 5-6, 2026)
   - 154+ tests passing (including 6 new hierarchy tests)
   - Dual AI code review (Gemini + Codex)
