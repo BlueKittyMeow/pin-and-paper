@@ -52,7 +52,7 @@ class TestDatabaseHelper {
 
   /// Create test database schema (matches DatabaseService._createDB)
   static Future<void> _createTestDB(Database db, int version) async {
-    // Create tasks table with Phase 3.3 schema (includes soft delete)
+    // Create tasks table with Phase 3.6.5 schema (includes notes + position_before_completion)
     await db.execute('''
       CREATE TABLE ${AppConstants.tasksTable} (
         id TEXT PRIMARY KEY,
@@ -69,6 +69,8 @@ class TestDatabaseHelper {
         notification_type TEXT,
         notification_time INTEGER,
         deleted_at INTEGER,
+        notes TEXT DEFAULT NULL,
+        position_before_completion INTEGER DEFAULT NULL,
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable} (id) ON DELETE CASCADE
       )
     ''');

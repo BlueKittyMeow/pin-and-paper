@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 7; // Phase 3.6B: Universal Search (no schema changes, FTS5 reserved)
+  static const int databaseVersion = 8; // Phase 3.6.5: Edit Task Modal Rework (notes + position_before_completion)
 
   // Table names
   static const String tasksTable = 'tasks';

@@ -381,21 +381,156 @@ class TaskService {
   }
 
   // Toggle task completion status
+  // Phase 3.6.5: Now saves position before completion for restore capability
   Future<Task> toggleTaskCompletion(Task task) async {
-    final updatedTask = task.copyWith(
-      completed: !task.completed,
-      completedAt: !task.completed ? DateTime.now() : null,
+    final db = await _dbService.database;
+
+    if (!task.completed) {
+      // Completing: Save current position for potential restore
+      final updatedTask = task.copyWith(
+        completed: true,
+        completedAt: DateTime.now(),
+        positionBeforeCompletion: task.position,
+      );
+
+      await db.update(
+        AppConstants.tasksTable,
+        updatedTask.toMap(),
+        where: 'id = ?',
+        whereArgs: [task.id],
+      );
+
+      return updatedTask;
+    } else {
+      // Uncompleting: Use restoreTaskToPosition for proper handling
+      return await uncompleteTask(task.id);
+    }
+  }
+
+  /// Phase 3.6.5: Uncomplete a task and restore its position
+  ///
+  /// Gemini #18: Moved position restore logic to TaskService for cleaner architecture
+  ///
+  /// Steps:
+  /// 1. Get task and its saved position
+  /// 2. Shift siblings at >= target position up by 1
+  /// 3. Restore task to its original position
+  /// 4. Clear position_before_completion
+  Future<Task> uncompleteTask(String taskId) async {
+    final db = await _dbService.database;
+
+    return await db.transaction((txn) async {
+      // 1. Get the task
+      final taskMaps = await txn.query(
+        AppConstants.tasksTable,
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      if (taskMaps.isEmpty) {
+        throw Exception('Task not found: $taskId');
+      }
+
+      final task = Task.fromMap(taskMaps.first);
+
+      // Determine target position
+      final targetPosition = task.positionBeforeCompletion ?? task.position;
+      final parentId = task.parentId;
+
+      // 2. Shift siblings at >= target position up by 1 to make room
+      await txn.rawUpdate('''
+        UPDATE ${AppConstants.tasksTable}
+        SET position = position + 1
+        WHERE ${parentId == null ? 'parent_id IS NULL' : 'parent_id = ?'}
+          AND position >= ?
+          AND completed = 0
+          AND deleted_at IS NULL
+          AND id != ?
+      ''', parentId == null
+          ? [targetPosition, taskId]
+          : [parentId, targetPosition, taskId]);
+
+      // 3. Update task: uncomplete and restore position
+      await txn.update(
+        AppConstants.tasksTable,
+        {
+          'completed': 0,
+          'completed_at': null,
+          'position': targetPosition,
+          'position_before_completion': null, // Clear saved position
+        },
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      // 4. Return updated task
+      return task.copyWith(
+        completed: false,
+        completedAt: null,
+        position: targetPosition,
+        positionBeforeCompletion: null,
+      );
+    });
+  }
+
+  /// Phase 3.6.5: Comprehensive task update
+  ///
+  /// Updates multiple task fields at once:
+  /// - title (required)
+  /// - dueDate (optional)
+  /// - notes (optional)
+  ///
+  /// NOTE: Parent changes are handled separately via updateTaskParent()
+  /// to maintain proper hierarchy validation and position handling.
+  ///
+  /// Returns the updated Task object
+  /// Throws [ArgumentError] if title is empty or whitespace-only
+  /// Throws [Exception] if task not found
+  Future<Task> updateTask(
+    String taskId, {
+    required String title,
+    DateTime? dueDate,
+    String? notes,
+  }) async {
+    final db = await _dbService.database;
+    final trimmedTitle = title.trim();
+
+    // Validate title
+    if (trimmedTitle.isEmpty) {
+      throw ArgumentError('Task title cannot be empty');
+    }
+
+    // Fetch the original task first to have all its data
+    final maps = await db.query(
+      AppConstants.tasksTable,
+      where: 'id = ?',
+      whereArgs: [taskId],
     );
 
-    final db = await _dbService.database;
+    if (maps.isEmpty) {
+      throw Exception('Task not found: $taskId');
+    }
+
+    final originalTask = Task.fromMap(maps.first);
+
+    // Perform the update
     await db.update(
       AppConstants.tasksTable,
-      updatedTask.toMap(),
+      {
+        'title': trimmedTitle,
+        'due_date': dueDate?.millisecondsSinceEpoch,
+        'notes': notes,
+      },
       where: 'id = ?',
-      whereArgs: [task.id],
+      whereArgs: [taskId],
     );
 
-    return updatedTask;
+    // Return updated copy
+    return originalTask.copyWith(
+      title: trimmedTitle,
+      dueDate: dueDate,
+      notes: notes,
+    );
   }
 
   // Phase 3.4: Update task title
