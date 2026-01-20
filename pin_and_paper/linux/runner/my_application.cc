@@ -55,6 +55,15 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
+  // Phase 3.6B: Set app icon
+  g_autoptr(GError) icon_error = nullptr;
+  g_autoptr(GdkPixbuf) icon = gdk_pixbuf_new_from_file("linux/runner/app_icon.png", &icon_error);
+  if (icon != nullptr) {
+    gtk_window_set_icon(window, icon);
+  } else if (icon_error != nullptr) {
+    g_warning("Failed to load app icon: %s", icon_error->message);
+  }
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 

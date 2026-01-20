@@ -15,11 +15,6 @@ import '../utils/tag_colors.dart';
 import 'search_result_tile.dart';
 import 'tag_filter_dialog.dart';
 
-// Phase 3.6B: Custom intent for applying tags with Enter key
-class ApplyTagsIntent extends Intent {
-  const ApplyTagsIntent();
-}
-
 class SearchDialog extends StatefulWidget {
   @override
   _SearchDialogState createState() => _SearchDialogState();
@@ -28,6 +23,7 @@ class SearchDialog extends StatefulWidget {
 class _SearchDialogState extends State<SearchDialog> {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode(); // Phase 3.6B: For Enter key shortcut
+  final _dialogContentFocusNode = FocusNode(); // Phase 3.6B: For dialog content focus
   final _tagService = TagService();  // v4: Cache service instance
   SearchScope _scope = SearchScope.current;  // DEFAULT: Current (BlueKitty)
   List<SearchResult> _results = [];
@@ -57,6 +53,7 @@ class _SearchDialogState extends State<SearchDialog> {
     _debounceTimer?.cancel();  // v3: Clean up timer
     _searchController.dispose();
     _searchFocusNode.dispose(); // Phase 3.6B
+    _dialogContentFocusNode.dispose(); // Phase 3.6B
     // Save search state for next open (cleared only on app launch)
     _saveSearchState();
     super.dispose();
@@ -64,34 +61,43 @@ class _SearchDialogState extends State<SearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // Phase 3.6B: Use Shortcuts + Actions (same pattern as Dialog uses for Escape)
+    // Phase 3.6B: Use FocusScope + GestureDetector (Gemini + Codex solution)
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
       clipBehavior: Clip.antiAlias, // Clip AppBar to respect rounded corners
-      child: Shortcuts(
-        shortcuts: <ShortcutActivator, Intent>{
-          const SingleActivator(LogicalKeyboardKey.enter): const ApplyTagsIntent(),
+      child: GestureDetector(
+        // Codex suggestion: Explicitly move focus when tapping outside TextField
+        onTap: () {
+          // When user taps anywhere on the background, move focus away from search field
+          if (_searchFocusNode.hasFocus) {
+            _searchFocusNode.unfocus();
+          }
+          // Give focus to dialog content so shortcuts work
+          _dialogContentFocusNode.requestFocus();
         },
-        child: Actions(
-          actions: <Type, Action<Intent>>{
-            ApplyTagsIntent: CallbackAction<ApplyTagsIntent>(
-              onInvoke: (ApplyTagsIntent intent) {
-                // Only apply tags if search field is not focused
-                if (!_searchFocusNode.hasFocus) {
-                  _applyActiveTagFilters();
-                }
-                return null;
-              },
-            ),
+        behavior: HitTestBehavior.opaque,
+        child: FocusScope(
+          // Gemini suggestion: FocusScope with onKeyEvent
+          onKeyEvent: (node, event) {
+            // Check if Enter key pressed (both regular and numpad)
+            if (event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                 event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+              // Gemini suggestion: Check primaryFocus for reliability
+              if (FocusManager.instance.primaryFocus != _searchFocusNode) {
+                debugPrint('Enter pressed outside search field. Applying filters.');
+                _applyActiveTagFilters();
+                return KeyEventResult.handled; // Stop propagation
+              }
+            }
+            return KeyEventResult.ignored;
           },
-          child: Focus(
-            autofocus: true,
-            child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        height: MediaQuery.of(context).size.height * 0.8,
-        child: Column(
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.8,
+            child: Column(
           children: [
             // Header with close and clear all buttons
             _buildHeader(),
@@ -114,11 +120,10 @@ class _SearchDialogState extends State<SearchDialog> {
                       : _buildResults(),
             ),
           ],
-        ), // Close Column
-      ), // Close Container
-          ), // Close Focus
-        ), // Close Actions
-      ), // Close Shortcuts
+            ), // Close Column
+          ), // Close Container
+        ), // Close FocusScope
+      ), // Close GestureDetector
     ); // Close Dialog
   }
 

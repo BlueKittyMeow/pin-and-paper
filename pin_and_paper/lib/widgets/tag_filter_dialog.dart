@@ -46,6 +46,7 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
   String _searchQuery = '';
   Set<String> _savedSelections = {}; // UX7: Remember selections when switching to Untagged
   final TextEditingController _searchController = TextEditingController(); // UX1: For clear button
+  final FocusNode _searchFocusNode = FocusNode(); // Phase 3.6B: For Enter key detection
 
   // FIX #2 (Codex v2): Preload tag counts instead of N×FutureBuilder
   Map<String, int> _tagCounts = {};
@@ -69,6 +70,13 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
     if (widget.initialFilter.isActive) {
       _updateResultCount();
     }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose(); // Phase 3.6B
+    super.dispose();
   }
 
   Future<void> _loadTagCounts() async {
@@ -171,19 +179,54 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
     return _presenceFilter == TagPresenceFilter.onlyUntagged;
   }
 
+  // Phase 3.6B: Apply filter and close dialog (same as Apply button)
+  void _applyFilter() {
+    HapticFeedback.mediumImpact();
+    final filter = FilterState(
+      selectedTagIds: _selectedTagIds.toList(),
+      logic: _logic,
+      presenceFilter: _presenceFilter,
+    );
+    Navigator.pop(context, filter);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Filter by Tags'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      content: GestureDetector(
+        // Phase 3.6B: Move focus away from search when tapping elsewhere
+        onTap: () {
+          if (_searchFocusNode.hasFocus) {
+            _searchFocusNode.unfocus();
+          }
+        },
+        behavior: HitTestBehavior.opaque,
+        child: FocusScope(
+          // Phase 3.6B: Intercept Enter key to apply filter
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                 event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+              // Only apply if search field is not focused
+              if (FocusManager.instance.primaryFocus != _searchFocusNode) {
+                debugPrint('Enter pressed outside search field. Applying filter.');
+                _applyFilter();
+                return KeyEventResult.handled;
+              }
+            }
+            return KeyEventResult.ignored;
+          },
+          child: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
             // Search field
             // UX1: Clear button for search
             TextField(
               controller: _searchController,
+              focusNode: _searchFocusNode, // Phase 3.6B: For Enter key detection
               decoration: InputDecoration(
                 labelText: 'Search tags',
                 prefixIcon: const Icon(Icons.search),
@@ -433,8 +476,10 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
                       ),
               ),
           ],
-        ),
-      ),
+            ), // Close Column
+          ), // Close SizedBox
+        ), // Close FocusScope
+      ), // Close GestureDetector
       actionsOverflowButtonSpacing: 8,
       actions: [
         // M4: Clear All button on the left side
@@ -454,17 +499,7 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
             ),
             const SizedBox(width: 8),
             FilledButton(
-              onPressed: () {
-                // UX POLISH: Medium haptic feedback for major action
-                HapticFeedback.mediumImpact();
-
-                final filter = FilterState(
-                  selectedTagIds: _selectedTagIds.toList(),
-                  logic: _logic,
-                  presenceFilter: _presenceFilter,
-                );
-                Navigator.pop(context, filter);
-              },
+              onPressed: _applyFilter, // Phase 3.6B: Use extracted method
               child: const Text('Apply'),
             ),
           ],
