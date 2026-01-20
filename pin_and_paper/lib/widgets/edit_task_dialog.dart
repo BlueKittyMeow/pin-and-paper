@@ -4,6 +4,11 @@ import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../models/tag.dart';
 import '../providers/task_provider.dart';
+import '../services/date_parsing_service.dart'; // Phase 3.7
+import '../utils/debouncer.dart'; // Phase 3.7
+import '../utils/date_formatter.dart'; // Phase 3.7
+import 'highlighted_text_editing_controller.dart'; // Phase 3.7
+import 'date_options_sheet.dart'; // Phase 3.7
 import 'inline_tag_picker.dart';
 import 'parent_selector_dialog.dart'; // Phase 3.6.5 Day 4
 
@@ -52,8 +57,15 @@ class EditTaskDialog extends StatefulWidget {
 }
 
 class _EditTaskDialogState extends State<EditTaskDialog> {
-  late TextEditingController _titleController;
+  // Phase 3.7: Changed to HighlightedTextEditingController for date highlighting
+  late HighlightedTextEditingController _titleController;
   late TextEditingController _notesController;
+
+  // Phase 3.7: Date parsing state
+  final DateParsingService _dateParser = DateParsingService();
+  final Debouncer _debouncer = Debouncer(milliseconds: 300);
+  ParsedDate? _parsedDate;
+  bool _userDismissedParsing = false;
 
   DateTime? _dueDate;
   TimeOfDay? _dueTime; // Time component (separate for picker)
@@ -67,7 +79,11 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   void initState() {
     super.initState();
 
-    _titleController = TextEditingController(text: widget.task.title);
+    // Phase 3.7: Use HighlightedTextEditingController with tap handler
+    _titleController = HighlightedTextEditingController(
+      text: widget.task.title,
+      onTapHighlight: _showDateOptions,
+    );
     _notesController = TextEditingController(text: widget.task.notes ?? '');
     _dueDate = widget.task.dueDate;
     _isAllDay = widget.task.isAllDay;
@@ -105,6 +121,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   void dispose() {
     _titleController.dispose();
     _notesController.dispose();
+    _debouncer.dispose(); // Phase 3.7
     super.dispose();
   }
 
@@ -191,7 +208,8 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   }
 
   void _save() {
-    final title = _titleController.text.trim();
+    // Phase 3.7: Use clean title (with date text stripped if parsed)
+    final title = _getCleanTitle();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -246,6 +264,113 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     return 'Parent: (Loading...)';
   }
 
+  // ===== PHASE 3.7: DATE PARSING METHODS =====
+
+  void _onTitleChanged(String text) {
+    // Reset dismissal flag if text changes significantly
+    if (_userDismissedParsing && text.length != _titleController.text.length) {
+      setState(() {
+        _userDismissedParsing = false;
+      });
+    }
+
+    // PRE-FILTER (Codex/Gemini): Skip parsing if no date-like tokens
+    // Reduces FFI calls by 80-90% (most tasks don't have dates)
+    if (!_dateParser.containsPotentialDate(text)) {
+      _debouncer.cancel(); // Stop any pending parse
+      _titleController.clearHighlight();
+      setState(() => _parsedDate = null);
+      return;
+    }
+
+    // Debounce parsing (300ms after last keystroke)
+    _debouncer.run(() {
+      if (!_userDismissedParsing) {
+        _parseDateFromTitle(text);
+      }
+    });
+  }
+
+  void _parseDateFromTitle(String text) {
+    try {
+      final parsed = _dateParser.parse(text);
+
+      setState(() {
+        _parsedDate = parsed;
+
+        if (parsed != null) {
+          _titleController.setHighlight(parsed.matchedRange);
+          // Auto-apply parsed date to _dueDate
+          _dueDate = parsed.date;
+          _isAllDay = parsed.isAllDay;
+          if (!parsed.isAllDay) {
+            _dueTime = TimeOfDay.fromDateTime(parsed.date);
+          }
+        } else {
+          _titleController.clearHighlight();
+        }
+      });
+    } catch (e) {
+      print('Error parsing date: $e');
+      // Silently fail - don't disrupt user
+    }
+  }
+
+  void _showDateOptions() {
+    if (_parsedDate == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => DateOptionsSheet(
+        parsedDate: _parsedDate!,
+        onRemove: () {
+          setState(() {
+            _parsedDate = null;
+            _userDismissedParsing = true;
+            _titleController.clearHighlight();
+            // Note: Don't clear _dueDate here, user might want to keep manual date
+          });
+          Navigator.pop(context);
+        },
+        onSelectDate: (DateTime date, bool isAllDay) {
+          setState(() {
+            _parsedDate = ParsedDate(
+              matchedText: _parsedDate!.matchedText,
+              matchedRange: _parsedDate!.matchedRange,
+              date: date,
+              isAllDay: isAllDay,
+            );
+            // Update the actual due date fields
+            _dueDate = date;
+            _isAllDay = isAllDay;
+            if (!isAllDay) {
+              _dueTime = TimeOfDay.fromDateTime(date);
+            } else {
+              _dueTime = null;
+            }
+          });
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  String _getCleanTitle() {
+    if (_parsedDate == null || _userDismissedParsing) {
+      return _titleController.text.trim();
+    }
+
+    // Strip the matched date text from title
+    final text = _titleController.text;
+    final range = _parsedDate!.matchedRange;
+
+    final before = text.substring(0, range.start);
+    final after = text.substring(range.end);
+
+    // Clean up extra whitespace
+    return '${before}${after}'.trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -266,14 +391,30 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                     // ===== TITLE =====
                     TextField(
                       controller: _titleController,
+                      onChanged: _onTitleChanged, // Phase 3.7: Date parsing
                       autofocus: true,
                       decoration: const InputDecoration(
                         labelText: 'Title',
+                        hintText: 'e.g., Call dentist tomorrow', // Phase 3.7
                         border: OutlineInputBorder(),
                       ),
                       maxLines: 2,
                       textInputAction: TextInputAction.next,
                     ),
+
+                    // Phase 3.7: Date preview
+                    if (_parsedDate != null && !_userDismissedParsing)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, left: 12),
+                        child: Text(
+                          'Due: ${DateFormatter.formatRelativeDate(_parsedDate!.date, isAllDay: _parsedDate!.isAllDay)}',
+                          style: TextStyle(
+                            color: Colors.blue[700],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+
                     const SizedBox(height: 16),
 
                     // ===== PARENT SELECTOR =====
