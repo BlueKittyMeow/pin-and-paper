@@ -1,4 +1,5 @@
 import 'dart:async'; // Phase 3.6B: For Timer (highlight functionality)
+import 'dart:math'; // Phase 3.6.5: For max() in depth calculation
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'; // Phase 3.6B: For GlobalKey, Scrollable, Curves (scroll-to-task)
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
@@ -12,7 +13,42 @@ import '../services/tag_service.dart'; // Phase 3.5
 import '../services/database_service.dart'; // Phase 3.6A: For database access
 import '../services/preferences_service.dart'; // Phase 2 Stretch
 import '../utils/constants.dart'; // Phase 3.6A: For AppConstants table names
+import '../utils/task_tree_controller.dart'; // Phase 3.6.5: Custom TreeController fix
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
+
+/// Phase 3.6.5: Cached incomplete descendant info for completed parents
+///
+/// Stores computed information about incomplete descendants for O(1) lookup.
+/// Computed once per loadTasks() / toggleTaskCompletion(), not per-widget.
+class IncompleteDescendantInfo {
+  /// Direct children that are incomplete
+  final int immediateCount;
+
+  /// All descendants that are incomplete (including grandchildren+)
+  final int totalCount;
+
+  /// Depth of deepest incomplete descendant: 1 = immediate only, 2+ = has grandchildren+
+  final int maxDepth;
+
+  const IncompleteDescendantInfo({
+    required this.immediateCount,
+    required this.totalCount,
+    required this.maxDepth,
+  });
+
+  /// True if any descendants are incomplete
+  bool get hasIncomplete => totalCount > 0;
+
+  /// True if incomplete descendants exist at depth > 1 (grandchildren or deeper)
+  bool get hasDeepIncomplete => maxDepth > 1;
+
+  /// Returns display string: "> 3 incomplete" or ">> 5 incomplete"
+  String get displayText {
+    final prefix = maxDepth > 1 ? '>>' : '>';
+    final noun = totalCount == 1 ? 'incomplete' : 'incomplete';
+    return '$prefix $totalCount $noun';
+  }
+}
 
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService;
@@ -30,7 +66,8 @@ class TaskProvider extends ChangeNotifier {
         _tagService = tagService ?? TagService(), // Phase 3.5
         _tagProvider = tagProvider ?? TagProvider() { // Phase 3.6A
     // Phase 3.2: Initialize TreeController for hierarchical view
-    _treeController = TreeController<Task>(
+    // Phase 3.6.5: Use TaskTreeController for ID-based expansion state (fixes corruption bug)
+    _treeController = TaskTreeController(
       roots: [],  // Start empty, populated in loadTasks
       childrenProvider: (Task task) => _tasks.where((t) => t.parentId == task.id),
       parentProvider: (Task task) => _findParent(task.parentId),
@@ -51,13 +88,16 @@ class TaskProvider extends ChangeNotifier {
   // Phase 3.5: Codex review - reentrant guard for loadTasks()
   Future<void>? _loadTasksFuture;
 
+  // Phase 3.6.5: Guard against concurrent toggleTaskCompletion calls (race condition fix)
+  bool _isTogglingCompletion = false;
+
   // Phase 3.6A: Filter state
   FilterState _filterState = FilterState.empty;
   int _filterOperationId = 0; // Race condition prevention
 
   // Phase 3.2: Hierarchy state
   bool _isReorderMode = false;
-  late TreeController<Task> _treeController;
+  late TaskTreeController _treeController; // Phase 3.6.5: Use custom controller for ID-based state
 
   // Phase 2 Stretch: Hide completed tasks settings
   bool _hideOldCompleted = true;
@@ -67,6 +107,10 @@ class TaskProvider extends ChangeNotifier {
   List<Task> _activeTasks = [];
   List<Task> _recentlyCompletedTasks = [];
   List<Task> _oldCompletedTasks = [];
+
+  // Phase 3.6.5: Cached incomplete descendant info for completed parents
+  // Computed once per loadTasks()/toggleTaskCompletion(), not per-widget O(1) lookup
+  Map<String, IncompleteDescendantInfo> _incompleteDescendantCache = {};
 
   // Getters
   List<Task> get tasks => _tasks;
@@ -111,12 +155,33 @@ class TaskProvider extends ChangeNotifier {
   FilterState get filterState => _filterState;
   bool get hasActiveFilters => _filterState.isActive;
 
+  // Phase 3.6.5: Get incomplete descendant info for a completed task
+  /// Returns cached info for O(1) lookup, or null if task has no incomplete descendants
+  IncompleteDescendantInfo? getIncompleteDescendantInfo(String taskId) {
+    return _incompleteDescendantCache[taskId];
+  }
+
+  /// Phase 3.6.5: Check if task is a completed parent with incomplete descendants
+  bool isCompletedParentWithIncomplete(String taskId) {
+    return _incompleteDescendantCache[taskId]?.hasIncomplete ?? false;
+  }
+
   // Phase 3.2: Helper to find parent task by ID
   Task? _findParent(String? parentId) {
     if (parentId == null) return null;
     try {
       return _tasks.firstWhere((t) => t.id == parentId);
     } catch (e) {
+      return null;
+    }
+  }
+
+  /// Phase 3.6.5: Public method to get task by ID
+  /// Used by EditTaskDialog and other widgets
+  Task? getTaskById(String taskId) {
+    try {
+      return _tasks.firstWhere((t) => t.id == taskId);
+    } catch (_) {
       return null;
     }
   }
@@ -183,6 +248,7 @@ class TaskProvider extends ChangeNotifier {
 
   // Phase 3.2: Refresh TreeController with active tasks
   // Active = incomplete OR (completed but has incomplete descendants)
+  // Phase 3.6.5: Simplified - TaskTreeController tracks by ID, no capture/restore needed
   void _refreshTreeController() {
     // Phase 3.6A: Build task ID set for efficient lookup
     final taskIds = _tasks.map((t) => t.id).toSet();
@@ -206,6 +272,7 @@ class TaskProvider extends ChangeNotifier {
     debugPrint('[TreeRefresh] Setting ${activeRoots.length} roots from ${_tasks.length} total tasks');
     _treeController.roots = activeRoots;
     _treeController.rebuild();
+    // Done! Expansion state preserved automatically by TaskTreeController (ID-based)
   }
 
   // Phase 3.2: Get ALL visible completed tasks (with breadcrumbs for nested tasks)
@@ -310,6 +377,70 @@ class TaskProvider extends ChangeNotifier {
     }).toList();
   }
 
+  /// Phase 3.6.5: Rebuild the incomplete descendant cache
+  ///
+  /// Called after loadTasks() and after any task completion changes.
+  /// Uses the full task list (not filtered) for accurate detection.
+  void _rebuildIncompleteDescendantCache() {
+    _incompleteDescendantCache.clear();
+
+    // Build parent-to-children map for efficient traversal
+    final childrenMap = <String, List<Task>>{};
+    for (final task in _tasks) {
+      if (task.parentId != null && task.deletedAt == null) {
+        childrenMap.putIfAbsent(task.parentId!, () => []).add(task);
+      }
+    }
+
+    // For each completed task, compute its incomplete descendants
+    for (final task in _tasks) {
+      if (task.completed && task.deletedAt == null) {
+        final info = _computeIncompleteDescendants(task.id, childrenMap);
+        if (info.hasIncomplete) {
+          _incompleteDescendantCache[task.id] = info;
+        }
+      }
+    }
+  }
+
+  /// Recursive helper to compute incomplete descendants
+  ///
+  /// Returns info about all incomplete descendants of a task.
+  /// Uses depth tracking to distinguish immediate vs deep descendants.
+  IncompleteDescendantInfo _computeIncompleteDescendants(
+    String taskId,
+    Map<String, List<Task>> childrenMap,
+  ) {
+    final children = childrenMap[taskId] ?? [];
+
+    int immediateCount = 0;
+    int totalCount = 0;
+    int maxDepth = 0;
+
+    for (final child in children) {
+      // Count immediate incomplete children
+      if (!child.completed) {
+        immediateCount++;
+        totalCount++;
+        maxDepth = max(maxDepth, 1);
+      }
+
+      // Recurse into grandchildren regardless of child completion status
+      // (a completed child might have incomplete grandchildren)
+      final childInfo = _computeIncompleteDescendants(child.id, childrenMap);
+      totalCount += childInfo.totalCount;
+      if (childInfo.maxDepth > 0) {
+        maxDepth = max(maxDepth, childInfo.maxDepth + 1);
+      }
+    }
+
+    return IncompleteDescendantInfo(
+      immediateCount: immediateCount,
+      totalCount: totalCount,
+      maxDepth: maxDepth,
+    );
+  }
+
   // Load all tasks from database with hierarchy
   // Phase 3.2: Updated to use getTaskHierarchy() and refresh TreeController
   // Phase 3.5: Updated to batch-load tags for all tasks
@@ -337,6 +468,9 @@ class TaskProvider extends ChangeNotifier {
       // Phase 3.2: Load with hierarchy information (depth computed dynamically)
       _tasks = await _taskService.getTaskHierarchy();
       _categorizeTasks();  // Categorize once after load
+
+      // Phase 3.6.5: Rebuild incomplete descendant cache for completed parent indicator
+      _rebuildIncompleteDescendantCache();
 
       // Phase 3.5: Batch-load all tags for these tasks
       final taskIds = _tasks.map((t) => t.id).toList();
@@ -442,10 +576,19 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Toggle task completion
+  // Phase 3.6.5 Fix: Auto-expand task when uncompleting to show children
+  // Phase 3.6.5 Fix: Added guard to prevent concurrent calls (race condition)
   Future<void> toggleTaskCompletion(Task task) async {
+    // Guard against concurrent calls - prevents race conditions causing brief empty state
+    if (_isTogglingCompletion) {
+      debugPrint('[toggleTaskCompletion] Skipping concurrent call for task ${task.id}');
+      return;
+    }
+    _isTogglingCompletion = true;
     _errorMessage = null;
 
     try {
+      final wasCompleted = task.completed;
       final updatedTask = await _taskService.toggleTaskCompletion(task);
 
       // Update in local list
@@ -454,8 +597,32 @@ class TaskProvider extends ChangeNotifier {
         _tasks[index] = updatedTask;
         _categorizeTasks();  // Phase 2 Stretch: Re-categorize after toggle
 
+        // Phase 3.6.5: Rebuild incomplete descendant cache for completed parent indicator
+        _rebuildIncompleteDescendantCache();
+
         // Phase 3.2: Refresh TreeController to update visibility
         _refreshTreeController();
+
+        // Phase 3.6.5 Fix: When uncompleting a task, auto-expand it so children are visible
+        // This prevents the confusing behavior where children seem to "disappear"
+        if (wasCompleted && !updatedTask.completed) {
+          // Task was uncompleted - expand it if it has children
+          final hasChildren = _tasks.any((t) => t.parentId == updatedTask.id);
+          if (hasChildren) {
+            _treeController.setExpansionState(updatedTask, true);
+          }
+        }
+
+        // Phase 3.6.5 Fix: When completing a child task, expand its parent
+        // This keeps the completed child visible under its parent (crossed out)
+        if (!wasCompleted && updatedTask.completed && updatedTask.parentId != null) {
+          try {
+            final parent = _tasks.firstWhere((t) => t.id == updatedTask.parentId);
+            _treeController.setExpansionState(parent, true);
+          } catch (_) {
+            // Parent not found, skip
+          }
+        }
 
         notifyListeners();
       }
@@ -463,6 +630,8 @@ class TaskProvider extends ChangeNotifier {
       _errorMessage = 'Failed to update task: $e';
       debugPrint(_errorMessage);
       notifyListeners();
+    } finally {
+      _isTogglingCompletion = false;
     }
   }
 
@@ -503,6 +672,81 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  /// Phase 3.6.5: Comprehensive task update
+  ///
+  /// Updates multiple task fields at once:
+  /// - title (required)
+  /// - dueDate
+  /// - notes
+  /// - tags (via tagIds)
+  ///
+  /// NOTE: Parent changes are handled separately via changeTaskParent()
+  /// to maintain proper hierarchy validation and position handling.
+  ///
+  /// Uses in-memory update pattern to:
+  /// - Avoid full database reload
+  /// - Preserve TreeController expansion state
+  Future<void> updateTask({
+    required String taskId,
+    required String title,
+    DateTime? dueDate,
+    String? notes,
+    required List<String> tagIds,
+  }) async {
+    _errorMessage = null;
+
+    if (title.trim().isEmpty) {
+      throw ArgumentError('Task title cannot be empty');
+    }
+
+    try {
+      // 1. Update task in database via service
+      final updatedTask = await _taskService.updateTask(
+        taskId,
+        title: title.trim(),
+        dueDate: dueDate,
+        notes: notes,
+      );
+
+      // 2. Update tags
+      final currentTags = _taskTags[taskId] ?? [];
+      final currentTagIds = currentTags.map((t) => t.id).toSet();
+      final newTagIds = tagIds.toSet();
+
+      // Add new tags
+      for (final tagId in newTagIds.difference(currentTagIds)) {
+        await _tagProvider.addTagToTask(taskId, tagId);
+      }
+      // Remove removed tags
+      for (final tagId in currentTagIds.difference(newTagIds)) {
+        await _tagProvider.removeTagFromTask(taskId, tagId);
+      }
+
+      // 3. Update in-memory task list
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index != -1) {
+        // Preserve depth metadata from original task
+        final originalDepth = _tasks[index].depth;
+        _tasks[index] = updatedTask.copyWith(depth: originalDepth);
+
+        // Re-categorize to keep derived lists synchronized
+        _categorizeTasks();
+
+        // Refresh TreeController to update UI without collapsing
+        _refreshTreeController();
+      }
+
+      // 4. Refresh tags cache
+      await refreshTags();
+
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to update task: $e';
+      debugPrint(_errorMessage);
+      rethrow;
+    }
+  }
+
   // ========== Phase 3.2: Hierarchy Methods ==========
 
   /// Enter/exit reorder mode
@@ -517,34 +761,56 @@ class TaskProvider extends ChangeNotifier {
   }
 
   /// Phase 3.6B: Expand all tasks in the tree
+  /// Phase 3.6.5 Fix: Expand ALL tasks with children (not just incomplete)
+  /// This ensures completed children become visible when parent is expanded
   void expandAll() {
-    for (final task in _tasks.where((t) => !t.completed)) {
-      _treeController.expand(task);
+    for (final task in _tasks) {
+      final hasChildren = _tasks.any((t) => t.parentId == task.id);
+      if (hasChildren) {
+        _treeController.setExpansionState(task, true);
+      }
     }
+    _treeController.rebuild(); // Notify AnimatedTreeView to update
     notifyListeners();
   }
 
   /// Phase 3.6B: Collapse all tasks in the tree
+  /// Phase 3.6.5 Fix: Collapse ALL tasks with children (not just incomplete)
   void collapseAll() {
-    for (final task in _tasks.where((t) => !t.completed)) {
-      _treeController.collapse(task);
+    for (final task in _tasks) {
+      final hasChildren = _tasks.any((t) => t.parentId == task.id);
+      if (hasChildren) {
+        _treeController.setExpansionState(task, false);
+      }
     }
+    _treeController.rebuild(); // Notify AnimatedTreeView to update
     notifyListeners();
   }
 
   /// Phase 3.6B: Check if all tasks are expanded
+  /// Phase 3.6.5 Fix: Check ALL tasks with children (not just incomplete)
   bool get areAllExpanded {
-    // Get all incomplete tasks that have children
+    // Get all tasks that have children and are in the active tree
     final tasksWithChildren = _tasks.where((task) {
-      if (task.completed) return false;
       // Check if this task has any children
-      return _tasks.any((child) => child.parentId == task.id);
+      final hasChildren = _tasks.any((child) => child.parentId == task.id);
+      if (!hasChildren) return false;
+      // Only consider tasks that are active roots or descendants of roots
+      // (incomplete OR completed with incomplete descendants)
+      if (!task.completed) return true;
+      return _hasIncompleteDescendants(task);
     }).toList();
 
     if (tasksWithChildren.isEmpty) return false;
 
     // Check if all are expanded
-    return tasksWithChildren.every((task) => _treeController.getExpansionState(task));
+    return tasksWithChildren.every((task) {
+      try {
+        return _treeController.getExpansionState(task);
+      } catch (_) {
+        return false;
+      }
+    });
   }
 
   /// Move task to new parent (nest/unnest)
