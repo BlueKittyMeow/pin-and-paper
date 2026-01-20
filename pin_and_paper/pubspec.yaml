@@ -40,6 +40,9 @@ dependencies:
   shared_preferences: ^2.2.0  # UI preferences (hide completed toggle)
   string_similarity: ^2.0.0  # Fuzzy matching for natural language task completion
 
+  # Phase 3.7: Natural Language Date Parsing
+  flutter_js: ^0.8.5  # JavaScript runtime for chrono.js integration
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -50,3 +53,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Phase 3.7: Natural Language Date Parsing assets
+  assets:
+    - assets/js/chrono.min.js
