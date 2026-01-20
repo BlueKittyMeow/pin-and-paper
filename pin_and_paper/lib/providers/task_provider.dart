@@ -261,6 +261,9 @@ class TaskProvider extends ChangeNotifier {
     // Phase 3.6A: Build task ID set for efficient lookup
     final taskIds = _tasks.map((t) => t.id).toSet();
 
+    // Phase 3.6.5: Prune orphaned IDs (Codex/Gemini recommendation for memory hygiene)
+    _treeController.pruneOrphanedIds(taskIds);
+
     final activeRoots = _tasks.where((t) {
       // Phase 3.6A: In filtered views, treat as root if parent not in filtered results
       if (t.parentId != null) {

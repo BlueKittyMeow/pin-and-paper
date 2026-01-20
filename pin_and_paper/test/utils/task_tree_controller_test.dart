@@ -86,6 +86,35 @@ void main() {
       });
     });
 
+    group('pruneOrphanedIds', () {
+      test('removes IDs not in valid set', () {
+        controller.setExpansionState(task1, true);
+        controller.setExpansionState(task2, true);
+
+        // Prune, keeping only task1
+        controller.pruneOrphanedIds({'task-1'});
+
+        expect(controller.getExpansionState(task1), isTrue);
+        expect(controller.getExpansionState(task2), isFalse); // Pruned
+      });
+
+      test('keeps all IDs when all are valid', () {
+        controller.setExpansionState(task1, true);
+        controller.setExpansionState(task2, true);
+
+        controller.pruneOrphanedIds({'task-1', 'task-2', 'other'});
+
+        expect(controller.getExpansionState(task1), isTrue);
+        expect(controller.getExpansionState(task2), isTrue);
+      });
+
+      test('handles empty valid set', () {
+        controller.setExpansionState(task1, true);
+        controller.pruneOrphanedIds({});
+        expect(controller.getExpansionState(task1), isFalse);
+      });
+    });
+
     group('clearExpansionState', () {
       test('clears all expansion state', () {
         controller.setExpansionState(task1, true);
