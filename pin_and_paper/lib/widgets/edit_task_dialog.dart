@@ -56,6 +56,8 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   late TextEditingController _notesController;
 
   DateTime? _dueDate;
+  TimeOfDay? _dueTime; // Time component (separate for picker)
+  bool _isAllDay = true; // All-day vs specific time
   String? _parentId;
   List<String> _selectedTagIds = [];
   final bool _isLoading = false; // Reserved for future async loading
@@ -68,6 +70,11 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
     _dueDate = widget.task.dueDate;
+    _isAllDay = widget.task.isAllDay;
+    // Extract time from existing dueDate if not all-day
+    if (widget.task.dueDate != null && !widget.task.isAllDay) {
+      _dueTime = TimeOfDay.fromDateTime(widget.task.dueDate!);
+    }
     _parentId = widget.task.parentId;
     _selectedTagIds = widget.currentTags.map((t) => t.id).toList();
 
@@ -120,6 +127,31 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   void _clearDueDate() {
     setState(() {
       _dueDate = null;
+      _dueTime = null;
+      _isAllDay = true;
+    });
+  }
+
+  Future<void> _selectDueTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: _dueTime ?? TimeOfDay.now(),
+      helpText: 'Select Due Time',
+    );
+
+    if (time != null && mounted) {
+      setState(() {
+        _dueTime = time;
+      });
+    }
+  }
+
+  void _toggleAllDay(bool isAllDay) {
+    setState(() {
+      _isAllDay = isAllDay;
+      if (isAllDay) {
+        _dueTime = null; // Clear time when switching to all-day
+      }
     });
   }
 
@@ -170,9 +202,32 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
       return;
     }
 
+    // Combine date and time into a single DateTime
+    DateTime? combinedDueDate;
+    if (_dueDate != null) {
+      if (_isAllDay || _dueTime == null) {
+        // All-day: keep just the date (midnight)
+        combinedDueDate = DateTime(
+          _dueDate!.year,
+          _dueDate!.month,
+          _dueDate!.day,
+        );
+      } else {
+        // With time: combine date and time
+        combinedDueDate = DateTime(
+          _dueDate!.year,
+          _dueDate!.month,
+          _dueDate!.day,
+          _dueTime!.hour,
+          _dueTime!.minute,
+        );
+      }
+    }
+
     Navigator.pop(context, {
       'title': title,
-      'dueDate': _dueDate,
+      'dueDate': combinedDueDate,
+      'isAllDay': _isAllDay,
       'notes': _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
@@ -264,6 +319,40 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                         ],
                       ],
                     ),
+
+                    // ===== ALL DAY TOGGLE + TIME PICKER =====
+                    // Only show when date is set
+                    if (_dueDate != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          // All Day toggle
+                          Expanded(
+                            child: SwitchListTile(
+                              value: _isAllDay,
+                              onChanged: _toggleAllDay,
+                              title: const Text('All Day'),
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          // Time picker (only when NOT all-day)
+                          if (!_isAllDay)
+                            OutlinedButton.icon(
+                              onPressed: _selectDueTime,
+                              icon: const Icon(Icons.access_time),
+                              label: Text(
+                                _dueTime == null
+                                    ? 'Set Time'
+                                    : _dueTime!.format(context),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 40),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
                     // ===== INLINE TAG PICKER =====

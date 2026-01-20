@@ -75,11 +75,12 @@ class TaskItem extends StatelessWidget {
     try {
       final taskProvider = context.read<TaskProvider>();
 
-      // 1. Update task basic fields (title, dueDate, notes, tags)
+      // 1. Update task basic fields (title, dueDate, isAllDay, notes, tags)
       await taskProvider.updateTask(
         taskId: task.id,
         title: result['title'] as String,
         dueDate: result['dueDate'] as DateTime?,
+        isAllDay: (result['isAllDay'] as bool?) ?? true,
         notes: result['notes'] as String?,
         tagIds: (result['tagIds'] as List<String>?) ?? [],
       );

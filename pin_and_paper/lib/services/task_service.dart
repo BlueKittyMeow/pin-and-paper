@@ -490,6 +490,7 @@ class TaskService {
     String taskId, {
     required String title,
     DateTime? dueDate,
+    bool isAllDay = true,
     String? notes,
   }) async {
     final db = await _dbService.database;
@@ -519,6 +520,7 @@ class TaskService {
       {
         'title': trimmedTitle,
         'due_date': dueDate?.millisecondsSinceEpoch,
+        'is_all_day': isAllDay ? 1 : 0,
         'notes': notes,
       },
       where: 'id = ?',
@@ -529,6 +531,7 @@ class TaskService {
     return originalTask.copyWith(
       title: trimmedTitle,
       dueDate: dueDate,
+      isAllDay: isAllDay,
       notes: notes,
     );
   }

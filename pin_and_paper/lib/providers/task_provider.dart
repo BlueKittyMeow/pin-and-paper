@@ -700,6 +700,7 @@ class TaskProvider extends ChangeNotifier {
     required String taskId,
     required String title,
     DateTime? dueDate,
+    bool isAllDay = true,
     String? notes,
     required List<String> tagIds,
   }) async {
@@ -715,6 +716,7 @@ class TaskProvider extends ChangeNotifier {
         taskId,
         title: title.trim(),
         dueDate: dueDate,
+        isAllDay: isAllDay,
         notes: notes,
       );
 
