@@ -1,7 +1,7 @@
 # Codex Findings - Phase 3.7 Package Research
 
 **Phase:** 3.7 - Natural Language Date Parsing
-**Plan Document:** [phase-3.7-plan-v2.md](./phase-3.7-plan-v2.md)
+**Plan Document:** [phase-3.7-plan-v3.md](./phase-3.7-plan-v3.md)
 **Review Date:** 2026-01-20
 **Reviewer:** Codex
 **Review Type:** Pre-Implementation Research (Package Evaluation)
@@ -108,6 +108,189 @@ This document is for **Codex** to research and evaluate date parsing packages fo
 **Critical requirement:**
 - We need to integrate "Today Window" logic (see plan v2 for details)
 - Package must allow us to customize "today" calculation for night owl mode
+
+---
+
+## Plan Review: phase-3.7-plan-v3.md
+
+**Instructions:** Review the complete Phase 3.7 plan and provide feedback on:
+- Architecture and design decisions
+- Potential bugs or edge cases
+- Performance concerns
+- Complexity issues
+- Suggested improvements or alternatives
+- Missing requirements or considerations
+
+### Overall Assessment
+
+**Plan Quality:** [Rate 1-5 stars]
+
+**Strengths:**
+- [List what's well-designed in the plan]
+- [Technical approaches that are sound]
+- [Clear requirements and scope]
+
+**Concerns:**
+- [List potential issues or risks]
+- [Areas that need more detail]
+- [Unclear specifications]
+
+**Recommendations:**
+- [Suggest improvements to the plan]
+- [Alternative approaches to consider]
+- [Additional requirements to add]
+
+---
+
+### Specific Feedback by Section
+
+#### The Midnight Problem & Today Window Logic
+
+**Review:** [Is the algorithm correct? Edge cases covered?]
+
+**Issues:**
+- [List any bugs or problems with getEffectiveToday() algorithm]
+- [Edge cases not covered]
+- [Potential off-by-one errors]
+
+**Suggestions:**
+- [Improvements to algorithm]
+- [Additional test cases needed]
+
+---
+
+#### Real-Time Parsing with Todoist-Style UX
+
+**Review:** [Is the UX approach sound? Technical feasibility?]
+
+**Issues:**
+- [Performance concerns with RichText + TextSpan approach]
+- [State management complexity]
+- [Debouncing edge cases]
+
+**Suggestions:**
+- [Alternative implementation approaches]
+- [Simplifications possible]
+
+---
+
+#### Context-Aware Parsing Strategy
+
+**Review:** [Is the conservative approach right? How to implement?]
+
+**Issues:**
+- [False positive prevention challenges]
+- [Missing patterns to consider]
+- [Balance between accuracy and complexity]
+
+**Suggestions:**
+- [Recommended patterns to add]
+- [Implementation strategy]
+
+---
+
+#### Dual Parsing Strategy (Brain Dump vs Quick Add)
+
+**Review:** [Does the separation make sense? Any conflicts?]
+
+**Issues:**
+- [Potential inconsistencies between local and Claude parsing]
+- [Context synchronization problems]
+- [Unexpected edge cases]
+
+**Suggestions:**
+- [How to ensure consistency]
+- [Testing strategy for both paths]
+
+---
+
+#### Database & Settings
+
+**Review:** [Schema sufficient? Settings complete?]
+
+**Issues:**
+- [Missing fields or indexes]
+- [Migration concerns]
+- [Settings that should be added]
+
+**Suggestions:**
+- [Schema improvements]
+- [Additional settings to consider]
+
+---
+
+#### Testing Strategy
+
+**Review:** [Test coverage adequate? Missing test cases?]
+
+**Issues:**
+- [Test cases not covered]
+- [Edge cases missing from plan]
+- [Performance test gaps]
+
+**Suggestions:**
+- [Additional test scenarios]
+- [Testing approaches to add]
+
+---
+
+#### Implementation Timeline
+
+**Review:** [Is 1.5-2 weeks realistic? Bottlenecks?]
+
+**Issues:**
+- [Underestimated tasks]
+- [Missing dependencies]
+- [Critical path concerns]
+
+**Suggestions:**
+- [Timeline adjustments]
+- [Risk mitigation strategies]
+
+---
+
+### Critical Bugs or Blockers
+
+**Bugs Found in Plan:**
+1. [Bug description] - [Severity: CRITICAL/HIGH/MEDIUM/LOW]
+2. [Bug description] - [Severity]
+
+**Blockers:**
+1. [Blocker description] - [Impact]
+2. [Blocker description] - [Impact]
+
+---
+
+### Architectural Improvements
+
+**Suggested Changes:**
+1. [Improvement] - [Rationale] - [Impact]
+2. [Improvement] - [Rationale] - [Impact]
+
+---
+
+### Missing Considerations
+
+**Not Addressed in Plan:**
+- [Requirement or edge case not covered]
+- [Technical concern not addressed]
+- [User scenario missing]
+
+---
+
+## Plan Review Status
+
+- [ ] Overall plan reviewed
+- [ ] Midnight Problem algorithm reviewed
+- [ ] Real-time parsing UX reviewed
+- [ ] Context-aware parsing reviewed
+- [ ] Dual parsing strategy reviewed
+- [ ] Database & settings reviewed
+- [ ] Testing strategy reviewed
+- [ ] Timeline reviewed
+- [ ] Feedback documented above
+
+**Sign-off:** [Date] - [Approved / Approved with concerns / Needs revision]
 
 ---
 
