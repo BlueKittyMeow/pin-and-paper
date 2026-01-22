@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/task_provider.dart';
 import '../services/date_parsing_service.dart'; // Phase 3.7
 import '../utils/debouncer.dart'; // Phase 3.7
+import '../utils/date_formatter.dart'; // Phase 3.7
 import 'highlighted_text_editing_controller.dart'; // Phase 3.7
+import 'date_options_sheet.dart'; // Phase 3.7
 
 class TaskInput extends StatefulWidget {
   const TaskInput({super.key});
@@ -30,10 +32,7 @@ class _TaskInputState extends State<TaskInput> {
     // Phase 3.7: Initialize HighlightedTextEditingController
     _controller = HighlightedTextEditingController(
       text: '',
-      onTapHighlight: () {
-        // Quick Add doesn't need DateOptionsSheet
-        // Tapping highlight does nothing (could show tooltip in future)
-      },
+      onTapHighlight: _showDateOptions, // Open DateOptionsSheet on tap
     );
 
     // Only auto-focus on first app launch
@@ -100,7 +99,37 @@ class _TaskInputState extends State<TaskInput> {
     }
   }
 
-  // Phase 3.7: Get clean title (with date text stripped)
+  // Phase 3.7: Show date options sheet when tapping highlighted date
+  void _showDateOptions() {
+    if (_parsedDate == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => DateOptionsSheet(
+        parsedDate: _parsedDate!,
+        onRemove: () {
+          setState(() {
+            _parsedDate = null;
+            _controller.clearHighlight();
+          });
+          Navigator.pop(context);
+        },
+        onSelectDate: (DateTime date, bool isAllDay) {
+          setState(() {
+            _parsedDate = ParsedDate(
+              matchedText: _parsedDate!.matchedText,
+              matchedRange: _parsedDate!.matchedRange,
+              date: date,
+              isAllDay: isAllDay,
+            );
+          });
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  // Phase 3.7: Get clean title with formatted date suffix appended
   String _getCleanTitle() {
     if (_parsedDate == null) {
       return _controller.text.trim();
@@ -112,11 +141,21 @@ class _TaskInputState extends State<TaskInput> {
     final before = text.substring(0, range.start);
     final after = text.substring(range.end);
 
-    return '${before}${after}'.trim();
+    // Clean up extra whitespace from stripped text
+    final strippedTitle = '${before}${after}'.trim();
+
+    // Append formatted date suffix for clarity
+    // e.g., "Call office" + " (Mon, Jan 26)" or "Meeting" + " (Today, 3:00 PM)"
+    final dateSuffix = DateFormatter.formatTitleSuffix(
+      _parsedDate!.date.toLocal(),
+      isAllDay: _parsedDate!.isAllDay,
+    );
+
+    return '$strippedTitle $dateSuffix';
   }
 
   void _addTask() {
-    // Phase 3.7: Use clean title (with date text stripped)
+    // Phase 3.7: Use clean title (with formatted date suffix)
     final title = _getCleanTitle();
     if (title.isEmpty) return;
 

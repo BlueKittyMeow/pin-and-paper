@@ -58,4 +58,28 @@ class DateFormatter {
     final fullDate = DateFormat('EEE, MMM d').format(date);
     return '$label ($fullDate)';
   }
+
+  /// Format a date as a suffix to append to task titles
+  ///
+  /// Phase 3.7: When parsing natural language dates, we strip the original
+  /// date text and append this formatted suffix for clarity.
+  ///
+  /// IMPORTANT: Always uses absolute dates (never "Today"/"Tomorrow") because
+  /// the title is saved permanently and relative terms become incorrect over time.
+  ///
+  /// Examples:
+  /// - All-day: "(Mon, Jan 27)"
+  /// - With time: "(Mon, Jan 27, 3:00 PM)"
+  static String formatTitleSuffix(DateTime date, {bool isAllDay = true}) {
+    // Always use absolute date format - never "Today"/"Tomorrow" since
+    // the title is saved and those relative terms become stale
+    final dayPart = DateFormat('EEE, MMM d').format(date); // "Mon, Jan 27"
+
+    if (isAllDay) {
+      return '($dayPart)';
+    } else {
+      final time = DateFormat('h:mm a').format(date);
+      return '($dayPart, $time)';
+    }
+  }
 }

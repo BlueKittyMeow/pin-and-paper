@@ -369,8 +369,17 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     final before = text.substring(0, range.start);
     final after = text.substring(range.end);
 
-    // Clean up extra whitespace
-    return '${before}${after}'.trim();
+    // Clean up extra whitespace from stripped text
+    final strippedTitle = '${before}${after}'.trim();
+
+    // Append formatted date suffix for clarity
+    // e.g., "Call office" + " (Mon, Jan 26)" or "Meeting" + " (Today, 3:00 PM)"
+    final dateSuffix = DateFormatter.formatTitleSuffix(
+      _parsedDate!.date.toLocal(),
+      isAllDay: _parsedDate!.isAllDay,
+    );
+
+    return '$strippedTitle $dateSuffix';
   }
 
   @override

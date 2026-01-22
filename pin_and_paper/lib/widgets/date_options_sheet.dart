@@ -66,7 +66,7 @@ class DateOptionsSheet extends StatelessWidget {
 
           const Divider(),
 
-          // Manual picker
+          // Manual picker (date only, all-day)
           ListTile(
             leading: const Icon(Icons.calendar_month),
             title: const Text('Pick custom date...'),
@@ -79,7 +79,45 @@ class DateOptionsSheet extends StatelessWidget {
                 lastDate: DateTime(2030),
               );
               if (pickedDate != null) {
-                onSelectDate(pickedDate, true);
+                onSelectDate(pickedDate, true); // All-day
+              }
+            },
+          ),
+
+          // Manual picker with time
+          ListTile(
+            leading: const Icon(Icons.access_time),
+            title: const Text('Pick custom date and time...'),
+            onTap: () async {
+              Navigator.pop(context);
+              // First pick date
+              final pickedDate = await showDatePicker(
+                context: context,
+                initialDate: parsedDate.date,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+              );
+              if (pickedDate != null) {
+                // Then pick time
+                final pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: parsedDate.isAllDay
+                      ? TimeOfDay.now()
+                      : TimeOfDay.fromDateTime(parsedDate.date),
+                );
+                if (pickedTime != null) {
+                  final dateWithTime = DateTime(
+                    pickedDate.year,
+                    pickedDate.month,
+                    pickedDate.day,
+                    pickedTime.hour,
+                    pickedTime.minute,
+                  );
+                  onSelectDate(dateWithTime, false); // Not all-day
+                } else {
+                  // User cancelled time picker, use date as all-day
+                  onSelectDate(pickedDate, true);
+                }
               }
             },
           ),
