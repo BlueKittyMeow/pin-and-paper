@@ -5,11 +5,15 @@ import '../models/task.dart';
 import '../models/tag.dart';
 import '../providers/task_provider.dart';
 import '../providers/tag_provider.dart';
+import '../services/date_parsing_service.dart'; // Phase 3.7
+import '../utils/date_suffix_parser.dart'; // Phase 3.7
+import '../utils/date_formatter.dart'; // Phase 3.7
 import 'task_context_menu.dart';
 import 'tag_picker_dialog.dart';
 import 'tag_chip.dart';
 import 'edit_task_dialog.dart'; // Phase 3.6.5
 import 'completed_task_metadata_dialog.dart'; // Phase 3.6.5 Day 5
+import 'date_options_sheet.dart'; // Phase 3.7
 
 class TaskItem extends StatelessWidget {
   final Task task;
@@ -239,6 +243,127 @@ class TaskItem extends StatelessWidget {
     }
   }
 
+  // Phase 3.7: Build title with colored date suffix (clickable)
+  Widget _buildTitleWithDateSuffix(
+    BuildContext context, {
+    required bool isTrulyComplete,
+    required bool isCompletedParent,
+  }) {
+    // Parse date suffix from title
+    final suffixResult = DateSuffixParser.parse(task.title);
+
+    // Base text style for title
+    final baseTextStyle = TextStyle(
+      decoration: isTrulyComplete ? TextDecoration.lineThrough : TextDecoration.none,
+      color: task.completed
+          ? Theme.of(context).colorScheme.onSurface.withValues(
+              alpha: isCompletedParent ? 0.35 : 0.5,
+            )
+          : Theme.of(context).colorScheme.onSurface,
+    );
+
+    // No date suffix - render plain text
+    if (suffixResult == null) {
+      return Text(task.title, style: baseTextStyle);
+    }
+
+    // Date suffix colors: blue for future, red for overdue
+    final suffixColor = suffixResult.isOverdue
+        ? Colors.red.shade600
+        : Colors.blue.shade600;
+    final suffixBgColor = suffixResult.isOverdue
+        ? Colors.red.shade50
+        : Colors.blue.shade50;
+
+    // Adjust opacity for completed tasks
+    final suffixOpacity = task.completed
+        ? (isCompletedParent ? 0.5 : 0.7)
+        : 1.0;
+
+    // Use Row with Text + tappable suffix chip
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        // Title prefix
+        Flexible(
+          child: Text(
+            suffixResult.prefix,
+            style: baseTextStyle,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 4),
+        // Tappable date suffix chip
+        GestureDetector(
+          onTap: task.completed ? null : () => _showDateOptionsForSuffix(context, suffixResult),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: suffixBgColor.withValues(alpha: suffixOpacity),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              suffixResult.suffix,
+              style: baseTextStyle.copyWith(
+                color: suffixColor.withValues(alpha: suffixOpacity),
+                fontWeight: FontWeight.w500,
+                decoration: TextDecoration.none, // Never strikethrough the date
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Phase 3.7: Show DateOptionsSheet for tapped suffix in task list
+  void _showDateOptionsForSuffix(BuildContext context, DateSuffixResult suffixResult) {
+    // Create ParsedDate from the suffix
+    final parsedDate = ParsedDate(
+      matchedText: suffixResult.suffix,
+      matchedRange: TextRange(start: 0, end: suffixResult.suffix.length),
+      date: suffixResult.date,
+      isAllDay: !suffixResult.hasTime,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => DateOptionsSheet(
+        parsedDate: parsedDate,
+        onRemove: () async {
+          Navigator.pop(sheetContext);
+          // Update task: remove due date and suffix from title
+          final taskProvider = context.read<TaskProvider>();
+          final currentTagIds = (tags ?? []).map((t) => t.id).toList();
+          await taskProvider.updateTask(
+            taskId: task.id,
+            title: suffixResult.prefix.trim(), // Title without suffix
+            dueDate: null,
+            isAllDay: true,
+            tagIds: currentTagIds, // Preserve existing tags
+          );
+        },
+        onSelectDate: (DateTime date, bool isAllDay) async {
+          Navigator.pop(sheetContext);
+          // Update task with new date and new suffix
+          final newSuffix = DateFormatter.formatTitleSuffix(date, isAllDay: isAllDay);
+          final newTitle = '${suffixResult.prefix.trim()} $newSuffix';
+          final taskProvider = context.read<TaskProvider>();
+          final currentTagIds = (tags ?? []).map((t) => t.id).toList();
+          await taskProvider.updateTask(
+            taskId: task.id,
+            title: newTitle,
+            dueDate: date,
+            isAllDay: isAllDay,
+            tagIds: currentTagIds, // Preserve existing tags
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Phase 3.2: Calculate indentation based on depth
@@ -356,20 +481,10 @@ class TaskItem extends StatelessWidget {
                 ),
               ],
             ),
-            title: Text(
-              task.title,
-              style: TextStyle(
-                // Phase 3.6.5: Only strikethrough if TRULY complete (no incomplete descendants)
-                decoration: isTrulyComplete
-                    ? TextDecoration.lineThrough
-                    : TextDecoration.none,
-                // Phase 3.6.5: Dim more for completed parents (0.35) vs truly complete (0.5)
-                color: task.completed
-                    ? Theme.of(context).colorScheme.onSurface.withValues(
-                        alpha: isCompletedParent ? 0.35 : 0.5,
-                      )
-                    : Theme.of(context).colorScheme.onSurface,
-              ),
+            title: _buildTitleWithDateSuffix(
+              context,
+              isTrulyComplete: isTrulyComplete,
+              isCompletedParent: isCompletedParent,
             ),
             // Phase 3.2: Drag handle in reorder mode
             trailing: isReorderMode

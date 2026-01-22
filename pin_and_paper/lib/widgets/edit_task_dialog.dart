@@ -7,6 +7,7 @@ import '../providers/task_provider.dart';
 import '../services/date_parsing_service.dart'; // Phase 3.7
 import '../utils/debouncer.dart'; // Phase 3.7
 import '../utils/date_formatter.dart'; // Phase 3.7
+import '../utils/date_suffix_parser.dart'; // Phase 3.7
 import 'highlighted_text_editing_controller.dart'; // Phase 3.7
 import 'date_options_sheet.dart'; // Phase 3.7
 import 'inline_tag_picker.dart';
@@ -103,6 +104,36 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     // Load parent title if has parent
     if (_parentId != null) {
       _loadParentTitle();
+    }
+
+    // Phase 3.7: Detect existing date suffix and set up highlight
+    _detectExistingDateSuffix();
+  }
+
+  /// Phase 3.7: Detect date suffix in existing task title and make it interactive
+  void _detectExistingDateSuffix() {
+    final title = widget.task.title;
+    final suffixResult = DateSuffixParser.parse(title);
+
+    if (suffixResult != null) {
+      // Calculate the range of the suffix in the title
+      final suffixStart = title.length - suffixResult.suffix.length;
+      final suffixEnd = title.length;
+
+      // Set up parsed date with the detected suffix
+      _parsedDate = ParsedDate(
+        matchedText: suffixResult.suffix,
+        matchedRange: TextRange(start: suffixStart, end: suffixEnd),
+        date: suffixResult.date,
+        isAllDay: !suffixResult.hasTime,
+      );
+
+      // Set up highlight on the suffix
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _titleController.setHighlight(TextRange(start: suffixStart, end: suffixEnd));
+        }
+      });
     }
   }
 

@@ -21,11 +21,17 @@ class FakeTaskService extends TaskService {
   int _idCounter = 0;
 
   @override
-  Future<Task> createTask(String title) async {
+  Future<Task> createTask(
+    String title, {
+    DateTime? dueDate,
+    bool isAllDay = true,
+  }) async {
     final task = Task(
       id: (++_idCounter).toString(),
       title: title,
       createdAt: DateTime.now(),
+      dueDate: dueDate,
+      isAllDay: isAllDay,
     );
     _storage.insert(0, task);
     return task;

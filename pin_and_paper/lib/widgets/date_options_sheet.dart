@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../services/date_parsing_service.dart';
 import '../utils/date_formatter.dart';
 
@@ -49,7 +48,7 @@ class DateOptionsSheet extends StatelessWidget {
             date: parsedDate.date,
             isAllDay: parsedDate.isAllDay,
             label: DateFormatter.formatRelativeDate(
-              parsedDate.date,
+              parsedDate.date.toLocal(),
               isAllDay: parsedDate.isAllDay,
             ),
             isSelected: true,
@@ -66,45 +65,27 @@ class DateOptionsSheet extends StatelessWidget {
 
           const Divider(),
 
-          // Manual picker (date only, all-day)
+          // Manual picker (date + optional time)
           ListTile(
             leading: const Icon(Icons.calendar_month),
-            title: const Text('Pick custom date...'),
+            title: const Text('Pick custom date & time...'),
             onTap: () async {
-              Navigator.pop(context);
+              // Show date picker BEFORE closing sheet (context still valid)
               final pickedDate = await showDatePicker(
                 context: context,
-                initialDate: parsedDate.date,
+                initialDate: parsedDate.date.toLocal(),
                 firstDate: DateTime(2020),
                 lastDate: DateTime(2030),
               );
               if (pickedDate != null) {
-                onSelectDate(pickedDate, true); // All-day
-              }
-            },
-          ),
-
-          // Manual picker with time
-          ListTile(
-            leading: const Icon(Icons.access_time),
-            title: const Text('Pick custom date and time...'),
-            onTap: () async {
-              Navigator.pop(context);
-              // First pick date
-              final pickedDate = await showDatePicker(
-                context: context,
-                initialDate: parsedDate.date,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2030),
-              );
-              if (pickedDate != null) {
-                // Then pick time
+                // Then show time picker
                 final pickedTime = await showTimePicker(
                   context: context,
                   initialTime: parsedDate.isAllDay
                       ? TimeOfDay.now()
-                      : TimeOfDay.fromDateTime(parsedDate.date),
+                      : TimeOfDay.fromDateTime(parsedDate.date.toLocal()),
                 );
+                // Don't pop here - callbacks are responsible for closing the sheet
                 if (pickedTime != null) {
                   final dateWithTime = DateTime(
                     pickedDate.year,
