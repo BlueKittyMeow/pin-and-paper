@@ -273,8 +273,18 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
       }
     }
 
+    // Phase 3.7: If there's a due date but no suffix in the title, append one
+    String finalTitle = title;
+    if (combinedDueDate != null && !DateSuffixParser.hasSuffix(title)) {
+      final suffix = DateFormatter.formatTitleSuffix(
+        combinedDueDate,
+        isAllDay: _isAllDay,
+      );
+      finalTitle = '$title $suffix';
+    }
+
     Navigator.pop(context, {
-      'title': title,
+      'title': finalTitle,
       'dueDate': combinedDueDate,
       'isAllDay': _isAllDay,
       'notes': _notesController.text.trim().isEmpty
@@ -390,27 +400,34 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
 
   String _getCleanTitle() {
     if (_parsedDate == null || _userDismissedParsing) {
-      return _titleController.text.trim();
+      // Even without active parsing, strip any existing suffix
+      // (handles case where user clears due date on a task with suffix)
+      final text = _titleController.text.trim();
+      final suffixResult = DateSuffixParser.parse(text);
+      if (suffixResult != null) {
+        return suffixResult.prefix.trim();
+      }
+      return text;
     }
 
     // Strip the matched date text from title
     final text = _titleController.text;
     final range = _parsedDate!.matchedRange;
 
+    // Safety: if range is out of bounds (user edited title), fall back to suffix parser
+    if (range.start < 0 || range.end > text.length || range.start > range.end) {
+      final suffixResult = DateSuffixParser.parse(text.trim());
+      if (suffixResult != null) {
+        return suffixResult.prefix.trim();
+      }
+      return text.trim();
+    }
+
     final before = text.substring(0, range.start);
     final after = text.substring(range.end);
 
-    // Clean up extra whitespace from stripped text
-    final strippedTitle = '${before}${after}'.trim();
-
-    // Append formatted date suffix for clarity
-    // e.g., "Call office" + " (Mon, Jan 26)" or "Meeting" + " (Today, 3:00 PM)"
-    final dateSuffix = DateFormatter.formatTitleSuffix(
-      _parsedDate!.date.toLocal(),
-      isAllDay: _parsedDate!.isAllDay,
-    );
-
-    return '$strippedTitle $dateSuffix';
+    // Return only the stripped title - _save() handles suffix appending
+    return '${before}${after}'.trim();
   }
 
   @override
@@ -457,21 +474,6 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                         ),
                       ),
 
-                    const SizedBox(height: 16),
-
-                    // ===== PARENT SELECTOR =====
-                    OutlinedButton.icon(
-                      onPressed: _selectParent,
-                      icon: const Icon(Icons.account_tree),
-                      label: Text(
-                        _getParentDisplayText(),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 48),
-                        alignment: Alignment.centerLeft,
-                      ),
-                    ),
                     const SizedBox(height: 16),
 
                     // ===== DUE DATE =====
