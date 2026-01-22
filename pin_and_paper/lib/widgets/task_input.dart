@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/task_provider.dart';
+import '../services/date_parsing_service.dart'; // Phase 3.7
+import '../utils/debouncer.dart'; // Phase 3.7
+import 'highlighted_text_editing_controller.dart'; // Phase 3.7
 
 class TaskInput extends StatefulWidget {
   const TaskInput({super.key});
@@ -11,13 +14,28 @@ class TaskInput extends StatefulWidget {
 }
 
 class _TaskInputState extends State<TaskInput> {
-  final TextEditingController _controller = TextEditingController();
+  late HighlightedTextEditingController _controller; // Phase 3.7: Changed type
   final FocusNode _focusNode = FocusNode();
   static const String _hasLaunchedKey = 'has_launched_before';
+
+  // Phase 3.7: Date parsing state
+  final DateParsingService _dateParser = DateParsingService();
+  final Debouncer _debouncer = Debouncer(milliseconds: 300);
+  ParsedDate? _parsedDate;
 
   @override
   void initState() {
     super.initState();
+
+    // Phase 3.7: Initialize HighlightedTextEditingController
+    _controller = HighlightedTextEditingController(
+      text: '',
+      onTapHighlight: () {
+        // Quick Add doesn't need DateOptionsSheet
+        // Tapping highlight does nothing (could show tooltip in future)
+      },
+    );
+
     // Only auto-focus on first app launch
     _checkAndFocusOnFirstLaunch();
   }
@@ -41,15 +59,85 @@ class _TaskInputState extends State<TaskInput> {
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
+    _debouncer.dispose(); // Phase 3.7: Cleanup
     super.dispose();
   }
 
+  // Phase 3.7: Handle title changes for date parsing
+  void _onTitleChanged(String text) {
+    // PRE-FILTER: Skip parsing if no date-like tokens
+    // Reduces FFI calls by 80-90% (most tasks don't have dates)
+    if (!_dateParser.containsPotentialDate(text)) {
+      _debouncer.cancel(); // Stop any pending parse
+      _controller.clearHighlight();
+      setState(() => _parsedDate = null);
+      return;
+    }
+
+    // Debounce parsing (300ms after last keystroke)
+    _debouncer.run(() {
+      _parseDateFromTitle(text);
+    });
+  }
+
+  // Phase 3.7: Parse date from title
+  void _parseDateFromTitle(String text) {
+    try {
+      final parsed = _dateParser.parse(text);
+
+      setState(() {
+        _parsedDate = parsed;
+
+        if (parsed != null) {
+          _controller.setHighlight(parsed.matchedRange);
+        } else {
+          _controller.clearHighlight();
+        }
+      });
+    } catch (e) {
+      print('Error parsing date: $e');
+      // Silently fail - don't disrupt user
+    }
+  }
+
+  // Phase 3.7: Get clean title (with date text stripped)
+  String _getCleanTitle() {
+    if (_parsedDate == null) {
+      return _controller.text.trim();
+    }
+
+    final text = _controller.text;
+    final range = _parsedDate!.matchedRange;
+
+    final before = text.substring(0, range.start);
+    final after = text.substring(range.end);
+
+    return '${before}${after}'.trim();
+  }
+
   void _addTask() {
-    final title = _controller.text.trim();
+    // Phase 3.7: Use clean title (with date text stripped)
+    final title = _getCleanTitle();
     if (title.isEmpty) return;
 
-    context.read<TaskProvider>().createTask(title);
+    // Phase 3.7: Extract parsed date information
+    DateTime? dueDate;
+    bool isAllDay = true;
+
+    if (_parsedDate != null) {
+      dueDate = _parsedDate!.date;
+      isAllDay = _parsedDate!.isAllDay;
+    }
+
+    // Call updated API with date parameters
+    context.read<TaskProvider>().createTask(
+      title,
+      dueDate: dueDate,
+      isAllDay: isAllDay,
+    );
+
     _controller.clear();
+    setState(() => _parsedDate = null); // Reset parsing state
     // Don't auto-refocus - let user manually tap if they want to add more
   }
 
@@ -79,6 +167,7 @@ class _TaskInputState extends State<TaskInput> {
               ),
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _addTask(),
+              onChanged: _onTitleChanged, // Phase 3.7: Add date parsing handler
             ),
           ),
           const SizedBox(width: 12),

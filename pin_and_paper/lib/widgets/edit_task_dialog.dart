@@ -267,8 +267,9 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   // ===== PHASE 3.7: DATE PARSING METHODS =====
 
   void _onTitleChanged(String text) {
-    // Reset dismissal flag if text changes significantly
-    if (_userDismissedParsing && text.length != _titleController.text.length) {
+    // Reset dismissal flag when user continues typing after dismissal
+    // (UX: If they dismissed parsing but keep typing, they likely want parsing back)
+    if (_userDismissedParsing) {
       setState(() {
         _userDismissedParsing = false;
       });
@@ -304,7 +305,8 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
           _dueDate = parsed.date;
           _isAllDay = parsed.isAllDay;
           if (!parsed.isAllDay) {
-            _dueTime = TimeOfDay.fromDateTime(parsed.date);
+            // Convert UTC datetime to local before extracting time
+            _dueTime = TimeOfDay.fromDateTime(parsed.date.toLocal());
           }
         } else {
           _titleController.clearHighlight();
@@ -407,7 +409,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                       Padding(
                         padding: const EdgeInsets.only(top: 8, left: 12),
                         child: Text(
-                          'Due: ${DateFormatter.formatRelativeDate(_parsedDate!.date, isAllDay: _parsedDate!.isAllDay)}',
+                          'Due: ${DateFormatter.formatRelativeDate(_parsedDate!.date.toLocal(), isAllDay: _parsedDate!.isAllDay)}',
                           style: TextStyle(
                             color: Colors.blue[700],
                             fontSize: 12,

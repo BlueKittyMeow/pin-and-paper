@@ -11,7 +11,11 @@ class TaskService {
   final Uuid _uuid = const Uuid();
 
   // Create a new task
-  Future<Task> createTask(String title) async {
+  Future<Task> createTask(
+    String title, {
+    DateTime? dueDate,
+    bool isAllDay = true,
+  }) async {
     if (title.trim().isEmpty) {
       throw ArgumentError('Task title cannot be empty');
     }
@@ -33,6 +37,8 @@ class TaskService {
       title: title.trim(),
       createdAt: DateTime.now(),
       position: nextPosition, // Phase 3.1: Assign calculated position
+      dueDate: dueDate, // Phase 3.7: Optional due date from Quick Add
+      isAllDay: isAllDay, // Phase 3.7: Optional isAllDay flag
     );
 
     await db.insert(

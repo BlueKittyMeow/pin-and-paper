@@ -178,20 +178,23 @@ class DateParsingService {
       r'\b('
       // Relative dates
       r'today|tomorrow|yesterday|tonight|'
-      r'next|this|last|'
+      r'next\s+(week|month|year)|this\s+(week|month|year)|last\s+(week|month|year)|'
       // Days of week
       r'monday|tuesday|wednesday|thursday|friday|saturday|sunday|'
-      r'mon|tue|wed|thu|fri|sat|sun|'
-      // Months
-      r'january|february|march|april|may|june|july|august|'
+      r'mon|tue|wed|thu|fri|sat|sun'
+      r')\b|'
+      // Months WITH day context required (prevents "May need to..." false positive)
+      r'\b(january|february|march|april|may|june|july|august|'
       r'september|october|november|december|'
-      r'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|'
+      r'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b|'
+      r'\b\d{1,2}\s+(january|february|march|april|may|june|july|august|'
+      r'september|october|november|december|'
+      r'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|'
       // Numeric patterns
       r'\d{1,2}[/-]\d{1,2}|'  // 12/31 or 12-31
       r'\d{4}|'                // 2026
-      r'in\s+\d+\s+(day|week|month)|'  // "in 3 days"
-      r'at\s+\d{1,2}'          // "at 3pm"
-      r')\b',
+      r'\bin\s+\d+\s+(day|week|month)s?\b|'  // "in 3 days"
+      r'\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b',  // "at 3pm", "at 3:30pm", "at 10"
       caseSensitive: false,
     );
 

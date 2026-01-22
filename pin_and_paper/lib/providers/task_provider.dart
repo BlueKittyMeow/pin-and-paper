@@ -538,13 +538,21 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Create a new task
-  Future<void> createTask(String title) async {
+  Future<void> createTask(
+    String title, {
+    DateTime? dueDate,
+    bool isAllDay = true,
+  }) async {
     if (title.trim().isEmpty) return;
 
     _errorMessage = null;
 
     try {
-      final newTask = await _taskService.createTask(title);
+      final newTask = await _taskService.createTask(
+        title,
+        dueDate: dueDate,
+        isAllDay: isAllDay,
+      );
       _tasks.insert(0, newTask); // Add to beginning of list
       _categorizeTasks(); // Keep derived task buckets in sync for UI
 
