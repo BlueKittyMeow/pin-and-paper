@@ -11,6 +11,14 @@ class AppTheme {
   static const Color softSage = Color(0xFF8FA596);
   static const Color warmBeige = Color(0xFFE8DDD3);
 
+  // Semantic UI State Colors (Witchy Flatlay versions)
+  // These replace hardcoded Colors.green, Colors.red, etc. throughout the app
+  static const Color success = Color(0xFF7A9B7A); // Muted sage green (affirming, natural)
+  static const Color danger = Color(0xFFC17A7A);  // Dusty rose red (warm, not harsh)
+  static const Color warning = Color(0xFFD4A574); // Warm amber (earthy orange tone)
+  static const Color info = Color(0xFF7A8FA5);    // Muted slate blue (calm, informative)
+  static const Color muted = Color(0xFF9B8F85);   // Warm gray-brown (subtle, disabled states)
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,

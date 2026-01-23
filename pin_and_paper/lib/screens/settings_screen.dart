@@ -10,6 +10,7 @@ import '../services/database_service.dart';
 import '../models/user_settings.dart'; // Phase 3.8: For Value<T> in copyWith
 import '../services/notification_service.dart'; // Phase 3.8
 import '../services/user_settings_service.dart'; // Phase 3.8
+import '../utils/theme.dart';
 import '../services/reminder_service.dart'; // Phase 3.8
 import '../utils/constants.dart';
 import '../widgets/permission_explanation_dialog.dart'; // Phase 3.8
@@ -114,7 +115,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Icon(
                     _connectionValid! ? Icons.check_circle : Icons.error,
-                    color: _connectionValid! ? Colors.green : Colors.red,
+                    color: _connectionValid! ? AppTheme.success : AppTheme.danger,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -122,7 +123,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Text(
                       _connectionMessage ?? (_connectionValid! ? 'Connected' : 'Connection failed'),
                       style: TextStyle(
-                        color: _connectionValid! ? Colors.green : Colors.red,
+                        color: _connectionValid! ? AppTheme.success : AppTheme.danger,
                         fontSize: 14,
                       ),
                     ),
@@ -155,7 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: _deleteApiKey,
                   child: const Text(
                     'Delete API Key',
-                    style: TextStyle(color: Colors.red),
+                    style: TextStyle(color: AppTheme.danger),
                   ),
                 ),
               ],
@@ -165,12 +166,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Help Text
             const Text(
               'Get your API key from console.anthropic.com',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
             const SizedBox(height: 8),
             const Text(
               r'💡 Tip: Claude API costs ~$0.01 per brain dump',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
             const SizedBox(height: 32),
 
@@ -230,7 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 12),
                           const Text(
                             'You can always view previously completed tasks by turning off this toggle. Coming soon: view these in your journal!',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            style: TextStyle(fontSize: 12, color: AppTheme.muted),
                           ),
                         ],
                       ],
@@ -260,7 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _notificationsEnabled
                             ? Icons.notifications_active
                             : Icons.notifications_off,
-                        color: _notificationsEnabled ? Colors.green : Colors.red,
+                        color: _notificationsEnabled ? AppTheme.success : AppTheme.danger,
                       ),
                       title: Text(_notificationsEnabled
                           ? 'Notifications enabled'
@@ -452,7 +453,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Text(
                         'Error loading usage data: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.red),
+                        style: const TextStyle(color: AppTheme.danger),
                       ),
                     ),
                   );
@@ -498,7 +499,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ElevatedButton(
                               onPressed: _showResetDialog,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
+                                backgroundColor: AppTheme.danger,
                                 foregroundColor: Colors.white,
                               ),
                               child: const Text('Reset'),
@@ -666,7 +667,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
             child: const Text('Delete'),
           ),
         ],
@@ -698,7 +699,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : null,
+        backgroundColor: isError ? AppTheme.danger : null,
       ),
     );
   }
@@ -723,7 +724,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
             child: const Text('Reset'),
           ),
         ],

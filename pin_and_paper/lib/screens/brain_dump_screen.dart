@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/brain_dump_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/constants.dart';
+import '../utils/theme.dart';
 import '../widgets/brain_dump_loading.dart';
 import '../widgets/success_animation.dart';
 import 'settings_screen.dart';
@@ -108,10 +109,10 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
-                    color: Colors.red.shade100,
+                    color: AppTheme.danger.withValues(alpha: 0.2),
                     child: Text(
                       provider.errorMessage!,
-                      style: TextStyle(color: Colors.red.shade900),
+                      style: const TextStyle(color: AppTheme.danger),
                     ),
                   ),
 
@@ -313,7 +314,7 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
               Navigator.pop(context);
               _clearText();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
             child: const Text('Clear'),
           ),
         ],
@@ -343,7 +344,7 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, 'discard'),
-            child: const Text('Discard', style: TextStyle(color: Colors.red)),
+            child: const Text('Discard', style: TextStyle(color: AppTheme.danger)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, 'cancel'),

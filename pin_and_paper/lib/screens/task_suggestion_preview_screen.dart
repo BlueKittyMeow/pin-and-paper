@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/brain_dump_provider.dart';
 import '../providers/task_provider.dart';
+import '../utils/theme.dart';
 import '../widgets/task_suggestion_item.dart';
 
 class TaskSuggestionPreviewScreen extends StatefulWidget {
@@ -37,7 +38,7 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
                         IconButton(
                           icon: Icon(
                             Icons.visibility,
-                            color: _showOriginalText ? Colors.green : Colors.grey,
+                            color: _showOriginalText ? AppTheme.success : AppTheme.muted,
                           ),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -54,7 +55,7 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
                           style: TextStyle(
                             fontSize: 9,
                             height: 1,
-                            color: _showOriginalText ? Colors.green : Colors.grey,
+                            color: _showOriginalText ? AppTheme.success : AppTheme.muted,
                           ),
                         ),
                       ],
@@ -167,7 +168,7 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey[400],
+                    color: AppTheme.muted.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -208,8 +209,8 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     'Swipe down to close',
-                    style: TextStyle(
-                      color: Colors.grey[600],
+                    style: const TextStyle(
+                      color: AppTheme.muted,
                       fontSize: 14,
                     ),
                   ),
@@ -270,7 +271,7 @@ class _TaskSuggestionPreviewScreenState extends State<TaskSuggestionPreviewScree
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to add tasks: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.danger,
           ),
         );
       }
