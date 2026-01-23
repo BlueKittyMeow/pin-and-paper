@@ -25,7 +25,7 @@ class AppConstants {
 
   // App metadata
   static const String appName = 'Pin and Paper';
-  static const String appVersion = '3.7.0'; // Phase 3.7: NL Date Parsing
+  static const String appVersion = '3.8.0'; // Phase 3.8: Due Date Notifications
 
   // Performance targets
   static const int maxTasksInMemory = 500;

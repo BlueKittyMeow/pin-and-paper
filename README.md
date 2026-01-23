@@ -80,11 +80,11 @@ Muted Lavender:#9B8FA5  (dried flowers, soft accents)
 - **Custom rendering** - Skia engine for torn paper effects, dynamic lighting, shadows
 
 ### Data & State
-- **SQLite v7** (via sqflite) - Local-first, offline-capable, battle-tested
-  - 7 schema migrations (v1 → v7, FTS5 reserved)
-  - Supports task hierarchy, tags, soft delete, due dates, search
+- **SQLite v10** (via sqflite) - Local-first, offline-capable, battle-tested
+  - 10 schema migrations (v1 → v10)
+  - Supports task hierarchy, tags, soft delete, due dates, search, reminders
 - **Provider** - Simple state management (upgrading to Riverpod later)
-- **390+ comprehensive tests** - Models, services, utilities, migrations, widgets (95%+ pass rate)
+- **396 comprehensive tests** - Models, services, utilities, migrations, widgets (95%+ pass rate)
 
 ### AI Integration
 - **Claude API** (Phase 2) - Natural language task extraction from brain dumps
@@ -335,7 +335,7 @@ Each phase builds on the previous:
 
 ### Current Stats
 - **~13,000+ lines of production code**
-- **394 tests passing** (95%+ pass rate)
+- **396 tests passing** (95%+ pass rate)
 - **Database:** v10 (10 migrations complete)
 - **Phases completed:** 2 full phases + 10 subphases
 - **Latest:** Phase 3.8 - Due Date Notifications

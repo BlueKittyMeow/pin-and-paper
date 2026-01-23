@@ -34,7 +34,7 @@
 - **Files modified:** 18 (Dart)
 - **Files created:** 5
 - **Lines added:** 1,965 (Dart production code)
-- **Commits:** 12
+- **Commits:** 15
 
 ### Testing
 - **Widget test:** ✅ Passing (no regressions)
@@ -45,6 +45,7 @@
 - **Critical bugs found:** 2 (circular import, test regression) — all resolved
 - **Medium bugs found:** 1 (Linux error spam) — resolved
 - **Low bugs found:** 2 (method name, helper function) — resolved
+- **Agent review fixes:** 8 (from Codex + Gemini validation) — all resolved
 - **Build verification:** ✅ All platforms passing
 
 ---
@@ -76,6 +77,27 @@
 **Problem:** `zonedSchedule()` throws UnimplementedError on Linux
 **Solution:** try/catch with silent skip; immediate notifications still work
 **Outcome:** No error spam, graceful degradation
+
+---
+
+## Agent Review Validation
+
+After initial implementation, a full validation cycle was performed:
+- **Codex findings:** 9 issues identified, 7 confirmed (2 non-issues)
+- **Gemini findings:** 6 issues identified, 5 retracted as false positives, 1 confirmed
+- **Claude validation:** Consolidated findings into 8 targeted fixes, all implemented
+
+**Fixes applied (commit e0a275d):**
+1. PermissionExplanationDialog wired into Settings toggle
+2. checkMissed gated by notifyWhenOverdue + quiet hours
+3. Cancel/set ordering fixed in TaskProvider (cancel BEFORE set)
+4. Deduplication added to checkMissed (5-minute window)
+5. cancelReminders now also cancels snooze ID
+6. Defensive quiet-hours day parsing (int.tryParse)
+7. Cold-start notification replay via handleNotificationResponse
+8. Minor: curly braces, value→initialValue deprecation fix
+
+**Validation sign-off:** Codex ✅, Gemini ✅, Claude ✅, BlueKitty ✅
 
 ---
 
@@ -118,7 +140,10 @@ All items logged in `docs/FEATURE_REQUESTS.md`:
 - [phase-3.8-implementation-report.md](./phase-3.8-implementation-report.md)
 
 **Validation:**
-- [phase-3.8-validation-v1.md](./phase-3.8-validation-v1.md) (final)
+- [phase-3.8-validation-v1.md](./phase-3.8-validation-v1.md) (initial validation)
+- [claude-validation.md](./claude-validation.md) (agent review consolidation + fix plan)
+- [codex-validation.md](./codex-validation.md) (Codex sign-off on fix plan)
+- [gemini-validation.md](./gemini-validation.md) (Gemini sign-off on fix plan)
 
 **Agent Findings:**
 - [codex-findings.md](./codex-findings.md)
