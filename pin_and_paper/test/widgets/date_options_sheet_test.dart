@@ -202,7 +202,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Pick custom date...'), findsOneWidget);
+      expect(find.text('Pick custom date & time...'), findsOneWidget);
       expect(find.byIcon(Icons.calendar_month), findsOneWidget);
     });
 

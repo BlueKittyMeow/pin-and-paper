@@ -514,6 +514,9 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - flutter_js + chrono.js integration (QuickJS FFI)
 - ~120+ tests, 1,848 lines production code
 - **Deferred:** Night owl mode, recurring dates → Phase 4+
+- **Known behaviors:**
+  - Date filter (Overdue/No Date) applies to root-level tasks only; children inherit visibility from parent. A child matching the filter whose parent doesn't match will be hidden. Evaluate optimal behavior during UX testing.
+  - `onTapHighlight` on `HighlightedTextEditingController` is scaffolded but not invoked in input fields. Tap-to-open-DateOptionsSheet works via `GestureDetector` in `task_item.dart`. Deferred cleanup or activation pending Flutter TapGestureRecognizer resolution in editable TextFields.
 
 **Phase 3.8: Due Date Notifications** 🔜 (1-2 weeks)
 - flutter_local_notifications integration

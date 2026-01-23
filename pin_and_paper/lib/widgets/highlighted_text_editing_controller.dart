@@ -53,13 +53,13 @@ class HighlightedTextEditingController extends TextEditingController {
         if (range.start > 0)
           TextSpan(text: text.substring(0, range.start)),
 
-        // Highlighted text (visual only - tap handled separately)
-        // Note: TapGestureRecognizer not allowed in editable TextFields
-        // (Flutter assertion: readOnly && !obscureText)
+        // Highlighted text (visual only)
+        // Tap-to-edit handled by GestureDetector in task_item.dart
+        // (TapGestureRecognizer on TextSpan conflicts with TextField gesture handling)
         TextSpan(
           text: text.substring(range.start, range.end),
           style: baseStyle.copyWith(
-            backgroundColor: Colors.blue.withOpacity(0.2),
+            backgroundColor: Colors.blue.withValues(alpha: 0.2),
             color: Colors.blue[700],
             fontWeight: FontWeight.w500,
           ),

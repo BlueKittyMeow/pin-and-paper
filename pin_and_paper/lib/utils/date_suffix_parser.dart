@@ -162,18 +162,17 @@ class DateSuffixParser {
     }
   }
 
-  /// Check if a date is overdue
+  /// Check if a date is overdue (respects Today Window for all-day tasks)
   static bool _isOverdue(DateTime date, {required bool isAllDay}) {
-    final now = DateTime.now();
-
     if (isAllDay) {
-      // For all-day tasks, overdue if date is before today
-      final today = DateTime(now.year, now.month, now.day);
+      // For all-day tasks, use Today Window to determine "today"
+      final effectiveToday = DateParsingService().getCurrentEffectiveToday();
+      final today = DateTime(effectiveToday.year, effectiveToday.month, effectiveToday.day);
       final dateOnly = DateTime(date.year, date.month, date.day);
       return dateOnly.isBefore(today);
     } else {
       // For timed tasks, overdue if datetime is in the past
-      return date.isBefore(now);
+      return date.isBefore(DateTime.now());
     }
   }
 }

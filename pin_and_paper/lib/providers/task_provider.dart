@@ -12,6 +12,7 @@ import '../providers/tag_provider.dart'; // Phase 3.6A
 import '../services/task_service.dart';
 import '../services/tag_service.dart'; // Phase 3.5
 import '../services/database_service.dart'; // Phase 3.6A: For database access
+import '../services/date_parsing_service.dart'; // Phase 3.7: For Today Window
 import '../services/preferences_service.dart'; // Phase 2 Stretch
 import '../utils/constants.dart'; // Phase 3.6A: For AppConstants table names
 import '../utils/task_tree_controller.dart'; // Phase 3.6.5: Custom TreeController fix
@@ -290,11 +291,17 @@ class TaskProvider extends ChangeNotifier {
 
     // Phase 3.7.5: Apply date filter
     if (_filterState.dateFilter != DateFilter.any) {
-      final now = DateTime.now();
       activeRoots = activeRoots.where((t) {
         switch (_filterState.dateFilter) {
           case DateFilter.overdue:
-            return t.dueDate != null && t.dueDate!.isBefore(now);
+            if (t.dueDate == null) return false;
+            if (t.isAllDay) {
+              final effectiveToday = DateParsingService().getCurrentEffectiveToday();
+              final todayOnly = DateTime(effectiveToday.year, effectiveToday.month, effectiveToday.day);
+              final dateOnly = DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
+              return dateOnly.isBefore(todayOnly);
+            }
+            return t.dueDate!.isBefore(DateTime.now());
           case DateFilter.noDueDate:
             return t.dueDate == null;
           case DateFilter.any:
@@ -552,6 +559,7 @@ class TaskProvider extends ChangeNotifier {
       orElse: () => TaskSortMode.manual,
     );
     _sortReversed = await _preferencesService.getSortReversed();
+    _refreshTreeController(); // Phase 3.7: Apply sort immediately on load
     notifyListeners();
   }
 

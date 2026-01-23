@@ -82,21 +82,30 @@ flutter build linux --debug
 
 **flutter analyze:**
 ```
-[Paste output or "No issues found"]
+207 issues found.
+- 4 warnings for unused elements/imports.
+- 3 `deprecated_member_use` warnings for `withOpacity`.
+- Numerous info-level lints for `avoid_print`, `use_super_parameters`, `constant_identifier_names`, etc.
 ```
 
 **flutter test:**
 ```
-Tests: [X] passing, [X] failing, [X] skipped
+Tests: 394 passing, 23 failing, 0 skipped
+
+Critical Failures:
+- 22 tests related to `DateParsingService` and `flutter_js` fail with "Failed to load dynamic library 'libquickjs_c_bridge_plugin.so'".
+- 1 test in `highlighted_text_editing_controller_test.dart` fails with a `_TypeError`.
+- 1 test in `date_options_sheet_test.dart` fails to find a widget.
+- 1 performance test fails for exceeding the 1ms target.
 ```
 
 **flutter build:**
 ```
-[Paste summary or "Build successful"]
+Build successful: ✓ Built build/linux/x64/debug/bundle/pin_and_paper
 ```
 
 **Compilation Warnings/Errors:**
-- [List any issues, or "None"]
+- None from the build command itself, but the test failures indicate a critical runtime issue with `flutter_js` in the test environment.
 
 ---
 
@@ -198,72 +207,176 @@ git diff main..HEAD -- pin_and_paper/lib/
 
 ## Findings
 
-_Use the format below for each issue found._
+### Issue #1: [CRITICAL] flutter_js Native Library Not Found in Test Environment
 
-### Issue Format
-
-```markdown
-### Issue #[N]: [Brief Title]
-
-**File:** `path/to/file.dart:line`
-**Type:** [Lint / Build / Schema / UI / Accessibility / Performance / Test]
-**Severity:** [CRITICAL / HIGH / MEDIUM / LOW]
-**Analyzer Message:** [If from flutter analyze]
+**File:** `test/integration/date_parsing_integration_test.dart`, `test/services/date_parsing_service_test.dart`
+**Type:** Test / Build
+**Severity:** CRITICAL
 
 **Description:**
-[What's wrong]
+A total of 22 tests across two files fail with the same root cause: `Invalid argument(s): Failed to load dynamic library 'libquickjs_c_bridge_plugin.so'`. The test environment is unable to load the native library required by the `flutter_js` package. This prevents any tests that rely on the `DateParsingService` from running, leaving the core new feature without test coverage.
 
 **Suggested Fix:**
-[How to fix it]
+The test setup needs to be configured to correctly locate and load the native libraries for FFI packages like `flutter_js`. This might involve:
+1.  Using `DynamicLibrary.open` with a specific path for the test environment.
+2.  Configuring the `flutter test` command or `flutter_test.yaml` to include the necessary native binaries in the test runner's environment.
+3.  Mocking the `DateParsingService` at a higher level for widget tests and relying solely on integration tests (which may need a different setup) for the FFI-dependent service.
 
 **Impact:**
-[Why it matters]
-```
+The most critical new feature of this phase, Natural Language Date Parsing, is currently untested. We cannot merge this with confidence until these tests are passing.
 
 ---
 
-## [Your findings go here]
+### Issue #2: [HIGH] Tap Gesture Recognizer TypeError in Widget Test
 
-_Run the build verification commands above, then review code and add issues._
+**File:** `test/widgets/highlighted_text_editing_controller_test.dart:281`
+**Type:** Test
+**Severity:** HIGH
+
+**Description:**
+The test `onTapHighlight callback is invoked` fails with the exception `type 'Null' is not a subtype of type 'TapGestureRecognizer' in type cast`. This occurs when the test attempts to simulate a tap on the highlighted text.
+
+**Suggested Fix:**
+The test setup is incorrectly finding the `TextSpan`'s gesture recognizer. The `recognizer` property of a `TextSpan` is being cast to `TapGestureRecognizer` but is `null` in the test context. The test needs to be adjusted to correctly find the gesture recognizer instance on the `TextSpan` created by `buildTextSpan`.
+
+**Impact:**
+The tap functionality on highlighted dates is not verified by any tests.
+
+---
+
+### Issue #3: [HIGH] Widget Not Found in DateOptionsSheet Test
+
+**File:** `test/widgets/date_options_sheet_test.dart:205`
+**Type:** Test
+**Severity:** HIGH
+**Analyzer Message:** `Expected: exactly one matching candidate. Actual: _TextWidgetFinder:<Found 0 widgets with text "Pick custom date...": []>`
+
+**Description:**
+The test `displays manual date picker option` fails because it cannot find the `Text` widget with the content "Pick custom date...". A code review of `date_options_sheet.dart` shows the text is actually "Pick custom date & time...".
+
+**Suggested Fix:**
+Update the `find.text()` call in the test to match the actual widget text: `find.text('Pick custom date & time...')`.
+
+**Impact:**
+A UI component test is failing, indicating a disconnect between the test and the implementation.
+
+---
+
+### Issue #4: [MEDIUM] Performance Test Failure
+
+**File:** `test/performance/date_parsing_perf_test.dart:28`
+**Type:** Performance / Test
+**Severity:** MEDIUM
+
+**Description:**
+The test `Single parse speed should be well under 1ms` fails consistently. The measured time was `3489 microseconds` (3.49ms), which is over 3x the target of 1ms.
+
+**Suggested Fix:**
+The 1ms target might be too aggressive for a cold start JIT FFI call. However, the implementation in `date_parsing_service.dart` already includes a "warmup parse" during initialization, which should have mitigated this. The fact that it's still this high suggests the warmup isn't effective in the test environment or the test is running before the async warmup completes.
+
+1.  Ensure the test `await`s the `DateParsingService().initialize()` method fully before running the measurement.
+2.  Consider increasing the performance target to a more realistic `<5ms` for the very first parse, as subsequent parses are extremely fast and the UI impact is already mitigated by the 300ms debouncer.
+
+**Impact:**
+The real-time parsing performance does not meet its specified target, which could lead to noticeable lag on the first date parse in a session on lower-end devices.
+
+---
+
+### Issue #5: [MEDIUM] Deprecated API Usage
+
+**File:** `lib/widgets/active_filter_bar.dart:53`, `lib/widgets/highlighted_text_editing_controller.dart:62`, `lib/widgets/search_result_tile.dart:105`
+**Type:** Lint
+**Severity:** MEDIUM
+**Analyzer Message:** `'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss`
+
+**Description:**
+The analyzer reports 3 instances of the deprecated `withOpacity()` method. This should be updated to the recommended `withValues()` to ensure color accuracy and future compatibility.
+
+**Suggested Fix:**
+Replace calls like `Colors.blue.withOpacity(0.2)` with `Colors.blue.withAlpha((255 * 0.2).round())` or similar logic using `withValues`.
+
+**Impact:**
+Using deprecated APIs can lead to future breaking changes and potential rendering inconsistencies.
+
+---
+
+### Issue #6: [LOW] Misleading Comment on TapGestureRecognizer
+
+**File:** `lib/widgets/highlighted_text_editing_controller.dart:55`
+**Type:** Lint
+**Severity:** LOW
+
+**Description:**
+The code contains a comment: `// Note: TapGestureRecognizer not allowed in editable TextFields`. This is incorrect. A `TapGestureRecognizer` *is* allowed on a `TextSpan` within the `buildTextSpan` method, and it is the correct way to handle taps on specific parts of the text. The implementation correctly omits the recognizer, but the comment provides the wrong reason. The tap handling was likely moved to a separate gesture detector on the `TextField` itself, but the comment remains.
+
+**Suggested Fix:**
+Remove or correct the misleading comment to reflect the actual implementation reason for omitting the recognizer from the `TextSpan` if it was an intentional design choice, or add the recognizer back if the tap is intended to be on the span itself.
+
+**Impact:**
+Incorrect comments can mislead future developers, making the code harder to maintain.
+
+---
+
+### Issue #7: [LOW] General Linter Warnings
+
+**File:** Multiple
+**Type:** Lint
+**Severity:** LOW
+
+**Description:**
+The analyzer reported ~200 info-level issues and 4 warnings. The most common are:
+- `avoid_print`: Numerous print statements exist in production code, especially in the `date_parsing_service`. These should be removed or replaced with a proper logging framework.
+- `unused_element` / `unused_import`: Several files have unused methods or imports that should be cleaned up.
+- `constant_identifier_names`: Constants like `MAX_CHAR_LIMIT` are not in `lowerCamelCase`.
+- `use_super_parameters`: Newer Dart syntax is available for constructors.
+
+**Suggested Fix:**
+Perform a codebase-wide cleanup to address all linter warnings and the most egregious info-level messages (especially `avoid_print`). Enable the "Fix all" action in the IDE for dart-fixable issues.
+
+**Impact:**
+Reduces code clutter, improves readability, and adheres to project style guidelines. Unremoved print statements can also add minor performance overhead.
 
 ---
 
 ## Summary
 
-**Total Issues Found:** [X]
+**Total Issues Found:** 7
 
 **By Severity:**
-- CRITICAL: [count]
-- HIGH: [count]
-- MEDIUM: [count]
-- LOW: [count]
+- CRITICAL: 1
+- HIGH: 2
+- MEDIUM: 2
+- LOW: 2
 
 **By Type:**
-- Build: [count]
-- Lint: [count]
-- UI/Layout: [count]
-- Accessibility: [count]
-- Performance: [count]
-- Test: [count]
+- Build: 0
+- Lint: 3
+- UI/Layout: 0
+- Accessibility: 0
+- Performance: 1
+- Test: 3
 
-**Build Status:** [Clean / Warnings / Errors]
-**Test Status:** [All passing / Some failures / Major failures]
+**Build Status:** Clean
+**Test Status:** Major failures
 
 ---
 
 ## Verdict
 
-**Release Ready:** [YES / NO / YES WITH FIXES]
+**Release Ready:** **NO**
 
 **Must Fix Before Release:**
-- [List blocking issues]
+- **Issue #1:** The `flutter_js` native library issue in the test environment is a blocker. The core feature cannot be validated without passing tests.
+- **Issue #2 & #3:** The other high-severity test failures must be fixed to ensure the UI components work as expected.
+- **Issue #5:** The deprecated API usage should be resolved.
 
 **Can Defer:**
-- [List non-blocking issues]
+- **Issue #4 (Performance):** The performance target can be re-evaluated. As long as the user experience feels responsive due to debouncing, the strict `<1ms` target is not a release blocker.
+- **Issue #6 & #7 (Lint/Comments):** These are important for code health but are not user-facing bugs. They can be addressed in a follow-up technical debt task.
 
 ---
 
 **Review completed by:** Gemini
-**Date:** [YYYY-MM-DD]
-**Build version tested:** [Flutter version, Dart version]
-**Platform tested:** [Linux / Android / iOS]
+**Date:** 2026-01-22
+**Build version tested:** Flutter 3.24.0-pre.13, Dart 3.5.0
+**Platform tested:** Linux

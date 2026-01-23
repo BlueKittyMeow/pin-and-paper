@@ -102,7 +102,7 @@ class SearchResultTile extends StatelessWidget {
       spans.add(TextSpan(
         text: text.substring(match.start, match.end),
         style: TextStyle(
-          backgroundColor: Colors.yellow.withOpacity(0.3),
+          backgroundColor: Colors.yellow.withValues(alpha: 0.3),
           fontWeight: FontWeight.bold,
         ),
       ));
