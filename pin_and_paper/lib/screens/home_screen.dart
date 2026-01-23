@@ -5,8 +5,10 @@ import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../providers/tag_provider.dart'; // Phase 3.6A
 import '../services/tag_service.dart'; // Phase 3.6A
+import '../models/task_sort_mode.dart'; // Phase 3.7.5
 import '../widgets/task_input.dart';
 import '../widgets/task_item.dart';
+import '../widgets/live_clock.dart'; // Phase 3.7.5
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2
 import '../widgets/active_filter_bar.dart'; // Phase 3.6A
 import '../widgets/tag_filter_dialog.dart'; // Phase 3.6A
@@ -36,7 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pin and Paper'),
+        title: const LiveClock(),
+        centerTitle: true,
         elevation: 0,
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -81,6 +84,63 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 tooltip: 'Filter Tasks',
                 onPressed: () => _showFilterDialog(context),
+              );
+            },
+          ),
+          // Phase 3.7.5: Sort button
+          Consumer<TaskProvider>(
+            builder: (context, taskProvider, _) {
+              final isActive = taskProvider.sortMode != TaskSortMode.manual;
+              return PopupMenuButton<TaskSortMode>(
+                icon: Icon(
+                  Icons.sort,
+                  color: isActive
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
+                tooltip: 'Sort Tasks',
+                onSelected: (mode) {
+                  if (mode == taskProvider.sortMode) {
+                    taskProvider.toggleSortReversed();
+                  } else {
+                    taskProvider.setSortMode(mode);
+                  }
+                },
+                itemBuilder: (context) => TaskSortMode.values.map((mode) {
+                  final isSelected = mode == taskProvider.sortMode;
+                  return PopupMenuItem<TaskSortMode>(
+                    value: mode,
+                    child: Row(
+                      children: [
+                        Icon(
+                          mode.icon,
+                          size: 20,
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            mode.displayName,
+                            style: TextStyle(
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          Icon(
+                            taskProvider.sortReversed
+                                ? Icons.arrow_upward
+                                : Icons.arrow_downward,
+                            size: 16,
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               );
             },
           ),

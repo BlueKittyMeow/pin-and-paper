@@ -5,6 +5,7 @@ import 'package:flutter/material.dart'; // Phase 3.6B: For GlobalKey, Scrollable
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/filter_state.dart'; // Phase 3.6A
 import '../models/task.dart';
+import '../models/task_sort_mode.dart'; // Phase 3.7.5
 import '../models/tag.dart'; // Phase 3.5
 import '../models/task_suggestion.dart'; // Phase 2
 import '../providers/tag_provider.dart'; // Phase 3.6A
@@ -70,7 +71,8 @@ class TaskProvider extends ChangeNotifier {
     _treeController = TaskTreeController(
       roots: [],  // Start empty, populated in loadTasks
       childrenProvider: (Task task) {
-        return _tasks.where((t) => t.parentId == task.id).toList();
+        return _tasks.where((t) => t.parentId == task.id).toList()
+          ..sort((a, b) => a.position.compareTo(b.position));
       },
       parentProvider: (Task task) => _findParent(task.parentId),
     );
@@ -101,6 +103,10 @@ class TaskProvider extends ChangeNotifier {
   bool _isReorderMode = false;
   late TaskTreeController _treeController; // Phase 3.6.5: Use custom controller for ID-based state
 
+  // Phase 3.7.5: Sort state
+  TaskSortMode _sortMode = TaskSortMode.manual;
+  bool _sortReversed = false;
+
   // Phase 3.6.5: Tree version counter to force AnimatedTreeView rebuild
   // Incremented when tree structure changes (completion, etc.)
   // Used as ValueKey to force Flutter to recreate the AnimatedTreeView widget
@@ -128,6 +134,10 @@ class TaskProvider extends ChangeNotifier {
   // Phase 3.2: Hierarchy getters
   bool get isReorderMode => _isReorderMode;
   TreeController<Task> get treeController => _treeController;
+
+  // Phase 3.7.5: Sort getters
+  TaskSortMode get sortMode => _sortMode;
+  bool get sortReversed => _sortReversed;
 
   List<Task> get incompleteTasks =>
       _tasks.where((task) => !task.completed).toList();
@@ -276,9 +286,12 @@ class TaskProvider extends ChangeNotifier {
       // Original logic: true root (parentId == null) or orphaned in filtered view
       if (!t.completed) return true; // Incomplete tasks always active
       return _hasIncompleteDescendants(t); // Completed with incomplete children
-    });
+    }).toList();
 
-    _treeController.roots = activeRoots.toList();
+    // Phase 3.7.5: Apply sort to root-level tasks
+    _sortTasks(activeRoots);
+
+    _treeController.roots = activeRoots;
     _treeController.rebuild();
     // Phase 3.6.5: Increment tree version to force AnimatedTreeView widget recreation
     _treeVersion++;
@@ -517,6 +530,13 @@ class TaskProvider extends ChangeNotifier {
   Future<void> loadPreferences() async {
     _hideOldCompleted = await _preferencesService.getHideOldCompleted();
     _hideThresholdHours = await _preferencesService.getHideThresholdHours();
+    // Phase 3.7.5: Load sort preferences
+    final sortModeStr = await _preferencesService.getSortMode();
+    _sortMode = TaskSortMode.values.firstWhere(
+      (m) => m.name == sortModeStr,
+      orElse: () => TaskSortMode.manual,
+    );
+    _sortReversed = await _preferencesService.getSortReversed();
     notifyListeners();
   }
 
@@ -770,11 +790,89 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  // ========== Phase 3.7.5: Sort Methods ==========
+
+  /// Change sort mode for root-level tasks
+  void setSortMode(TaskSortMode mode) {
+    if (_sortMode == mode) return;
+    _sortMode = mode;
+    _sortReversed = false;
+    _preferencesService.setSortMode(mode.name);
+    _preferencesService.setSortReversed(false);
+    _refreshTreeController();
+    notifyListeners();
+  }
+
+  /// Toggle sort direction
+  void toggleSortReversed() {
+    _sortReversed = !_sortReversed;
+    _preferencesService.setSortReversed(_sortReversed);
+    _refreshTreeController();
+    notifyListeners();
+  }
+
+  /// Sort a list of tasks in-place based on current sort mode
+  void _sortTasks(List<Task> tasks) {
+    switch (_sortMode) {
+      case TaskSortMode.manual:
+        tasks.sort((a, b) {
+          final cmp = a.position.compareTo(b.position);
+          return _sortReversed ? -cmp : cmp;
+        });
+
+      case TaskSortMode.recentlyCreated:
+        tasks.sort((a, b) {
+          final cmp = b.createdAt.compareTo(a.createdAt);
+          return _sortReversed ? -cmp : cmp;
+        });
+
+      case TaskSortMode.dueSoonest:
+        tasks.sort((a, b) {
+          if (a.dueDate == null && b.dueDate == null) {
+            return a.position.compareTo(b.position);
+          }
+          if (a.dueDate == null) return 1;
+          if (b.dueDate == null) return -1;
+          final cmp = a.dueDate!.compareTo(b.dueDate!);
+          return _sortReversed ? -cmp : cmp;
+        });
+
+      case TaskSortMode.overdue:
+        final now = DateTime.now();
+        tasks.sort((a, b) {
+          final aOverdue = a.dueDate != null && a.dueDate!.isBefore(now);
+          final bOverdue = b.dueDate != null && b.dueDate!.isBefore(now);
+
+          if (aOverdue && !bOverdue) return _sortReversed ? 1 : -1;
+          if (!aOverdue && bOverdue) return _sortReversed ? -1 : 1;
+
+          if (aOverdue && bOverdue) {
+            final cmp = a.dueDate!.compareTo(b.dueDate!);
+            return _sortReversed ? -cmp : cmp;
+          }
+
+          // Neither overdue: by due date if available, else position
+          if (a.dueDate == null && b.dueDate == null) {
+            return a.position.compareTo(b.position);
+          }
+          if (a.dueDate == null) return 1;
+          if (b.dueDate == null) return -1;
+          final cmp = a.dueDate!.compareTo(b.dueDate!);
+          return _sortReversed ? -cmp : cmp;
+        });
+    }
+  }
+
   // ========== Phase 3.2: Hierarchy Methods ==========
 
   /// Enter/exit reorder mode
   void setReorderMode(bool enabled) {
     _isReorderMode = enabled;
+    if (enabled && _sortMode != TaskSortMode.manual) {
+      _sortMode = TaskSortMode.manual;
+      _sortReversed = false;
+      _refreshTreeController();
+    }
     notifyListeners();
   }
 
