@@ -142,8 +142,14 @@ class NotificationService {
 
   /// Handle foreground notification tap/action
   void _onForegroundAction(NotificationResponse response) {
+    handleNotificationResponse(response);
+  }
+
+  /// Public method to handle a notification response.
+  /// Used both by the foreground handler and for replaying cold-start launches.
+  void handleNotificationResponse(NotificationResponse response) {
     debugPrint(
-        '[NotificationService] Foreground action: ${response.actionId}, payload: ${response.payload}');
+        '[NotificationService] Action: ${response.actionId}, payload: ${response.payload}');
     final taskId = response.payload;
 
     switch (response.actionId) {

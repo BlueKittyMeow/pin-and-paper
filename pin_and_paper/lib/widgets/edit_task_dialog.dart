@@ -681,7 +681,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                           style: Theme.of(context).textTheme.titleSmall),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: _notificationType,
+                        initialValue: _notificationType,
                         decoration: const InputDecoration(
                           labelText: 'Reminder setting',
                           border: OutlineInputBorder(),

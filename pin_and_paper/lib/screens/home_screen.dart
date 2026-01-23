@@ -35,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().loadTasks();
       _setupNotificationCallbacks();
+      _replayLaunchNotification();
     });
   }
 
@@ -74,6 +75,20 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint('[HomeScreen] Failed to cancel reminders: $e');
       }
     };
+  }
+
+  /// Phase 3.8.4: Replay notification that launched the app (cold start).
+  /// Must be called AFTER callbacks are set up so the response is handled.
+  Future<void> _replayLaunchNotification() async {
+    try {
+      final notificationService = NotificationService();
+      final launchResponse = await notificationService.getLaunchNotification();
+      if (launchResponse != null) {
+        notificationService.handleNotificationResponse(launchResponse);
+      }
+    } catch (e) {
+      debugPrint('[HomeScreen] Failed to replay launch notification: $e');
+    }
   }
 
   /// Phase 3.8.4: Show snooze options and schedule snoozed notification

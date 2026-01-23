@@ -266,9 +266,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? 'Notifications enabled'
                           : 'Notifications disabled'),
                       value: _notificationsEnabled,
-                      onChanged: (value) {
-                        setState(() => _notificationsEnabled = value);
-                        _updateNotificationSettings();
+                      onChanged: (value) async {
+                        if (value) {
+                          // Request permission before enabling
+                          final granted =
+                              await PermissionExplanationDialog.show(context);
+                          if (granted) {
+                            setState(() => _notificationsEnabled = true);
+                            _updateNotificationSettings();
+                          }
+                          // If denied, toggle stays off
+                        } else {
+                          setState(() => _notificationsEnabled = false);
+                          _updateNotificationSettings();
+                        }
                       },
                       contentPadding: EdgeInsets.zero,
                     ),

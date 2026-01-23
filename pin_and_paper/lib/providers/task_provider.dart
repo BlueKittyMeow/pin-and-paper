@@ -856,6 +856,9 @@ class TaskProvider extends ChangeNotifier {
 
       // 4. Phase 3.8: Handle custom reminders and reschedule
       try {
+        // Cancel old notifications FIRST (reads old DB reminders for IDs)
+        await _reminderService.cancelReminders(taskId);
+
         // Persist custom reminder types if applicable
         if (notificationType == 'custom' && reminderTypes != null) {
           final reminders = reminderTypes.map((type) => TaskReminder(
@@ -874,8 +877,7 @@ class TaskProvider extends ChangeNotifier {
           await _reminderService.deleteReminders(taskId);
         }
 
-        // Cancel old notifications and reschedule
-        await _reminderService.cancelReminders(taskId);
+        // Schedule new notifications based on updated task
         if (updatedTask.dueDate != null &&
             updatedTask.notificationType != 'none') {
           await _reminderService.scheduleReminders(updatedTask);

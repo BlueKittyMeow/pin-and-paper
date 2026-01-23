@@ -32,6 +32,10 @@ class ReminderService {
   /// Prevents per-task scheduling during bulk rescheduleAll()
   bool _isRescheduling = false;
 
+  /// Prevents checkMissed() from spamming overdue notifications on repeated app starts.
+  /// Within a session, only fires once per 5-minute window.
+  DateTime? _lastMissedCheck;
+
   // --- CRUD for task_reminders table ---
 
   /// Get all reminders for a task
@@ -108,6 +112,10 @@ class ReminderService {
     final overdueId =
         '${taskId}_global_overdue'.hashCode.abs() % (1 << 31);
     await _notificationService.cancel(overdueId);
+
+    // Cancel any snoozed notification for this task
+    final snoozeId = '${taskId}_snooze'.hashCode.abs() % (1 << 31);
+    await _notificationService.cancel(snoozeId);
   }
 
   /// Reschedule all notifications (timezone change, settings change, app resume).
@@ -149,7 +157,9 @@ class ReminderService {
       Task task, UserSettings settings) async {
     if (task.dueDate == null ||
         task.completed ||
-        task.notificationType == 'none') return;
+        task.notificationType == 'none') {
+      return;
+    }
 
     final reminders = await _getEffectiveReminders(task, settings);
     for (final reminder in reminders) {
@@ -171,12 +181,23 @@ class ReminderService {
 
   /// Check for missed notifications (Linux fallback, app restart).
   /// Respects user's end-of-day setting for all-day task overdue detection.
-  /// Only shows overdue alerts if NOT in quiet hours.
+  /// Only shows overdue alerts if notifyWhenOverdue is enabled and NOT in quiet hours.
   Future<List<Task>> checkMissed() async {
     if (!_notificationService.isInitialized) return [];
     final settings = await _userSettingsService.getUserSettings();
     if (!settings.notificationsEnabled) return []; // Master toggle off
+    if (!settings.notifyWhenOverdue) return []; // Overdue alerts disabled
     final now = DateTime.now();
+
+    // Deduplicate: skip if checked within the last 5 minutes
+    if (_lastMissedCheck != null &&
+        now.difference(_lastMissedCheck!).inMinutes < 5) {
+      return [];
+    }
+    _lastMissedCheck = now;
+
+    // Don't show immediate overdue notifications during quiet hours
+    if (_isCurrentlyInQuietHours(now, settings)) return [];
 
     final db = await DatabaseService.instance.database;
     // Query all active tasks with due dates and notifications enabled
@@ -384,6 +405,38 @@ class ReminderService {
     return reminders;
   }
 
+  /// Check if the given time falls within quiet hours.
+  /// Used by checkMissed() to suppress immediate overdue notifications.
+  bool _isCurrentlyInQuietHours(DateTime now, UserSettings settings) {
+    if (!settings.quietHoursEnabled) return false;
+    if (settings.quietHoursStart == null || settings.quietHoursEnd == null) {
+      return false;
+    }
+
+    final timeMinutes = now.hour * 60 + now.minute;
+    final start = settings.quietHoursStart!;
+    final end = settings.quietHoursEnd!;
+
+    // Check day-of-week (same cross-midnight logic as _adjustForQuietHours)
+    int dayOfWeek = now.weekday - 1; // Convert to 0=Mon format
+    if (start > end && timeMinutes < end) {
+      dayOfWeek = (dayOfWeek - 1 + 7) % 7;
+    }
+    final activeDays = settings.quietHoursDays
+        .split(',')
+        .where((s) => s.trim().isNotEmpty)
+        .map((s) => int.tryParse(s.trim()))
+        .whereType<int>()
+        .toSet();
+    if (activeDays.isEmpty || !activeDays.contains(dayOfWeek)) return false;
+
+    if (start < end) {
+      return timeMinutes >= start && timeMinutes < end;
+    } else {
+      return timeMinutes >= start || timeMinutes < end;
+    }
+  }
+
   /// Adjust notification time for quiet hours.
   /// NOTE: Quiet hours are highly user-configurable. All time boundaries
   /// flow from UserSettings - no hardcoded assumptions about day boundaries.
@@ -408,9 +461,13 @@ class ReminderService {
     if (start > end && timeMinutes < end) {
       dayOfWeek = (dayOfWeek - 1 + 7) % 7; // Check previous day
     }
-    final activeDays =
-        settings.quietHoursDays.split(',').map(int.parse).toSet();
-    if (!activeDays.contains(dayOfWeek)) return time;
+    final activeDays = settings.quietHoursDays
+        .split(',')
+        .where((s) => s.trim().isNotEmpty)
+        .map((s) => int.tryParse(s.trim()))
+        .whereType<int>()
+        .toSet();
+    if (activeDays.isEmpty || !activeDays.contains(dayOfWeek)) return time;
 
     bool isInQuietHours;
     if (start < end) {
