@@ -7,7 +7,12 @@ import '../providers/task_provider.dart';
 import '../services/settings_service.dart';
 import '../services/api_usage_service.dart';
 import '../services/database_service.dart';
+import '../models/user_settings.dart'; // Phase 3.8: For Value<T> in copyWith
+import '../services/notification_service.dart'; // Phase 3.8
+import '../services/user_settings_service.dart'; // Phase 3.8
+import '../services/reminder_service.dart'; // Phase 3.8
 import '../utils/constants.dart';
+import '../widgets/permission_explanation_dialog.dart'; // Phase 3.8
 import 'recently_deleted_screen.dart'; // Phase 3.3
 
 class SettingsScreen extends StatefulWidget {
@@ -30,11 +35,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Bug fix: Cache usage stats future to prevent re-running query on every rebuild
   late Future<UsageStats> _usageStatsFuture;
 
+  // Phase 3.8: Notification settings state
+  final UserSettingsService _userSettingsService = UserSettingsService();
+  bool _notificationsEnabled = true;
+  bool _notifyWhenOverdue = true;
+  bool _quietHoursEnabled = false;
+  int _quietHoursStart = 1320; // 22:00 in minutes
+  int _quietHoursEnd = 420; // 07:00 in minutes
+  Set<int> _quietHoursDays = {0, 1, 2, 3, 4, 5, 6}; // All days
+  Set<String> _defaultReminderTypes = {'at_time'};
+
   @override
   void initState() {
     super.initState();
     _loadApiKey();
     _usageStatsFuture = _apiUsageService.getStats();
+    _loadNotificationSettings(); // Phase 3.8
   }
 
   @override
@@ -223,6 +239,150 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               },
             ),
+            const SizedBox(height: 32),
+
+            // Phase 3.8: Notifications Section
+            Text(
+              'Notifications',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Master notifications toggle
+                    SwitchListTile(
+                      secondary: Icon(
+                        _notificationsEnabled
+                            ? Icons.notifications_active
+                            : Icons.notifications_off,
+                        color: _notificationsEnabled ? Colors.green : Colors.red,
+                      ),
+                      title: Text(_notificationsEnabled
+                          ? 'Notifications enabled'
+                          : 'Notifications disabled'),
+                      value: _notificationsEnabled,
+                      onChanged: (value) async {
+                        if (value) {
+                          // Request permission before enabling
+                          final granted =
+                              await PermissionExplanationDialog.show(context);
+                          if (granted) {
+                            setState(() => _notificationsEnabled = true);
+                            _updateNotificationSettings();
+                          }
+                          // If denied, toggle stays off
+                        } else {
+                          setState(() => _notificationsEnabled = false);
+                          _updateNotificationSettings();
+                        }
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+
+                    if (_notificationsEnabled) ...[
+                    const Divider(),
+
+                    // Default reminder timing
+                    Text('Default reminders',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        _buildDefaultReminderChip('at_time', 'At due time'),
+                        _buildDefaultReminderChip('before_1h', '1 hour before'),
+                        _buildDefaultReminderChip('before_1d', '1 day before'),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Notify when overdue (global)
+                    SwitchListTile(
+                      title: const Text('Notify when overdue'),
+                      subtitle: const Text(
+                          'Get reminded when tasks pass their due date'),
+                      value: _notifyWhenOverdue,
+                      onChanged: (value) {
+                        setState(() => _notifyWhenOverdue = value);
+                        _updateNotificationSettings();
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+
+                    const Divider(),
+
+                    // Quiet hours
+                    SwitchListTile(
+                      title: const Text('Quiet hours'),
+                      subtitle: const Text(
+                          'Delay notifications during set times'),
+                      value: _quietHoursEnabled,
+                      onChanged: (value) {
+                        setState(() => _quietHoursEnabled = value);
+                        _updateNotificationSettings();
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+
+                    if (_quietHoursEnabled) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ListTile(
+                              title: const Text('Start'),
+                              subtitle: Text(
+                                  _formatMinutesFromMidnight(_quietHoursStart)),
+                              onTap: () =>
+                                  _pickQuietHoursTime(isStart: true),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          Expanded(
+                            child: ListTile(
+                              title: const Text('End'),
+                              subtitle: Text(
+                                  _formatMinutesFromMidnight(_quietHoursEnd)),
+                              onTap: () =>
+                                  _pickQuietHoursTime(isStart: false),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 4,
+                        children: List.generate(7, (i) => _buildDayChip(i)),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    // Test notification button
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await NotificationService().showImmediate(
+                          id: 0,
+                          title: 'Test Notification',
+                          body:
+                              'Pin and Paper notifications are working!',
+                        );
+                      },
+                      icon: const Icon(Icons.notifications_none, size: 18),
+                      label: const Text('Send Test Notification'),
+                    ),
+                    ], // end if (_notificationsEnabled)
+                  ],
+                ),
+              ),
+            ),
+
             const SizedBox(height: 32),
 
             // Data Management Section (Phase 3.3)
@@ -609,5 +769,119 @@ Package Name: ${info.packageName}
     if (mounted) {
       _showSnackBar('Debug info copied to clipboard');
     }
+  }
+
+  // ========== Phase 3.8: Notification Settings ==========
+
+  Future<void> _loadNotificationSettings() async {
+    try {
+      final settings = await _userSettingsService.getUserSettings();
+      if (!mounted) return;
+      setState(() {
+        _notificationsEnabled = settings.notificationsEnabled;
+        _notifyWhenOverdue = settings.notifyWhenOverdue;
+        _quietHoursEnabled = settings.quietHoursEnabled;
+        _quietHoursStart = settings.quietHoursStart ?? 1320;
+        _quietHoursEnd = settings.quietHoursEnd ?? 420;
+        _quietHoursDays = settings.quietHoursDays
+            .split(',')
+            .where((s) => s.isNotEmpty)
+            .map(int.parse)
+            .toSet();
+        _defaultReminderTypes = settings.defaultReminderTypes
+            .split(',')
+            .where((s) => s.trim().isNotEmpty)
+            .map((s) => s.trim())
+            .toSet();
+      });
+    } catch (e) {
+      debugPrint('[SettingsScreen] Failed to load notification settings: $e');
+    }
+  }
+
+  Future<void> _updateNotificationSettings() async {
+    try {
+      final settings = await _userSettingsService.getUserSettings();
+      final updated = settings.copyWith(
+        notificationsEnabled: _notificationsEnabled,
+        notifyWhenOverdue: _notifyWhenOverdue,
+        quietHoursEnabled: _quietHoursEnabled,
+        quietHoursStart: Value(_quietHoursStart),
+        quietHoursEnd: Value(_quietHoursEnd),
+        quietHoursDays: _quietHoursDays.join(','),
+        defaultReminderTypes: _defaultReminderTypes.join(','),
+      );
+      await _userSettingsService.updateUserSettings(updated);
+      // Reschedule all notifications with new settings
+      await ReminderService().rescheduleAll();
+    } catch (e) {
+      debugPrint('[SettingsScreen] Failed to update notification settings: $e');
+    }
+  }
+
+  Future<void> _pickQuietHoursTime({required bool isStart}) async {
+    final currentMinutes = isStart ? _quietHoursStart : _quietHoursEnd;
+    final initial = TimeOfDay(
+      hour: currentMinutes ~/ 60,
+      minute: currentMinutes % 60,
+    );
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked == null) return;
+    final minutes = picked.hour * 60 + picked.minute;
+    setState(() {
+      if (isStart) {
+        _quietHoursStart = minutes;
+      } else {
+        _quietHoursEnd = minutes;
+      }
+    });
+    _updateNotificationSettings();
+  }
+
+  String _formatMinutesFromMidnight(int minutes) {
+    final hour = minutes ~/ 60;
+    final minute = minutes % 60;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  Widget _buildDefaultReminderChip(String type, String label) {
+    final selected = _defaultReminderTypes.contains(type);
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (value) {
+        setState(() {
+          if (value) {
+            _defaultReminderTypes.add(type);
+          } else {
+            _defaultReminderTypes.remove(type);
+          }
+        });
+        _updateNotificationSettings();
+      },
+    );
+  }
+
+  Widget _buildDayChip(int dayIndex) {
+    const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final selected = _quietHoursDays.contains(dayIndex);
+    return FilterChip(
+      label: Text(dayLabels[dayIndex]),
+      selected: selected,
+      onSelected: (value) {
+        setState(() {
+          if (value) {
+            _quietHoursDays.add(dayIndex);
+          } else {
+            _quietHoursDays.remove(dayIndex);
+          }
+        });
+        _updateNotificationSettings();
+      },
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+    );
   }
 }

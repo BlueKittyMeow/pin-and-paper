@@ -311,6 +311,43 @@ Phase X.Y complete with [key achievement summary]"
 
 ---
 
+### 4.4 Bump App Version Numbers
+
+**Purpose:** Keep the app's displayed version in sync with the current phase.
+
+**Files to update:**
+
+1. **`pin_and_paper/pubspec.yaml`** (search for `version:`):
+   - [ ] Update `MAJOR.MINOR` to match completed phase (e.g., Phase 3.7 → `3.7.0`)
+   - [ ] Increment build number (`+X` → `+X+1`)
+   - [ ] Update version comment to reference current phase
+
+2. **`pin_and_paper/lib/utils/constants.dart`** (search for `appVersion`):
+   - [ ] Update `appVersion` string to match pubspec (without build number)
+   - [ ] Update comment to reference current phase
+   - [ ] Update `databaseVersion` ONLY if schema changed this phase
+
+**Example:**
+```yaml
+# pubspec.yaml
+# 3.7.0 = Phase 3.7 complete (NL date parsing)
+# +5 = Build number (increment with each build)
+version: 3.7.0+5
+```
+```dart
+// constants.dart
+static const String appVersion = '3.7.0'; // Phase 3.7: NL Date Parsing
+```
+
+**Why this matters:**
+- Settings screen shows `appVersion` to users
+- Out-of-date versions cause confusion during testing
+- Build number must increase monotonically for app stores
+
+**Confirm:** "✅ Version numbers bumped to Phase X.Y"
+
+---
+
 ### 4.5 Harvest Future Features → FEATURE_REQUESTS.md
 
 **Purpose:** Capture any deferred features, future enhancements, or scattered "nice to have" items before archiving phase docs.

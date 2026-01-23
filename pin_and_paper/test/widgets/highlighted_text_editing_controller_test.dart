@@ -248,14 +248,41 @@ void main() {
       );
     });
 
-    // Note: onTapHighlight is scaffolded but not wired via TextSpan recognizer.
-    // Tap-to-edit is handled by GestureDetector in task_item.dart instead.
-    // This test is skipped because the controller intentionally omits the
-    // TapGestureRecognizer (conflicts with TextField gesture handling).
-    testWidgets('onTapHighlight callback is invoked', (tester) async {
-      // Intentionally skipped - tap handled by GestureDetector in task_item.dart,
-      // not via TextSpan recognizer in this controller.
-    }, skip: true); // onTapHighlight not wired via TextSpan - tap handled by task_item GestureDetector
+    testWidgets('highlighted TextSpan has no recognizer (tap handled by TextField.onTap)', (tester) async {
+      // Skip on web (highlighting disabled)
+      if (kIsWeb) return;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                final controller = HighlightedTextEditingController(
+                  text: 'meet tomorrow',
+                );
+                controller.setHighlight(const TextRange(start: 5, end: 13));
+
+                final textSpan = controller.buildTextSpan(
+                  context: context,
+                  style: const TextStyle(color: Colors.black),
+                  withComposing: false,
+                );
+
+                // Verify highlight renders without a recognizer
+                // (TapGestureRecognizer causes assertion error in editable TextFields)
+                final children = textSpan.children!;
+                final highlightSpan = children[1] as TextSpan;
+                expect(highlightSpan.text, 'tomorrow');
+                expect(highlightSpan.recognizer, isNull);
+
+                controller.dispose();
+                return Container();
+              },
+            ),
+          ),
+        ),
+      );
+    });
 
     testWidgets('handles highlight at start of text', (tester) async {
       // Skip on web (highlighting disabled)

@@ -111,6 +111,19 @@ class TaskService {
     return maps.map((map) => Task.fromMap(map)).toList();
   }
 
+  /// Phase 3.8: Get a single task by ID
+  /// Returns null if the task doesn't exist or is soft-deleted
+  Future<Task?> getTaskById(String taskId) async {
+    final db = await _dbService.database;
+    final maps = await db.query(
+      AppConstants.tasksTable,
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [taskId],
+    );
+    if (maps.isEmpty) return null;
+    return Task.fromMap(maps.first);
+  }
+
   // Phase 3.2: Get all tasks with hierarchy information
   // Returns flat list ordered by parent_id and position
   // Uses recursive CTE to compute depth dynamically
@@ -498,6 +511,7 @@ class TaskService {
     DateTime? dueDate,
     bool isAllDay = true,
     String? notes,
+    String? notificationType, // Phase 3.8
   }) async {
     final db = await _dbService.database;
     final trimmedTitle = title.trim();
@@ -521,14 +535,19 @@ class TaskService {
     final originalTask = Task.fromMap(maps.first);
 
     // Perform the update
+    final updateMap = <String, dynamic>{
+      'title': trimmedTitle,
+      'due_date': dueDate?.millisecondsSinceEpoch,
+      'is_all_day': isAllDay ? 1 : 0,
+      'notes': notes,
+    };
+    if (notificationType != null) {
+      updateMap['notification_type'] = notificationType;
+    }
+
     await db.update(
       AppConstants.tasksTable,
-      {
-        'title': trimmedTitle,
-        'due_date': dueDate?.millisecondsSinceEpoch,
-        'is_all_day': isAllDay ? 1 : 0,
-        'notes': notes,
-      },
+      updateMap,
       where: 'id = ?',
       whereArgs: [taskId],
     );
@@ -539,6 +558,7 @@ class TaskService {
       dueDate: dueDate,
       isAllDay: isAllDay,
       notes: notes,
+      notificationType: notificationType ?? originalTask.notificationType,
     );
   }
 

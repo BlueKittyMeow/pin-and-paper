@@ -14,6 +14,8 @@ import '../services/tag_service.dart'; // Phase 3.5
 import '../services/database_service.dart'; // Phase 3.6A: For database access
 import '../services/date_parsing_service.dart'; // Phase 3.7: For Today Window
 import '../services/preferences_service.dart'; // Phase 2 Stretch
+import '../services/reminder_service.dart'; // Phase 3.8: Notification scheduling
+import '../models/task_reminder.dart'; // Phase 3.8: For custom reminder types
 import '../utils/constants.dart'; // Phase 3.6A: For AppConstants table names
 import '../utils/task_tree_controller.dart'; // Phase 3.6.5: Custom TreeController fix
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
@@ -57,6 +59,7 @@ class TaskProvider extends ChangeNotifier {
   final PreferencesService _preferencesService;
   final TagService _tagService; // Phase 3.5
   final TagProvider _tagProvider; // Phase 3.6A
+  final ReminderService _reminderService = ReminderService(); // Phase 3.8
 
   TaskProvider({
     TaskService? taskService,
@@ -608,6 +611,15 @@ class TaskProvider extends ChangeNotifier {
       _tasks.insert(0, newTask); // Add to beginning of list
       _categorizeTasks(); // Keep derived task buckets in sync for UI
 
+      // Phase 3.8: Schedule notifications if task has due date and notifications enabled
+      if (newTask.dueDate != null && newTask.notificationType != 'none') {
+        try {
+          await _reminderService.scheduleReminders(newTask);
+        } catch (e) {
+          debugPrint('[TaskProvider] Failed to schedule reminders: $e');
+        }
+      }
+
       // Phase 3.2: Refresh TreeController with new task
       _refreshTreeController();
 
@@ -632,6 +644,17 @@ class TaskProvider extends ChangeNotifier {
       _tasks.insertAll(0, newTasks);
       // CRITICAL: Re-categorize to populate activeTasks, recentlyCompletedTasks, etc.
       _categorizeTasks();
+
+      // Phase 3.8: Schedule notifications for tasks with due dates
+      for (final task in newTasks) {
+        if (task.dueDate != null && task.notificationType != 'none') {
+          try {
+            await _reminderService.scheduleReminders(task);
+          } catch (e) {
+            debugPrint('[TaskProvider] Failed to schedule reminders for bulk task: $e');
+          }
+        }
+      }
 
       // Phase 3.2: Refresh TreeController with new tasks
       _refreshTreeController();
@@ -660,6 +683,22 @@ class TaskProvider extends ChangeNotifier {
     try {
       final wasCompleted = task.completed;
       final updatedTask = await _taskService.toggleTaskCompletion(task);
+
+      // Phase 3.8: Update notifications based on completion state
+      try {
+        if (!wasCompleted && updatedTask.completed) {
+          // Task completed - cancel all reminders
+          await _reminderService.cancelReminders(task.id);
+        } else if (wasCompleted && !updatedTask.completed) {
+          // Task uncompleted - reschedule if applicable
+          if (updatedTask.dueDate != null &&
+              updatedTask.notificationType != 'none') {
+            await _reminderService.scheduleReminders(updatedTask);
+          }
+        }
+      } catch (e) {
+        debugPrint('[TaskProvider] Failed to update reminders on toggle: $e');
+      }
 
       // Update in local list
       final index = _tasks.indexWhere((t) => t.id == task.id);
@@ -766,6 +805,9 @@ class TaskProvider extends ChangeNotifier {
     bool isAllDay = true,
     String? notes,
     required List<String> tagIds,
+    String? notificationType,    // Phase 3.8
+    List<String>? reminderTypes, // Phase 3.8: custom reminder types
+    bool? notifyIfOverdue,       // Phase 3.8: per-task overdue toggle
   }) async {
     _errorMessage = null;
 
@@ -781,6 +823,7 @@ class TaskProvider extends ChangeNotifier {
         dueDate: dueDate,
         isAllDay: isAllDay,
         notes: notes,
+        notificationType: notificationType,
       );
 
       // 2. Update tags
@@ -811,7 +854,39 @@ class TaskProvider extends ChangeNotifier {
         _refreshTreeController();
       }
 
-      // 4. Refresh tags cache
+      // 4. Phase 3.8: Handle custom reminders and reschedule
+      try {
+        // Cancel old notifications FIRST (reads old DB reminders for IDs)
+        await _reminderService.cancelReminders(taskId);
+
+        // Persist custom reminder types if applicable
+        if (notificationType == 'custom' && reminderTypes != null) {
+          final reminders = reminderTypes.map((type) => TaskReminder(
+            taskId: taskId,
+            reminderType: type,
+          )).toList();
+          if (notifyIfOverdue == true) {
+            reminders.add(TaskReminder(
+              taskId: taskId,
+              reminderType: ReminderType.overdue,
+            ));
+          }
+          await _reminderService.setReminders(taskId, reminders);
+        } else if (notificationType != null && notificationType != 'custom') {
+          // Switching away from custom - clear custom reminders
+          await _reminderService.deleteReminders(taskId);
+        }
+
+        // Schedule new notifications based on updated task
+        if (updatedTask.dueDate != null &&
+            updatedTask.notificationType != 'none') {
+          await _reminderService.scheduleReminders(updatedTask);
+        }
+      } catch (e) {
+        debugPrint('[TaskProvider] Failed to update reminders: $e');
+      }
+
+      // 5. Refresh tags cache
       await refreshTags();
 
       notifyListeners();
@@ -1061,6 +1136,25 @@ class TaskProvider extends ChangeNotifier {
         if (!confirmed) return false;
       }
 
+      // Phase 3.8: Cancel reminders for task and all descendants before delete
+      try {
+        final idsToCancel = <String>[taskId];
+        // Collect all descendant IDs (breadth-first)
+        for (var i = 0; i < idsToCancel.length; i++) {
+          final parentId = idsToCancel[i];
+          for (final t in _tasks) {
+            if (t.parentId == parentId && !idsToCancel.contains(t.id)) {
+              idsToCancel.add(t.id);
+            }
+          }
+        }
+        for (final id in idsToCancel) {
+          await _reminderService.cancelReminders(id);
+        }
+      } catch (e) {
+        debugPrint('[TaskProvider] Failed to cancel reminders on delete: $e');
+      }
+
       // Soft delete task and all descendants (Phase 3.3)
       final deletedCount = await _taskService.softDeleteTask(taskId);
 
@@ -1092,6 +1186,19 @@ class TaskProvider extends ChangeNotifier {
 
       // Reload tasks to show restored tasks
       await loadTasks();
+
+      // Phase 3.8: Reschedule reminders for restored task if applicable
+      try {
+        final restoredTask = await _taskService.getTaskById(taskId);
+        if (restoredTask != null &&
+            restoredTask.dueDate != null &&
+            restoredTask.dueDate!.isAfter(DateTime.now()) &&
+            restoredTask.notificationType != 'none') {
+          await _reminderService.scheduleReminders(restoredTask);
+        }
+      } catch (e) {
+        debugPrint('[TaskProvider] Failed to reschedule on restore: $e');
+      }
 
       debugPrint('Restored $restoredCount task(s)');
       return true;

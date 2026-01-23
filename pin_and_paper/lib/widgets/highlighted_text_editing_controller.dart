@@ -7,20 +7,20 @@ import 'package:flutter/material.dart';
 ///
 /// Key features:
 /// - Inline text highlighting with custom styles
-/// - Tap gesture on highlighted text
 /// - Web platform workaround (highlighting disabled due to cursor issues)
 /// - Maintains full text editing capabilities
 ///
-/// Implementation note:
-/// This uses buildTextSpan() override, which is the correct Flutter pattern
-/// for inline highlighting. RichText widget is NOT editable and cannot be used.
+/// Implementation notes:
+/// - This uses buildTextSpan() override, which is the correct Flutter pattern
+///   for inline highlighting. RichText widget is NOT editable and cannot be used.
+/// - TapGestureRecognizer CANNOT be used on TextSpans in editable TextFields.
+///   Flutter asserts: 'readOnly && !obscureText' (editable.dart:1346).
+///   Tap detection is handled via TextField.onTap + cursor position check instead.
 class HighlightedTextEditingController extends TextEditingController {
   TextRange? highlightRange;
-  VoidCallback? onTapHighlight;
 
   HighlightedTextEditingController({
     String? text,
-    this.onTapHighlight,
   }) : super(text: text);
 
   @override
@@ -54,8 +54,8 @@ class HighlightedTextEditingController extends TextEditingController {
           TextSpan(text: text.substring(0, range.start)),
 
         // Highlighted text (visual only)
-        // Tap-to-edit handled by GestureDetector in task_item.dart
-        // (TapGestureRecognizer on TextSpan conflicts with TextField gesture handling)
+        // Tap detection is handled by TextField.onTap in task_input.dart
+        // and edit_task_dialog.dart (cursor position check against highlightRange)
         TextSpan(
           text: text.substring(range.start, range.end),
           style: baseStyle.copyWith(
@@ -86,12 +86,5 @@ class HighlightedTextEditingController extends TextEditingController {
       highlightRange = null;
       notifyListeners();
     }
-  }
-
-  @override
-  void dispose() {
-    // Note: TapGestureRecognizer is automatically disposed by Flutter
-    // when TextSpan is rebuilt, so no manual cleanup needed
-    super.dispose();
   }
 }

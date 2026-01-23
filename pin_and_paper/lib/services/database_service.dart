@@ -121,6 +121,13 @@ class DatabaseService {
         default_notification_hour INTEGER DEFAULT 9,
         default_notification_minute INTEGER DEFAULT 0,
         voice_smart_punctuation INTEGER DEFAULT 1,
+        notify_when_overdue INTEGER DEFAULT 0,
+        quiet_hours_enabled INTEGER DEFAULT 0,
+        quiet_hours_start INTEGER DEFAULT NULL,
+        quiet_hours_end INTEGER DEFAULT NULL,
+        quiet_hours_days TEXT DEFAULT '0,1,2,3,4,5,6',
+        default_reminder_types TEXT DEFAULT 'at_time',
+        notifications_enabled INTEGER DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -219,6 +226,18 @@ class DatabaseService {
       )
     ''');
 
+    // Phase 3.8: Task reminders
+    await db.execute('''
+      CREATE TABLE ${AppConstants.taskRemindersTable} (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        reminder_type TEXT NOT NULL,
+        offset_minutes INTEGER,
+        enabled INTEGER DEFAULT 1,
+        FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+      )
+    ''');
+
     // ===========================================
     // 4. CREATE INDEXES (12 total, matching _migrateToV4)
     // ===========================================
@@ -306,6 +325,14 @@ class DatabaseService {
       CREATE INDEX idx_api_usage_timestamp ON ${AppConstants.apiUsageLogTable}(timestamp DESC)
     ''');
 
+    // Phase 3.8: Task reminders indexes
+    await db.execute('''
+      CREATE INDEX idx_task_reminders_task ON ${AppConstants.taskRemindersTable}(task_id)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_task_reminders_type ON ${AppConstants.taskRemindersTable}(task_id, reminder_type)
+    ''');
+
     // ===========================================
     // 5. SEED USER SETTINGS TABLE
     // ===========================================
@@ -328,6 +355,13 @@ class DatabaseService {
       'auto_complete_children': 'prompt',
       'default_notification_hour': 9,
       'default_notification_minute': 0,
+      'notify_when_overdue': 0,
+      'quiet_hours_enabled': 0,
+      'quiet_hours_start': null,
+      'quiet_hours_end': null,
+      'quiet_hours_days': '0,1,2,3,4,5,6',
+      'default_reminder_types': 'at_time',
+      'notifications_enabled': 1,
       'voice_smart_punctuation': 1,
       'created_at': now,
       'updated_at': now,
@@ -398,6 +432,16 @@ class DatabaseService {
     // Migrate from version 7 to 8: Phase 3.6.5 - Edit Task Modal Rework
     if (oldVersion < 8) {
       await _migrateToV8(db);
+    }
+
+    // Migrate from version 8 to 9: Phase 3.8 - Due Date Notifications
+    if (oldVersion < 9) {
+      await _migrateToV9(db);
+    }
+
+    // Migrate from version 9 to 10: Phase 3.8 - Master notifications toggle
+    if (oldVersion < 10) {
+      await _migrateToV10(db);
     }
   }
 
@@ -962,6 +1006,103 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v8 successfully');
+  }
+
+  /// Phase 3.8 Migration: v8 → v9
+  ///
+  /// Adds:
+  /// - task_reminders table (per-task custom reminders)
+  /// - Notification settings columns on user_settings
+  /// - Backfills existing custom notification tasks to task_reminders
+  Future<void> _migrateToV9(Database db) async {
+    debugPrint('Migrating database from v8 to v9: Due Date Notifications');
+
+    await db.transaction((txn) async {
+      // ===========================================
+      // 1. CREATE TASK_REMINDERS TABLE
+      // ===========================================
+      await txn.execute('''
+        CREATE TABLE ${AppConstants.taskRemindersTable} (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          reminder_type TEXT NOT NULL,
+          offset_minutes INTEGER,
+          enabled INTEGER DEFAULT 1,
+          FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+        )
+      ''');
+
+      // Performance indexes
+      await txn.execute('''
+        CREATE INDEX idx_task_reminders_task
+        ON ${AppConstants.taskRemindersTable}(task_id)
+      ''');
+      await txn.execute('''
+        CREATE INDEX idx_task_reminders_type
+        ON ${AppConstants.taskRemindersTable}(task_id, reminder_type)
+      ''');
+
+      // ===========================================
+      // 2. ADD NOTIFICATION SETTINGS TO USER_SETTINGS
+      // ===========================================
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.userSettingsTable}
+        ADD COLUMN notify_when_overdue INTEGER DEFAULT 0
+      ''');
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.userSettingsTable}
+        ADD COLUMN quiet_hours_enabled INTEGER DEFAULT 0
+      ''');
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.userSettingsTable}
+        ADD COLUMN quiet_hours_start INTEGER DEFAULT NULL
+      ''');
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.userSettingsTable}
+        ADD COLUMN quiet_hours_end INTEGER DEFAULT NULL
+      ''');
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.userSettingsTable}
+        ADD COLUMN quiet_hours_days TEXT DEFAULT '0,1,2,3,4,5,6'
+      ''');
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.userSettingsTable}
+        ADD COLUMN default_reminder_types TEXT DEFAULT 'at_time'
+      ''');
+
+      // ===========================================
+      // 3. BACKFILL EXISTING CUSTOM NOTIFICATION TASKS
+      // ===========================================
+      final customTasks = await txn.query(
+        AppConstants.tasksTable,
+        where: "notification_type = 'custom' AND notification_time IS NOT NULL",
+      );
+      for (final task in customTasks) {
+        final taskId = task['id'] as String;
+        await txn.insert(AppConstants.taskRemindersTable, {
+          'id': '${taskId}_at_time_migrated',
+          'task_id': taskId,
+          'reminder_type': 'at_time',
+          'offset_minutes': null,
+          'enabled': 1,
+        });
+      }
+    });
+
+    debugPrint('✅ Database migrated to v9 successfully');
+  }
+
+  /// Phase 3.8 Migration: v9 → v10
+  ///
+  /// Adds:
+  /// - notifications_enabled column (master toggle for all notifications)
+  Future<void> _migrateToV10(Database db) async {
+    debugPrint('Migrating database from v9 to v10: Notifications master toggle');
+    await db.execute('''
+      ALTER TABLE ${AppConstants.userSettingsTable}
+      ADD COLUMN notifications_enabled INTEGER DEFAULT 1
+    ''');
+    debugPrint('✅ Database migrated to v10 successfully');
   }
 
   Future<void> close() async {

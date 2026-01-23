@@ -79,7 +79,7 @@ class TaskItem extends StatelessWidget {
     try {
       final taskProvider = context.read<TaskProvider>();
 
-      // 1. Update task basic fields (title, dueDate, isAllDay, notes, tags)
+      // 1. Update task basic fields (title, dueDate, isAllDay, notes, tags, notifications)
       await taskProvider.updateTask(
         taskId: task.id,
         title: result['title'] as String,
@@ -87,6 +87,10 @@ class TaskItem extends StatelessWidget {
         isAllDay: (result['isAllDay'] as bool?) ?? true,
         notes: result['notes'] as String?,
         tagIds: (result['tagIds'] as List<String>?) ?? [],
+        notificationType: result['notificationType'] as String?,
+        reminderTypes: (result['reminderTypes'] as List<dynamic>?)
+            ?.cast<String>(),
+        notifyIfOverdue: result['notifyIfOverdue'] as bool?,
       );
 
       // 2. Handle parent changes (Day 4: Uses validated changeTaskParent)
