@@ -43,6 +43,12 @@ If you want to reference another agent's work:
 
 **This is YOUR document. Other agents have their own documents.**
 
+**📝 RECORD ONLY - DO NOT MODIFY CODE 📝**
+- Your job is to **record findings to THIS file only**
+- Do NOT make any changes to the codebase (no editing source files, tests, configs, etc.)
+- Do NOT create, modify, or delete any files outside of this document
+- Claude will review your findings and implement fixes separately
+
 ---
 
 ### Review Focus Areas

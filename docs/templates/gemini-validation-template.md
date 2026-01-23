@@ -29,6 +29,12 @@ Unlike the findings doc (used during implementation for ongoing bug hunting), th
 **NEVER SIMULATE OTHER AGENTS' RESPONSES.**
 Only document YOUR OWN findings here.
 
+**📝 RECORD ONLY - DO NOT MODIFY CODE 📝**
+- Your job is to **record findings to THIS file only**
+- Do NOT make any changes to the codebase (no editing source files, tests, configs, etc.)
+- Do NOT create, modify, or delete any files outside of this document
+- Claude will review your findings and implement fixes separately
+
 ---
 
 ## Validation Scope
