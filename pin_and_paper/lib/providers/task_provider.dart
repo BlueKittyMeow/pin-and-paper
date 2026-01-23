@@ -355,11 +355,20 @@ class TaskProvider extends ChangeNotifier {
   // **Performance:** O(N) using child map + Set for lookups
   List<Task> get completedTasksWithHierarchy {
     // Get all fully completed tasks (no incomplete descendants)
-    final completed = _tasks.where((t) {
+    var completed = _tasks.where((t) {
       if (!t.completed) return false;
       if (_hasIncompleteDescendants(t)) return false;
       return true;
     }).toList();
+
+    // Apply hide-old-completed filter (matches visibleCompletedTasks logic)
+    if (_hideOldCompleted) {
+      completed = completed.where((t) {
+        if (t.completedAt == null) return false;
+        final hoursSinceCompletion = DateTime.now().difference(t.completedAt!).inHours;
+        return hoursSinceCompletion < _hideThresholdHours;
+      }).toList();
+    }
 
     // Build child map ONCE for O(N) performance (Codex fix)
     // Maps parent ID -> list of completed children

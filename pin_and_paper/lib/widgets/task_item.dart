@@ -275,9 +275,9 @@ class TaskItem extends StatelessWidget {
         ? Colors.red.shade50
         : Colors.blue.shade50;
 
-    // Adjust opacity for completed tasks
+    // Adjust opacity for completed tasks (match title dimming)
     final suffixOpacity = task.completed
-        ? (isCompletedParent ? 0.5 : 0.7)
+        ? (isCompletedParent ? 0.35 : 0.5)
         : 1.0;
 
     // Compute display suffix with relative label (Today/Tomorrow)
@@ -304,7 +304,7 @@ class TaskItem extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: suffixBgColor.withValues(alpha: suffixOpacity),
+              color: suffixBgColor.withValues(alpha: task.completed ? suffixOpacity * 0.5 : suffixOpacity),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
@@ -312,7 +312,6 @@ class TaskItem extends StatelessWidget {
               style: baseTextStyle.copyWith(
                 color: suffixColor.withValues(alpha: suffixOpacity),
                 fontWeight: FontWeight.w500,
-                decoration: TextDecoration.none, // Never strikethrough the date
               ),
             ),
           ),
