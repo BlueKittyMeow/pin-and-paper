@@ -1,8 +1,8 @@
 # Phase 3.8 Implementation Plan - Due Date Notifications
 
-**Version:** 2
+**Version:** 3
 **Created:** 2026-01-22
-**Revised:** 2026-01-23 (agent review findings addressed)
+**Revised:** 2026-01-23 (v2: agent review findings; v3: self-review type/field/principle fixes)
 **Status:** Ready for Implementation
 **Reference:** `phase-3.8-plan-v2.md` (design decisions)
 
@@ -105,7 +105,11 @@
 | Notification IDs | `reminder.id.hashCode.abs() % (1 << 31)` | UUID-based, unique per reminder row |
 | Existing `notificationType` | Keep | Still useful (use_global/custom/none) |
 | Existing `notificationTime` | Obsolete, keep in schema | Backward compat, no migration risk |
-| All-day overdue | After user's `endOfDayHour:Minute` (not midnight) | Respects "user_midnight" concept |
+| All-day overdue | After user's `todayCutoffHour:Minute` (not midnight) | Respects "user_midnight" concept |
+| No hardcoded times | ALL notification times derived from user prefs | Never assume "9am" or "midnight" — always read from settings |
+| Alert vs. state | Tasks MARKED overdue (data) but alerts suppressed in quiet hours | Users should never be woken by notifications |
+| Quiet hours | Mandatory suppression of ALL alerts (including overdue) | Night owls with 4am end-of-day must not get 5am alerts |
+| Snooze target | Uses `defaultNotificationHour` (user's preferred alert time) | Not semantically "morning" — it's the user's configured time |
 | Timezone source | `UserSettings.timezoneId` ?? `FlutterTimezone.getLocalTimezone()` | Existing field, auto-detect fallback |
 | Service pattern | Singleton (factory constructor) | Matches DateParsingService |
 | Package versions | FLN ^19.5.0, timezone ^0.11.0, flutter_timezone ^5.0.1 | Latest stable as of Jan 2026 |
@@ -464,6 +468,9 @@ class NotificationService {
     );
 
     // Use exact scheduling if permitted, fall back to inexact otherwise
+    // PERF NOTE: During rescheduleAll(), this is called per-notification.
+    // Consider adding optional bool? exactAllowed param to avoid N platform
+    // channel calls. For single-task scheduling this is negligible.
     final exactAllowed = await canScheduleExactAlarms();
     await _plugin.zonedSchedule(
       id,
@@ -1056,10 +1063,10 @@ class ReminderService {
       // overdue until 4:00 AM the next calendar day
       final endOfDay = DateTime(
         task.dueDate!.year, task.dueDate!.month, task.dueDate!.day,
-        settings.endOfDayHour, settings.endOfDayMinute,
+        settings.todayCutoffHour, settings.todayCutoffMinute,
       );
       // If end-of-day is before noon (e.g., 4 AM), it means "next calendar day"
-      final effectiveDeadline = settings.endOfDayHour < 12
+      final effectiveDeadline = settings.todayCutoffHour < 12
           ? endOfDay.add(const Duration(days: 1))
           : endOfDay;
       return now.isAfter(effectiveDeadline);
@@ -1096,23 +1103,28 @@ class ReminderService {
       baseTime = _notificationService.toLocalTZ(task.dueDate!);
     }
 
+    // Helper: TZDateTime.subtract()/add() return DateTime, not TZDateTime.
+    // Must re-wrap to preserve timezone information.
+    final loc = _notificationService.localTimezone;
+    tz.TZDateTime offset(Duration d) => tz.TZDateTime.from(baseTime.subtract(d), loc);
+
     switch (reminder.reminderType) {
       case ReminderType.atTime:
         return baseTime;
 
       case ReminderType.before1h:
-        return baseTime.subtract(const Duration(hours: 1));
+        return offset(const Duration(hours: 1));
 
       case ReminderType.before1d:
-        return baseTime.subtract(const Duration(days: 1));
+        return offset(const Duration(days: 1));
 
       case ReminderType.beforeCustom:
         if (reminder.offsetMinutes == null) return null;
-        return baseTime.subtract(Duration(minutes: reminder.offsetMinutes!));
+        return offset(Duration(minutes: reminder.offsetMinutes!));
 
       case ReminderType.overdue:
-        // 1 minute after due time
-        return baseTime.add(const Duration(minutes: 1));
+        // 1 minute after due time (fires immediately once overdue)
+        return tz.TZDateTime.from(baseTime.add(const Duration(minutes: 1)), loc);
 
       default:
         return null;
@@ -1791,9 +1803,9 @@ class SnoozeOptionsSheet extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.wb_sunny_outlined),
-            title: const Text('Tomorrow morning'),
-            subtitle: const Text('At your default notification time'),
-            onTap: () => onSnoozeSelected(const Duration(hours: -1)), // Sentinel
+            title: const Text('Tomorrow'),
+            subtitle: const Text('At your preferred notification time'),
+            onTap: () => onSnoozeSelected(const Duration(hours: -1)), // Sentinel: snooze to user's configured time
           ),
           ListTile(
             leading: const Icon(Icons.calendar_today),
@@ -1822,7 +1834,7 @@ Future<void> snooze(String taskId, Duration snoozeDuration) async {
   tz.TZDateTime snoozeTime;
 
   if (snoozeDuration == const Duration(hours: -1)) {
-    // "Tomorrow morning" sentinel
+    // "Tomorrow at preferred time" sentinel — uses user's configured notification time
     final tomorrow = DateTime.now().add(const Duration(days: 1));
     snoozeTime = tz.TZDateTime(
       notificationService.localTimezone,
@@ -1834,7 +1846,8 @@ Future<void> snooze(String taskId, Duration snoozeDuration) async {
     // Custom - handled by caller opening DateOptionsSheet
     return;
   } else {
-    snoozeTime = tz.TZDateTime.now(tz.local).add(snoozeDuration);
+    final now = tz.TZDateTime.now(tz.local);
+    snoozeTime = tz.TZDateTime.from(now.add(snoozeDuration), tz.local);
   }
 
   // Schedule a one-shot snooze notification
@@ -1930,7 +1943,7 @@ if (Platform.isAndroid || Platform.isIOS) {
 - [ ] "Snooze" action shows snooze options (foreground) or uses default (background)
 - [ ] "Cancel" action cancels all upcoming reminders for the task
 - [ ] Snooze correctly reschedules at chosen time
-- [ ] "Tomorrow morning" snooze uses user's defaultNotificationHour
+- [ ] "Tomorrow" snooze uses user's defaultNotificationHour (preferred time)
 - [ ] Cold-start from notification navigates to correct task
 - [ ] `checkMissed()` fires overdue notifications on app open
 - [ ] Linux shows immediate notifications for overdue tasks on app open
@@ -1983,7 +1996,7 @@ group('scheduleReminders', () {
 
 group('snooze', () {
   test('cancels existing and schedules at new time');
-  test('tomorrow morning uses defaultNotificationHour');
+  test('tomorrow snooze uses user preferred notification time');
   test('custom durations schedule correctly');
 });
 ```
@@ -2107,7 +2120,15 @@ Each subphase builds on the previous. No subphase can be implemented out of orde
 
 1. **Notification grouping v1:** Using OS-level groupKey rather than manual time-window grouping. Sufficient for initial release? Or should we implement the 30-min window logic from day one?
 
-2. **TaskService.getTaskById():** This method may not exist yet. Need to verify and add if missing (simple query by ID).
+2. **TaskService.getTaskById():** ✅ RESOLVED — Method does not exist. Add to TaskService during 3.8.1:
+   ```dart
+   Future<Task?> getTaskById(String taskId) async {
+     final db = await _dbService.database;
+     final maps = await db.query(AppConstants.tasksTable, where: 'id = ?', whereArgs: [taskId]);
+     if (maps.isEmpty) return null;
+     return Task.fromMap(maps.first);
+   }
+   ```
 
 3. **Navigation from notification:** Current app uses simple Navigator. May need a global navigator key or route-based approach for deep linking to a specific task from notification tap.
 
