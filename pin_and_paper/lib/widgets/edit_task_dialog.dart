@@ -3,8 +3,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../models/tag.dart';
+import '../models/task_reminder.dart'; // Phase 3.8
 import '../providers/task_provider.dart';
 import '../services/date_parsing_service.dart'; // Phase 3.7
+import '../services/reminder_service.dart'; // Phase 3.8
 import '../utils/debouncer.dart'; // Phase 3.7
 import '../utils/date_formatter.dart'; // Phase 3.7
 import '../utils/date_suffix_parser.dart'; // Phase 3.7
@@ -76,6 +78,11 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   final bool _isLoading = false; // Reserved for future async loading
   String? _parentTitle;
 
+  // Phase 3.8: Notification state
+  late String _notificationType;
+  Set<String> _selectedReminderTypes = {};
+  bool _notifyIfOverdue = false;
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +98,12 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     }
     _parentId = widget.task.parentId;
     _selectedTagIds = widget.currentTags.map((t) => t.id).toList();
+
+    // Phase 3.8: Initialize notification state
+    _notificationType = widget.task.notificationType;
+    if (_notificationType == 'custom') {
+      _loadTaskReminders();
+    }
 
     // Select all title text for easy replacement
     _titleController.selection = TextSelection(
@@ -143,6 +156,41 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     setState(() {
       _parentTitle = parent?.title;
     });
+  }
+
+  /// Phase 3.8: Load custom reminders from DB
+  Future<void> _loadTaskReminders() async {
+    try {
+      final reminders = await ReminderService().getRemindersForTask(widget.task.id);
+      if (!mounted) return;
+      setState(() {
+        _selectedReminderTypes = reminders
+            .where((r) => r.reminderType != ReminderType.overdue)
+            .map((r) => r.reminderType)
+            .toSet();
+        _notifyIfOverdue = reminders.any((r) => r.reminderType == ReminderType.overdue);
+      });
+    } catch (e) {
+      debugPrint('[EditTaskDialog] Failed to load reminders: $e');
+    }
+  }
+
+  /// Phase 3.8: Build a toggleable reminder type chip
+  Widget _buildReminderChip(String type, String label) {
+    final selected = _selectedReminderTypes.contains(type);
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (value) {
+        setState(() {
+          if (value) {
+            _selectedReminderTypes.add(type);
+          } else {
+            _selectedReminderTypes.remove(type);
+          }
+        });
+      },
+    );
   }
 
   @override
@@ -312,6 +360,10 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
           : _notesController.text.trim(),
       'parentId': _parentId,
       'tagIds': _selectedTagIds,
+      // Phase 3.8: Notification params
+      'notificationType': _notificationType,
+      'reminderTypes': _selectedReminderTypes.toList(),
+      'notifyIfOverdue': _notifyIfOverdue,
     });
   }
 
@@ -622,6 +674,60 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                         ],
                       ),
                     ],
+                    // ===== NOTIFICATIONS (Phase 3.8) =====
+                    if (_dueDate != null) ...[
+                      const Divider(height: 24),
+                      Text('Notifications',
+                          style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _notificationType,
+                        decoration: const InputDecoration(
+                          labelText: 'Reminder setting',
+                          border: OutlineInputBorder(),
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'use_global',
+                              child: Text('Use global defaults')),
+                          DropdownMenuItem(
+                              value: 'custom',
+                              child: Text('Custom for this task')),
+                          DropdownMenuItem(
+                              value: 'none', child: Text('No reminders')),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _notificationType = value!),
+                      ),
+                      if (_notificationType == 'custom') ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            _buildReminderChip(
+                                ReminderType.atTime, 'At due time'),
+                            _buildReminderChip(
+                                ReminderType.before1h, '1 hour before'),
+                            _buildReminderChip(
+                                ReminderType.before1d, '1 day before'),
+                          ],
+                        ),
+                      ],
+                      SwitchListTile(
+                        title: const Text('Notify if overdue'),
+                        subtitle: const Text(
+                            'Get reminded if task passes due date'),
+                        value: _notifyIfOverdue,
+                        onChanged: (value) =>
+                            setState(() => _notifyIfOverdue = value),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                    ],
+
                     const SizedBox(height: 16),
 
                     // ===== INLINE TAG PICKER =====

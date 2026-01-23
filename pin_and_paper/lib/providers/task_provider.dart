@@ -15,6 +15,7 @@ import '../services/database_service.dart'; // Phase 3.6A: For database access
 import '../services/date_parsing_service.dart'; // Phase 3.7: For Today Window
 import '../services/preferences_service.dart'; // Phase 2 Stretch
 import '../services/reminder_service.dart'; // Phase 3.8: Notification scheduling
+import '../models/task_reminder.dart'; // Phase 3.8: For custom reminder types
 import '../utils/constants.dart'; // Phase 3.6A: For AppConstants table names
 import '../utils/task_tree_controller.dart'; // Phase 3.6.5: Custom TreeController fix
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
@@ -804,6 +805,9 @@ class TaskProvider extends ChangeNotifier {
     bool isAllDay = true,
     String? notes,
     required List<String> tagIds,
+    String? notificationType,    // Phase 3.8
+    List<String>? reminderTypes, // Phase 3.8: custom reminder types
+    bool? notifyIfOverdue,       // Phase 3.8: per-task overdue toggle
   }) async {
     _errorMessage = null;
 
@@ -819,6 +823,7 @@ class TaskProvider extends ChangeNotifier {
         dueDate: dueDate,
         isAllDay: isAllDay,
         notes: notes,
+        notificationType: notificationType,
       );
 
       // 2. Update tags
@@ -849,8 +854,27 @@ class TaskProvider extends ChangeNotifier {
         _refreshTreeController();
       }
 
-      // 4. Phase 3.8: Cancel old reminders and reschedule
+      // 4. Phase 3.8: Handle custom reminders and reschedule
       try {
+        // Persist custom reminder types if applicable
+        if (notificationType == 'custom' && reminderTypes != null) {
+          final reminders = reminderTypes.map((type) => TaskReminder(
+            taskId: taskId,
+            reminderType: type,
+          )).toList();
+          if (notifyIfOverdue == true) {
+            reminders.add(TaskReminder(
+              taskId: taskId,
+              reminderType: ReminderType.overdue,
+            ));
+          }
+          await _reminderService.setReminders(taskId, reminders);
+        } else if (notificationType != null && notificationType != 'custom') {
+          // Switching away from custom - clear custom reminders
+          await _reminderService.deleteReminders(taskId);
+        }
+
+        // Cancel old notifications and reschedule
         await _reminderService.cancelReminders(taskId);
         if (updatedTask.dueDate != null &&
             updatedTask.notificationType != 'none') {

@@ -511,6 +511,7 @@ class TaskService {
     DateTime? dueDate,
     bool isAllDay = true,
     String? notes,
+    String? notificationType, // Phase 3.8
   }) async {
     final db = await _dbService.database;
     final trimmedTitle = title.trim();
@@ -534,14 +535,19 @@ class TaskService {
     final originalTask = Task.fromMap(maps.first);
 
     // Perform the update
+    final updateMap = <String, dynamic>{
+      'title': trimmedTitle,
+      'due_date': dueDate?.millisecondsSinceEpoch,
+      'is_all_day': isAllDay ? 1 : 0,
+      'notes': notes,
+    };
+    if (notificationType != null) {
+      updateMap['notification_type'] = notificationType;
+    }
+
     await db.update(
       AppConstants.tasksTable,
-      {
-        'title': trimmedTitle,
-        'due_date': dueDate?.millisecondsSinceEpoch,
-        'is_all_day': isAllDay ? 1 : 0,
-        'notes': notes,
-      },
+      updateMap,
       where: 'id = ?',
       whereArgs: [taskId],
     );
@@ -552,6 +558,7 @@ class TaskService {
       dueDate: dueDate,
       isAllDay: isAllDay,
       notes: notes,
+      notificationType: notificationType ?? originalTask.notificationType,
     );
   }
 
