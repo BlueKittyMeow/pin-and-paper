@@ -84,7 +84,7 @@ Muted Lavender:#9B8FA5  (dried flowers, soft accents)
   - 7 schema migrations (v1 → v7, FTS5 reserved)
   - Supports task hierarchy, tags, soft delete, due dates, search
 - **Provider** - Simple state management (upgrading to Riverpod later)
-- **180+ comprehensive tests** - Models, services, utilities, migrations, widgets (99%+ pass rate)
+- **390+ comprehensive tests** - Models, services, utilities, migrations, widgets (95%+ pass rate)
 
 ### AI Integration
 - **Claude API** (Phase 2) - Natural language task extraction from brain dumps
@@ -163,8 +163,14 @@ Data Layer (SQLite)
   - Bug fixes: depth preservation on uncomplete, reorder positioning
   - 290 tests passing (15 new TreeController unit tests)
 
+- ✅ **Phase 3.7:** Natural Language Date Parsing + Sort/Filter (Jan 2026)
+  - chrono.js NL parsing via flutter_js (QuickJS FFI)
+  - Real-time inline highlighting in task titles
+  - DateOptionsSheet (Today/Tomorrow/Next Week/Pick)
+  - Live clock, Sort-by, Date filters (Overdue/No Date)
+  - ~120+ tests, 1,848 lines production code
+
 **Next Up:**
-- 🔜 **Phase 3.7:** Natural Language Date Parsing (1-1.5 weeks)
 - 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
 - 🔜 **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 
@@ -299,22 +305,27 @@ Each phase builds on the previous:
   - Advanced filtering with debounced search
 
 - [x] **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix (Jan 2026)
-  - **290 tests passing** (15 new TreeController tests)
   - Custom TaskTreeController with ID-based expansion state
   - Comprehensive edit dialog (title, parent, date, time, tags, notes)
   - Completed task metadata dialog
   - Time picker with All Day toggle
-  - Bug fixes: depth preservation, reorder positioning
+
+- [x] **Phase 3.7:** Natural Language Date Parsing + Sort/Filter (Jan 2026)
+  - chrono.js NL parsing via flutter_js (QuickJS FFI)
+  - Real-time inline highlighting in task titles
+  - DateOptionsSheet, clickable date suffixes
+  - Live clock, Sort-by (Manual/Recent/Due Soonest)
+  - Date filters (Overdue/No Date) in filter dialog
+  - ~120+ tests, 1,848 lines production code
 
 ### Current Stats
-- **~9,000+ lines of production code**
-- **290 tests passing** (100% pass rate)
+- **~11,000+ lines of production code**
+- **394 tests passing** (95%+ pass rate)
 - **Database:** v6 (6 migrations complete)
-- **Phases completed:** 2 full phases + 8 subphases
-- **Latest:** Phase 3.6.5 - Edit Task Modal Rework + TreeController Fix
+- **Phases completed:** 2 full phases + 9 subphases
+- **Latest:** Phase 3.7 - Natural Language Date Parsing + Sort/Filter
 
 ### Next Up
-- **Phase 3.7:** Natural Language Date Parsing (1-1.5 weeks)
 - **Phase 3.8:** Due Date Notifications (1-2 weeks)
 - **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 - **Phase 4:** Bounded Workspace View (4-5 weeks)
