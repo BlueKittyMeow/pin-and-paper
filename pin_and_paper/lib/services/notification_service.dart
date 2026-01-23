@@ -37,6 +37,9 @@ class NotificationService {
   bool _initialized = false;
   tz.Location? _localTimezone;
 
+  /// Whether the notification service has been initialized
+  bool get isInitialized => _initialized;
+
   /// Callback for handling notification taps in foreground
   /// Set by the app to enable navigation to a specific task
   void Function(String? taskId)? onNotificationTapped;

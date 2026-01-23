@@ -45,6 +45,14 @@ class UserSettings {
   final int defaultNotificationHour;
   final int defaultNotificationMinute;
 
+  // Phase 3.8: Notification scheduling preferences
+  final bool notifyWhenOverdue; // Global: notify when tasks become overdue
+  final bool quietHoursEnabled; // Quiet hours toggle
+  final int? quietHoursStart; // Minutes from midnight (e.g., 1320 = 22:00)
+  final int? quietHoursEnd; // Minutes from midnight (e.g., 420 = 07:00)
+  final String quietHoursDays; // Comma-separated day indices: "0,1,2,3,4,5,6" (0=Mon)
+  final String defaultReminderTypes; // Comma-separated: "at_time,before_1h"
+
   // Voice input preferences
   final bool voiceSmartPunctuation;
 
@@ -68,6 +76,12 @@ class UserSettings {
     this.autoCompleteChildren = 'prompt',
     this.defaultNotificationHour = 9,
     this.defaultNotificationMinute = 0,
+    this.notifyWhenOverdue = false,
+    this.quietHoursEnabled = false,
+    this.quietHoursStart,
+    this.quietHoursEnd,
+    this.quietHoursDays = '0,1,2,3,4,5,6',
+    this.defaultReminderTypes = 'at_time',
     this.voiceSmartPunctuation = true,
     required this.createdAt,
     required this.updatedAt,
@@ -90,6 +104,12 @@ class UserSettings {
       'auto_complete_children': autoCompleteChildren,
       'default_notification_hour': defaultNotificationHour,
       'default_notification_minute': defaultNotificationMinute,
+      'notify_when_overdue': notifyWhenOverdue ? 1 : 0,
+      'quiet_hours_enabled': quietHoursEnabled ? 1 : 0,
+      'quiet_hours_start': quietHoursStart,
+      'quiet_hours_end': quietHoursEnd,
+      'quiet_hours_days': quietHoursDays,
+      'default_reminder_types': defaultReminderTypes,
       'voice_smart_punctuation': voiceSmartPunctuation ? 1 : 0,
       'created_at': createdAt.millisecondsSinceEpoch,
       'updated_at': updatedAt.millisecondsSinceEpoch,
@@ -113,6 +133,12 @@ class UserSettings {
       autoCompleteChildren: map['auto_complete_children'] as String,
       defaultNotificationHour: map['default_notification_hour'] as int,
       defaultNotificationMinute: map['default_notification_minute'] as int,
+      notifyWhenOverdue: (map['notify_when_overdue'] as int?) == 1,
+      quietHoursEnabled: (map['quiet_hours_enabled'] as int?) == 1,
+      quietHoursStart: map['quiet_hours_start'] as int?,
+      quietHoursEnd: map['quiet_hours_end'] as int?,
+      quietHoursDays: (map['quiet_hours_days'] as String?) ?? '0,1,2,3,4,5,6',
+      defaultReminderTypes: (map['default_reminder_types'] as String?) ?? 'at_time',
       voiceSmartPunctuation: map['voice_smart_punctuation'] == 1,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int),
@@ -143,6 +169,12 @@ class UserSettings {
     String? autoCompleteChildren,
     int? defaultNotificationHour,
     int? defaultNotificationMinute,
+    bool? notifyWhenOverdue,
+    bool? quietHoursEnabled,
+    Value<int?>? quietHoursStart,
+    Value<int?>? quietHoursEnd,
+    String? quietHoursDays,
+    String? defaultReminderTypes,
     bool? voiceSmartPunctuation,
     DateTime? updatedAt,
   }) {
@@ -164,6 +196,16 @@ class UserSettings {
           defaultNotificationHour ?? this.defaultNotificationHour,
       defaultNotificationMinute:
           defaultNotificationMinute ?? this.defaultNotificationMinute,
+      notifyWhenOverdue: notifyWhenOverdue ?? this.notifyWhenOverdue,
+      quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
+      quietHoursStart: quietHoursStart != null
+          ? quietHoursStart.value
+          : this.quietHoursStart,
+      quietHoursEnd: quietHoursEnd != null
+          ? quietHoursEnd.value
+          : this.quietHoursEnd,
+      quietHoursDays: quietHoursDays ?? this.quietHoursDays,
+      defaultReminderTypes: defaultReminderTypes ?? this.defaultReminderTypes,
       voiceSmartPunctuation:
           voiceSmartPunctuation ?? this.voiceSmartPunctuation,
       createdAt: createdAt,
