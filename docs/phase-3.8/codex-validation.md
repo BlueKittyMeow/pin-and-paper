@@ -6,7 +6,7 @@
 **Phase Summary:** [phase-3.8-summary.md](./phase-3.8-summary.md)
 **Review Date:** 2026-01-23
 **Reviewer:** Codex
-**Status:** Pending Review
+**Status:** Complete
 
 ---
 
@@ -189,34 +189,218 @@ _Review the files above and add issues using this format:_
 
 ## [Your findings go here]
 
-_Start reviewing and add issues above using the format._
+### Issue #1: Notification permission never requested
+
+**File:** `pin_and_paper/lib/screens/settings_screen.dart:258`
+**Type:** Bug
+**Severity:** HIGH
+
+**Description:**
+The notifications toggle updates settings and reschedules reminders, but the app never requests OS notification permission or shows the PermissionExplanationDialog. On iOS and Android 13+, users will not receive any notifications because permission is never requested.
+
+**Current Code:**
+```dart
+onChanged: (value) {
+  setState(() => _notificationsEnabled = value);
+  _updateNotificationSettings();
+},
+```
+
+**Suggested Fix:**
+When enabling notifications, show `PermissionExplanationDialog.show(...)` and call `NotificationService().requestPermission()` before saving settings or scheduling. If permission is denied, revert the toggle and surface feedback.
+
+**Impact:**
+Notifications silently fail on permissioned platforms; core Phase 3.8 feature appears broken.
+
+### Issue #2: checkMissed ignores overdue/quiet-hours preferences
+
+**File:** `pin_and_paper/lib/services/reminder_service.dart:172`
+**Type:** Bug
+**Severity:** HIGH
+
+**Description:**
+`checkMissed()` claims to respect quiet hours and overdue settings, but it only checks `notificationsEnabled`. It will emit overdue notifications even if `notifyWhenOverdue` is off or the current time is within quiet hours.
+
+**Current Code:**
+```dart
+if (!settings.notificationsEnabled) return []; // Master toggle off
+...
+if (_isTaskOverdue(task, settings, now)) {
+  await _notificationService.showImmediate(...);
+}
+```
+
+**Suggested Fix:**
+Gate `checkMissed()` by `settings.notifyWhenOverdue` (and per-task overdue preferences if applicable) and skip immediate notifications when `_adjustForQuietHours(...)` would defer them.
+
+**Impact:**
+Users receive overdue notifications they explicitly disabled or during quiet hours.
+
+### Issue #3: checkMissed spams overdue notifications on every launch
+
+**File:** `pin_and_paper/lib/services/reminder_service.dart:172`
+**Type:** Bug
+**Severity:** MEDIUM
+
+**Description:**
+`checkMissed()` has no dedupe/last-seen tracking. Any overdue task triggers a new immediate notification on every app start, which can quickly become noisy.
+
+**Current Code:**
+```dart
+for (final taskMap in candidateTasks) {
+  if (_isTaskOverdue(task, settings, now)) {
+    await _notificationService.showImmediate(...);
+  }
+}
+```
+
+**Suggested Fix:**
+Persist a last-notified timestamp (global or per-task) or record a "missed notification sent" marker to prevent repeats across launches.
+
+**Impact:**
+Overdue tasks generate repeated notifications on each app open.
+
+### Issue #4: Custom reminder updates leave stale scheduled notifications
+
+**File:** `pin_and_paper/lib/providers/task_provider.dart:857`
+**Type:** Bug
+**Severity:** HIGH
+
+**Description:**
+When editing a task, `setReminders()` or `deleteReminders()` is called before `cancelReminders()`. Since `cancelReminders()` relies on the current DB rows to find IDs, it cancels the newly written reminders instead of the previously scheduled ones. Old scheduled notifications are left active.
+
+**Current Code:**
+```dart
+await _reminderService.setReminders(taskId, reminders);
+...
+await _reminderService.cancelReminders(taskId);
+```
+
+**Suggested Fix:**
+Cancel first (using existing DB reminders), then update DB reminders, then reschedule. Alternatively, capture old reminder IDs before replacing them.
+
+**Impact:**
+Users can receive notifications for reminder settings that were removed or changed.
+
+### Issue #5: Snoozed notifications are never canceled on task completion/deletion
+
+**File:** `pin_and_paper/lib/services/reminder_service.dart:86`
+**Type:** Bug
+**Severity:** MEDIUM
+
+**Description:**
+`cancelReminders()` cancels custom and global reminders, but does not cancel the snooze notification (`${taskId}_snooze`). Completing or deleting a task after snoozing can still trigger the snoozed alert.
+
+**Current Code:**
+```dart
+final dbReminders = await getRemindersForTask(taskId);
+...
+final overdueId = '${taskId}_global_overdue'.hashCode.abs() % (1 << 31);
+await _notificationService.cancel(overdueId);
+```
+
+**Suggested Fix:**
+Also cancel the snooze ID inside `cancelReminders()` or persist snoozes in the reminders table.
+
+**Impact:**
+Completed/deleted tasks can still notify after snooze.
+
+### Issue #6: Quiet-hours day parsing can throw on empty selection
+
+**File:** `pin_and_paper/lib/services/reminder_service.dart:411`
+**Type:** Bug
+**Severity:** MEDIUM
+
+**Description:**
+`settings.quietHoursDays.split(',').map(int.parse)` will throw `FormatException` if the stored string is empty (possible if user deselects all days). That aborts scheduling/rescheduling.
+
+**Current Code:**
+```dart
+final activeDays =
+    settings.quietHoursDays.split(',').map(int.parse).toSet();
+```
+
+**Suggested Fix:**
+Filter/trim empty values before parsing, or treat empty as “no quiet hours days.”
+
+**Impact:**
+Quiet-hours scheduling can crash and prevent notifications from rescheduling.
+
+### Issue #7: Notification actions can be dropped on cold start
+
+**File:** `pin_and_paper/lib/screens/home_screen.dart:32`
+**Type:** Architecture
+**Severity:** MEDIUM
+
+**Description:**
+Action callbacks are registered only after the first frame. If the app is launched from a notification action, the plugin can dispatch the response before HomeScreen sets callbacks, causing the action to be ignored.
+
+**Current Code:**
+```dart
+WidgetsBinding.instance.addPostFrameCallback((_) {
+  context.read<TaskProvider>().loadTasks();
+  _setupNotificationCallbacks();
+});
+```
+
+**Suggested Fix:**
+Register callbacks earlier (e.g., in main) and/or replay `getLaunchNotification()` once the UI is ready.
+
+**Impact:**
+Tapping “Complete/Snooze/Dismiss” on a cold start can do nothing.
+
+### Issue #8: Notification IDs rely on hashCode stability
+
+**File:** `pin_and_paper/lib/models/task_reminder.dart:71`
+**Type:** Architecture
+**Severity:** LOW
+
+**Description:**
+Notification IDs are derived from `String.hashCode`, which is not guaranteed stable across app restarts or platforms. If it changes, cancellation by ID will fail.
+
+**Current Code:**
+```dart
+int get notificationId => id.hashCode.abs() % (1 << 31);
+```
+
+**Suggested Fix:**
+Use a stable hash (crc32/xxhash) or persist a numeric notification ID in the DB.
+
+**Impact:**
+Potential inability to cancel previously scheduled notifications after restart.
 
 ---
 
 ## Summary
 
-**Total Issues Found:** [X]
+**Total Issues Found:** 8
 
 **By Severity:**
-- CRITICAL: [count]
-- HIGH: [count]
-- MEDIUM: [count]
-- LOW: [count]
+- CRITICAL: 0
+- HIGH: 3
+- MEDIUM: 4
+- LOW: 1
 
 ---
 
 ## Verdict
 
-**Release Ready:** [YES / NO / YES WITH FIXES]
+**Release Ready:** NO
 
 **Must Fix Before Release:**
-- [List CRITICAL and HIGH issues]
+- Issue #1: Notification permission never requested
+- Issue #2: checkMissed ignores overdue/quiet-hours preferences
+- Issue #4: Custom reminder updates leave stale scheduled notifications
 
 **Can Defer:**
-- [List MEDIUM and LOW issues]
+- Issue #3: checkMissed spams overdue notifications on every launch
+- Issue #5: Snoozed notifications are never canceled on task completion/deletion
+- Issue #6: Quiet-hours day parsing can throw on empty selection
+- Issue #7: Notification actions can be dropped on cold start
+- Issue #8: Notification IDs rely on hashCode stability
 
 ---
 
 **Review completed by:** Codex
-**Date:** [YYYY-MM-DD]
-**Confidence level:** [High / Medium / Low]
+**Date:** 2026-01-23
+**Confidence level:** Medium
