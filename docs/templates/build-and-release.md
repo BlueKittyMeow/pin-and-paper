@@ -2,7 +2,7 @@
 
 **Purpose:** Ensure all version numbers are updated and builds are tested before release
 **Used by:** Claude + BlueKitty
-**Last Updated:** 2026-01-05
+**Last Updated:** 2026-01-22
 
 ---
 
@@ -59,7 +59,7 @@ cd pin_and_paper
 
 **Search for:** `static const int databaseVersion`
 
-**Current:** `6` (Phase 3.5 - Tags)
+**Current:** `8` (Phase 3.6.5 - Edit Task Modal)
 
 **When to increment:**
 - ONLY when schema changes (new tables, columns, migrations)
@@ -84,6 +84,8 @@ static const int databaseVersion = 7;
 - v4: Phase 3.1 (task nesting)
 - v5: Phase 3.3-3.4 (soft delete, editing)
 - v6: Phase 3.5 (tags)
+- v7: Phase 3.6 (tag filtering, user settings)
+- v8: Phase 3.6.5 (edit task modal - notes + position_before_completion)
 
 ---
 
@@ -217,7 +219,7 @@ flutter run --profile
 
 - [ ] Uninstall app completely
 - [ ] Install new release build
-- [ ] Verify fresh database created (v6)
+- [ ] Verify fresh database created (current version)
 - [ ] Test all features from scratch
 
 ### 5. Feature Completeness
@@ -362,7 +364,7 @@ genhtml coverage/lcov.info -o coverage/html
 open coverage/html/index.html
 ```
 
-**Current test count:** 154+ tests (as of Phase 3.5)
+**Current test count:** 396+ tests (as of Phase 3.7)
 
 ### Test Failures Troubleshooting
 
@@ -554,18 +556,28 @@ git push origin main --tags
 
 ## Appendix: Current Version Status
 
-**As of 2026-01-05:**
+**As of 2026-01-22:**
 
-| File | Field | Current Value | Should Be (Phase 3.5) |
-|------|-------|---------------|----------------------|
-| pubspec.yaml | version | 0.2.0+2 | 3.5.0+5 |
-| constants.dart | appVersion | '0.2.0' | '3.5.0' |
-| constants.dart | databaseVersion | 6 | 6 ✓ |
+| File | Field | Current Value | Phase |
+|------|-------|---------------|-------|
+| pubspec.yaml | version | 3.7.0+5 | Phase 3.7 (NL Date Parsing) |
+| constants.dart | appVersion | '3.7.0' | Phase 3.7 (NL Date Parsing) |
+| constants.dart | databaseVersion | 8 | Phase 3.6.5 (Edit Task Modal) |
 
-**Action needed:** Update pubspec.yaml and constants.dart appVersion before Phase 3.5 release build.
+**Database version history:**
+- v1: Phase 1 (basic tasks)
+- v2: Phase 2 (AI integration)
+- v3: Phase 2 Stretch (API usage)
+- v4: Phase 3.1 (task nesting)
+- v5: Phase 3.3-3.4 (soft delete, editing)
+- v6: Phase 3.5 (tags)
+- v7: Phase 3.6 (tag filtering, user settings)
+- v8: Phase 3.6.5 (edit task modal - notes + position_before_completion)
+
+**Next:** Phase 3.8 will bump to `3.8.0+6` and database to v9 (task_reminders table).
 
 ---
 
-**Template Version:** 1.0
-**Last Updated:** 2026-01-05
+**Template Version:** 1.1
+**Last Updated:** 2026-01-22
 **Maintained By:** BlueKitty + Claude
