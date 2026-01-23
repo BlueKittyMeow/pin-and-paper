@@ -372,6 +372,8 @@ class _BrainDumpScreenState extends State<BrainDumpScreen> {
 
     final provider = context.read<BrainDumpProvider>();
     await provider.saveDraft(_textController.text);
+    // Bug fix: Reset draft ID after manual save so next session creates new draft
+    provider.clear();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Draft saved')),

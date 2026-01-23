@@ -180,6 +180,11 @@
 - **Description:** Swipe gestures on task items for quick actions (complete, delete, snooze, edit). Configurable swipe-left/swipe-right actions.
 - **Source:** PROJECT_SPEC.md Phase 6+ deferral
 
+#### Right-Click Context Menus (Desktop)
+- **Priority:** MEDIUM | **Complexity:** LOW
+- **Description:** Add right-click context menus for desktop platforms (Linux, Windows, macOS) to complement swipe gestures. Currently, swipe-to-delete works on drafts, but desktop users need mouse-friendly alternatives. Context menu should include: Delete, Edit, Complete (for tasks), and other common actions.
+- **Source:** Phase 3.9.0 user feedback (regression testing)
+
 ---
 
 **Document Version:** 2.0
