@@ -80,11 +80,8 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   void initState() {
     super.initState();
 
-    // Phase 3.7: Use HighlightedTextEditingController with tap handler
-    _titleController = HighlightedTextEditingController(
-      text: widget.task.title,
-      onTapHighlight: _showDateOptions,
-    );
+    // Phase 3.7: Use HighlightedTextEditingController for date highlighting
+    _titleController = HighlightedTextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
     _dueDate = widget.task.dueDate;
     _isAllDay = widget.task.isAllDay;
@@ -382,6 +379,21 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     }
   }
 
+  // Phase 3.7: Handle tap on title TextField - check if cursor is on highlighted date
+  // PostFrameCallback ensures cursor position is finalized before we read it.
+  void _handleTitleTap() {
+    if (_parsedDate == null || _titleController.highlightRange == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_parsedDate == null || _titleController.highlightRange == null) return;
+      final cursorPos = _titleController.selection.baseOffset;
+      final range = _titleController.highlightRange!;
+      if (cursorPos >= range.start && cursorPos <= range.end) {
+        _showDateOptions();
+      }
+    });
+  }
+
   void _showDateOptions() {
     if (_parsedDate == null) return;
 
@@ -522,6 +534,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                     TextField(
                       controller: _titleController,
                       onChanged: _onTitleChanged, // Phase 3.7: Date parsing
+                      onTap: _handleTitleTap, // Phase 3.7: Tap highlight to refine date
                       autofocus: true,
                       decoration: const InputDecoration(
                         labelText: 'Title',

@@ -30,10 +30,7 @@ class _TaskInputState extends State<TaskInput> {
     super.initState();
 
     // Phase 3.7: Initialize HighlightedTextEditingController
-    _controller = HighlightedTextEditingController(
-      text: '',
-      onTapHighlight: _showDateOptions, // Open DateOptionsSheet on tap
-    );
+    _controller = HighlightedTextEditingController(text: '');
 
     // Only auto-focus on first app launch
     _checkAndFocusOnFirstLaunch();
@@ -97,6 +94,24 @@ class _TaskInputState extends State<TaskInput> {
       print('Error parsing date: $e');
       // Silently fail - don't disrupt user
     }
+  }
+
+  // Phase 3.7: Handle tap on TextField - check if cursor is on highlighted date
+  // Note: TapGestureRecognizer on TextSpan doesn't work in editable TextFields
+  // (Flutter's EditableText gesture handler wins the gesture arena).
+  // Instead, we detect taps via onTap + cursor position check.
+  // PostFrameCallback ensures cursor position is finalized before we read it.
+  void _handleTextFieldTap() {
+    if (_parsedDate == null || _controller.highlightRange == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_parsedDate == null || _controller.highlightRange == null) return;
+      final cursorPos = _controller.selection.baseOffset;
+      final range = _controller.highlightRange!;
+      if (cursorPos >= range.start && cursorPos <= range.end) {
+        _showDateOptions();
+      }
+    });
   }
 
   // Phase 3.7: Show date options sheet when tapping highlighted date
@@ -205,6 +220,7 @@ class _TaskInputState extends State<TaskInput> {
                 border: OutlineInputBorder(),
               ),
               textInputAction: TextInputAction.done,
+              onTap: _handleTextFieldTap, // Phase 3.7: Tap highlight to refine date
               onSubmitted: (_) => _addTask(),
               onChanged: _onTitleChanged, // Phase 3.7: Add date parsing handler
             ),

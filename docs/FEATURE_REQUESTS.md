@@ -30,6 +30,11 @@
 - **Description:** Overdue and No Date filters implemented. More granular filters (due today, this week) deferred.
 - **Source:** Phase 3.6B stretch goal
 
+### onTapHighlight Cleanup
+- **Completed:** Phase 3.8 (Jan 22, 2026)
+- **Description:** Removed dead `onTapHighlight`/`TapGestureRecognizer` code from `HighlightedTextEditingController`. Replaced with `TextField.onTap` + cursor position check (TapGestureRecognizer causes Flutter assertion in editable TextFields).
+- **Source:** Phase 3.7 known behaviors
+
 ---
 
 ## Planned (Assigned to Phase)
@@ -122,11 +127,6 @@
 - **Source:** Phase 3.8 plan v2
 
 ### Code Quality & Technical Debt
-
-#### onTapHighlight Cleanup
-- **Priority:** LOW | **Complexity:** LOW
-- **Description:** `onTapHighlight` callback on `HighlightedTextEditingController` is scaffolded but never invoked. Tap-to-edit works via GestureDetector in task_item.dart. Either remove the dead code or activate if Flutter resolves TapGestureRecognizer conflicts in editable TextFields.
-- **Source:** Phase 3.7 known behaviors
 
 #### Provider → Riverpod Migration
 - **Priority:** LOW | **Complexity:** HIGH

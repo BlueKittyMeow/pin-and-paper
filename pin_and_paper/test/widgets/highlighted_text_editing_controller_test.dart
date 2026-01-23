@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/widgets/highlighted_text_editing_controller.dart';
@@ -249,11 +248,9 @@ void main() {
       );
     });
 
-    testWidgets('onTapHighlight wires TapGestureRecognizer to highlighted TextSpan', (tester) async {
+    testWidgets('highlighted TextSpan has no recognizer (tap handled by TextField.onTap)', (tester) async {
       // Skip on web (highlighting disabled)
       if (kIsWeb) return;
-
-      bool callbackFired = false;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -262,7 +259,6 @@ void main() {
               builder: (context) {
                 final controller = HighlightedTextEditingController(
                   text: 'meet tomorrow',
-                  onTapHighlight: () => callbackFired = true,
                 );
                 controller.setHighlight(const TextRange(start: 5, end: 13));
 
@@ -272,15 +268,12 @@ void main() {
                   withComposing: false,
                 );
 
-                // Find the highlighted child span
+                // Verify highlight renders without a recognizer
+                // (TapGestureRecognizer causes assertion error in editable TextFields)
                 final children = textSpan.children!;
                 final highlightSpan = children[1] as TextSpan;
                 expect(highlightSpan.text, 'tomorrow');
-                expect(highlightSpan.recognizer, isA<TapGestureRecognizer>());
-
-                // Simulate the tap via the recognizer directly
-                (highlightSpan.recognizer as TapGestureRecognizer).onTap!();
-                expect(callbackFired, isTrue);
+                expect(highlightSpan.recognizer, isNull);
 
                 controller.dispose();
                 return Container();

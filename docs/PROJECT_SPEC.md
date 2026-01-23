@@ -510,7 +510,7 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - **Deferred items:** See `docs/FEATURE_REQUESTS.md`
 - **Known behaviors:**
   - Date filter (Overdue/No Date) applies to root-level tasks only; children inherit visibility from parent. A child matching the filter whose parent doesn't match will be hidden. Evaluate optimal behavior during UX testing.
-  - `onTapHighlight` on `HighlightedTextEditingController` is scaffolded but not invoked in input fields. Tap-to-open-DateOptionsSheet works via `GestureDetector` in `task_item.dart`. Deferred cleanup or activation pending Flutter TapGestureRecognizer resolution in editable TextFields.
+  - Highlighted date text in input fields uses `TextField.onTap` + cursor position check for tap detection (TapGestureRecognizer cannot be used in editable TextFields due to Flutter assertion). Saved tasks use `GestureDetector` on date suffix chip in `task_item.dart`.
 
 **Phase 3.8: Due Date Notifications** 🔜 (1-2 weeks)
 - flutter_local_notifications integration

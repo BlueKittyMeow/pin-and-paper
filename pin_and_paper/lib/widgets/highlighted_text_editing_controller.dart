@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// Custom TextEditingController that highlights a range of text
@@ -8,21 +7,20 @@ import 'package:flutter/material.dart';
 ///
 /// Key features:
 /// - Inline text highlighting with custom styles
-/// - Tap gesture on highlighted text
 /// - Web platform workaround (highlighting disabled due to cursor issues)
 /// - Maintains full text editing capabilities
 ///
-/// Implementation note:
-/// This uses buildTextSpan() override, which is the correct Flutter pattern
-/// for inline highlighting. RichText widget is NOT editable and cannot be used.
+/// Implementation notes:
+/// - This uses buildTextSpan() override, which is the correct Flutter pattern
+///   for inline highlighting. RichText widget is NOT editable and cannot be used.
+/// - TapGestureRecognizer CANNOT be used on TextSpans in editable TextFields.
+///   Flutter asserts: 'readOnly && !obscureText' (editable.dart:1346).
+///   Tap detection is handled via TextField.onTap + cursor position check instead.
 class HighlightedTextEditingController extends TextEditingController {
   TextRange? highlightRange;
-  VoidCallback? onTapHighlight;
-  TapGestureRecognizer? _tapRecognizer;
 
   HighlightedTextEditingController({
     String? text,
-    this.onTapHighlight,
   }) : super(text: text);
 
   @override
@@ -55,9 +53,9 @@ class HighlightedTextEditingController extends TextEditingController {
         if (range.start > 0)
           TextSpan(text: text.substring(0, range.start)),
 
-        // Highlighted text with tap-to-refine gesture
-        // task_input.dart wires onTapHighlight to open DateOptionsSheet
-        // task_item.dart uses its own GestureDetector on the date suffix instead
+        // Highlighted text (visual only)
+        // Tap detection is handled by TextField.onTap in task_input.dart
+        // and edit_task_dialog.dart (cursor position check against highlightRange)
         TextSpan(
           text: text.substring(range.start, range.end),
           style: baseStyle.copyWith(
@@ -65,9 +63,6 @@ class HighlightedTextEditingController extends TextEditingController {
             color: Colors.blue[700],
             fontWeight: FontWeight.w500,
           ),
-          recognizer: onTapHighlight != null
-              ? (_tapRecognizer = TapGestureRecognizer()..onTap = onTapHighlight)
-              : null,
         ),
 
         // Text after highlight
@@ -91,12 +86,5 @@ class HighlightedTextEditingController extends TextEditingController {
       highlightRange = null;
       notifyListeners();
     }
-  }
-
-  @override
-  void dispose() {
-    _tapRecognizer?.dispose();
-    _tapRecognizer = null;
-    super.dispose();
   }
 }
