@@ -77,6 +77,11 @@
 - **Description:** Add user preference for default keyboard capitalization behavior (sentence case, lowercase, etc.) in task input fields.
 - **Source:** Phase 3.5 validation, defer to Settings/Preferences phase
 
+#### Timezone Picker Override in Settings
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** Add a timezone picker to User Settings allowing manual override of the device timezone. The `UserSettings.timezoneId` field already exists in the model but has no UI. Notification scheduling and date parsing would use this override when set.
+- **Source:** Phase 3.8 agent review (Codex #6)
+
 #### Reorder Mode Icon Replacement
 - **Priority:** LOW | **Complexity:** LOW
 - **Description:** Current reorder mode uses hamburger icon (≡) which looks like a menu icon. Replace with a more intuitive list-with-arrows or drag-handle icon.
@@ -111,6 +116,11 @@
 
 ### Notifications & Reminders
 
+#### Background Isolate DB Access for Notification Actions
+- **Priority:** MEDIUM | **Complexity:** HIGH
+- **Description:** Currently notification action buttons (Complete, Cancel) use `showsUserInterface: true` to bring the app to foreground for handling. A future polish would implement true background action handling via isolate-safe DB access (`DartPluginRegistrant.ensureInitialized()` + SharedPreferences queueing for complex operations). This would let users complete/cancel tasks without opening the app.
+- **Source:** Phase 3.8 agent review (Codex #2, Gemini #6)
+
 #### Location-Based Reminders
 - **Priority:** LOW | **Complexity:** HIGH
 - **Description:** "Remind me when I get home" or "Remind me when I'm at the store." Requires geofencing and location permissions.
@@ -144,6 +154,11 @@
 - **Source:** Phase 3.6B stretch goal (partially fulfilled by 3.7.5)
 
 ### Input & Interaction
+
+#### Expand Natural Language Date Parsing
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Add support for relative date expressions not currently handled: "three days from now", "in three days", "day after tomorrow", "in a week", "two weeks from today", etc. Requires extending chrono.js configuration or adding post-processing rules in DateParsingService.
+- **Source:** Phase 3.7 known limitation
 
 #### Voice Input (Speech-to-Text)
 - **Priority:** LOW | **Complexity:** HIGH

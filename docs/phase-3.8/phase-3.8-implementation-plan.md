@@ -1,8 +1,9 @@
 # Phase 3.8 Implementation Plan - Due Date Notifications
 
-**Version:** 1
+**Version:** 2
 **Created:** 2026-01-22
-**Status:** Draft - Pending Review
+**Revised:** 2026-01-23 (agent review findings addressed)
+**Status:** Ready for Implementation
 **Reference:** `phase-3.8-plan-v2.md` (design decisions)
 
 ---
@@ -100,14 +101,19 @@
 
 | Decision | Resolution | Rationale |
 |----------|-----------|-----------|
-| Quiet hours | Delay to quiet hours end | Grouping logic (3+ in 30min) prevents burst |
+| Quiet hours | Delay to quiet hours end; cross-midnight checks previous day | All config flows from user prefs |
 | Notification IDs | `reminder.id.hashCode.abs() % (1 << 31)` | UUID-based, unique per reminder row |
 | Existing `notificationType` | Keep | Still useful (use_global/custom/none) |
 | Existing `notificationTime` | Obsolete, keep in schema | Backward compat, no migration risk |
-| All-day base time | `defaultNotificationHour:Minute` | Consistent with user preferences |
+| All-day overdue | After user's `endOfDayHour:Minute` (not midnight) | Respects "user_midnight" concept |
 | Timezone source | `UserSettings.timezoneId` ?? `FlutterTimezone.getLocalTimezone()` | Existing field, auto-detect fallback |
 | Service pattern | Singleton (factory constructor) | Matches DateParsingService |
 | Package versions | FLN ^19.5.0, timezone ^0.11.0, flutter_timezone ^5.0.1 | Latest stable as of Jan 2026 |
+| Action buttons | All use `showsUserInterface: true` for v1 | Background isolate DB deferred |
+| Exact alarms | `SCHEDULE_EXACT_ALARM` with runtime check + inexact fallback | Non-alarm app, user grants via Settings |
+| cancelReminders | Also cancels computed global IDs (not just DB rows) | Prevents stale notifications |
+| Trash restore | Reschedules reminders on restore if future due date | Prevents silent reminder loss |
+| rescheduleAll | Uses `_isRescheduling` flag to prevent races | Serializes bulk vs per-task scheduling |
 
 ---
 
@@ -155,8 +161,8 @@ android {
     compileOptions {
         // Enable desugaring for java.time APIs used by flutter_local_notifications
         isCoreLibraryDesugaringEnabled = true
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11  // Match existing project config
+        targetCompatibility = JavaVersion.VERSION_11  // Match existing project config
     }
 }
 
@@ -265,14 +271,17 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import '../utils/constants.dart';
+import '../services/user_settings_service.dart';
 
 /// Top-level background action handler (must be top-level or static)
+/// NOTE: For v1, all actions use showsUserInterface: true so this handler
+/// is primarily a safety net. True background handling (isolate DB access)
+/// is deferred to a future polish phase (see FEATURE_REQUESTS.md).
 @pragma('vm:entry-point')
 void onBackgroundNotificationAction(NotificationResponse response) {
-  // Handle background actions (Complete, Snooze, Cancel)
-  // This runs in an isolate - limited to simple operations
-  // Complex actions deferred to app open via SharedPreferences flag
   debugPrint('[Notification] Background action: ${response.actionId}');
+  // All actions handled in foreground via showsUserInterface: true
+  // Future: implement SharedPreferences queueing for background execution
 }
 
 class NotificationService {
@@ -296,9 +305,11 @@ class NotificationService {
     // Initialize timezone database
     tz.initializeTimeZones();
 
-    // Detect device timezone
+    // Detect timezone: prefer user override from settings, fallback to device
     try {
-      final timezoneName = await FlutterTimezone.getLocalTimezone();
+      final settings = await UserSettingsService().getUserSettings();
+      final timezoneName = settings.timezoneId
+          ?? await FlutterTimezone.getLocalTimezone();
       _localTimezone = tz.getLocation(timezoneName);
       tz.setLocalLocation(_localTimezone!);
     } catch (e) {
@@ -398,6 +409,15 @@ class NotificationService {
     return true;
   }
 
+  /// Check if exact alarm scheduling is permitted (Android 12+)
+  /// SCHEDULE_EXACT_ALARM requires user to grant via Settings > Alarms & Reminders
+  Future<bool> canScheduleExactAlarms() async {
+    if (!Platform.isAndroid) return true;
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    return await androidPlugin?.canScheduleExactNotifications() ?? true;
+  }
+
   /// Schedule a notification at a specific TZDateTime
   Future<void> schedule({
     required int id,
@@ -443,6 +463,8 @@ class NotificationService {
       linux: linuxDetails,
     );
 
+    // Use exact scheduling if permitted, fall back to inexact otherwise
+    final exactAllowed = await canScheduleExactAlarms();
     await _plugin.zonedSchedule(
       id,
       title,
@@ -450,7 +472,9 @@ class NotificationService {
       scheduledTime,
       details,
       payload: payload,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: exactAllowed
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: null,  // One-shot, not recurring
     );
 
@@ -859,6 +883,9 @@ class ReminderService {
   final NotificationService _notificationService = NotificationService();
   final UserSettingsService _userSettingsService = UserSettingsService();
 
+  /// Prevents per-task scheduling during bulk rescheduleAll()
+  bool _isRescheduling = false;
+
   // --- CRUD for task_reminders table ---
 
   /// Get all reminders for a task
@@ -903,94 +930,143 @@ class ReminderService {
 
   /// Schedule all notifications for a task based on its reminders
   Future<void> scheduleReminders(Task task) async {
-    if (task.dueDate == null) return;
-    if (task.completed) return;
-    if (task.notificationType == 'none') return;
-
+    if (_isRescheduling) return; // Skip per-task during bulk reschedule
     final settings = await _userSettingsService.getUserSettings();
-    final reminders = await _getEffectiveReminders(task, settings);
+    await _scheduleRemindersInternal(task, settings);
+  }
 
+  /// Cancel all scheduled notifications for a task
+  /// Handles both custom (DB-stored) and use_global (computed) reminders
+  Future<void> cancelReminders(String taskId) async {
+    // Cancel DB-stored reminders (custom type)
+    final dbReminders = await getRemindersForTask(taskId);
+    for (final reminder in dbReminders) {
+      await _notificationService.cancel(reminder.notificationId);
+    }
+
+    // Also cancel global reminders (not in DB, computed from settings)
+    // These use deterministic IDs based on taskId + type
+    final settings = await _userSettingsService.getUserSettings();
+    final globalTypes = settings.defaultReminderTypes.split(',');
+    for (final type in globalTypes) {
+      if (type.trim().isEmpty) continue;
+      final globalId = '${taskId}_global_${type.trim()}'.hashCode.abs() % (1 << 31);
+      await _notificationService.cancel(globalId);
+    }
+    // Cancel global overdue reminder too
+    final overdueId = '${taskId}_global_overdue'.hashCode.abs() % (1 << 31);
+    await _notificationService.cancel(overdueId);
+  }
+
+  /// Reschedule all notifications (timezone change, settings change, app resume)
+  /// Uses _isRescheduling flag to prevent per-task scheduling from racing
+  Future<void> rescheduleAll() async {
+    _isRescheduling = true;
+    try {
+      await _notificationService.cancelAll();
+
+      final db = await DatabaseService.instance.database;
+      final settings = await _userSettingsService.getUserSettings();
+      // Get all active tasks with due dates and notification_type != 'none'
+      final tasks = await db.query(
+        AppConstants.tasksTable,
+        where: "deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL AND notification_type != 'none'",
+      );
+
+      for (final taskMap in tasks) {
+        final task = Task.fromMap(taskMap);
+        // Call scheduling logic directly (bypasses _isRescheduling guard)
+        await _scheduleRemindersInternal(task, settings);
+      }
+
+      debugPrint('[ReminderService] Rescheduled notifications for ${tasks.length} tasks');
+    } finally {
+      _isRescheduling = false;
+    }
+  }
+
+  /// Internal scheduling logic used by both scheduleReminders and rescheduleAll
+  Future<void> _scheduleRemindersInternal(Task task, UserSettings settings) async {
+    if (task.dueDate == null || task.completed || task.notificationType == 'none') return;
+
+    final reminders = await _getEffectiveReminders(task, settings);
     for (final reminder in reminders) {
       if (!reminder.enabled) continue;
-
       final notifyTime = computeNotificationTime(task, reminder, settings);
       if (notifyTime == null) continue;
-
-      // Check quiet hours - delay if needed
       final adjustedTime = _adjustForQuietHours(notifyTime, settings);
-
-      // Build notification content
       final title = _buildNotificationTitle(task, reminder);
       final body = _buildNotificationBody(task, reminder);
-
       await _notificationService.schedule(
         id: reminder.notificationId,
         title: title,
         body: body,
         scheduledTime: adjustedTime,
-        payload: task.id,  // Task ID for navigation
+        payload: task.id,
       );
     }
-  }
-
-  /// Cancel all scheduled notifications for a task
-  Future<void> cancelReminders(String taskId) async {
-    final reminders = await getRemindersForTask(taskId);
-    for (final reminder in reminders) {
-      await _notificationService.cancel(reminder.notificationId);
-    }
-  }
-
-  /// Reschedule all notifications (timezone change, settings change, app resume)
-  Future<void> rescheduleAll() async {
-    await _notificationService.cancelAll();
-
-    final db = await DatabaseService.instance.database;
-    // Get all active tasks with due dates and notification_type != 'none'
-    final tasks = await db.query(
-      AppConstants.tasksTable,
-      where: "deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL AND notification_type != 'none'",
-    );
-
-    for (final taskMap in tasks) {
-      final task = Task.fromMap(taskMap);
-      await scheduleReminders(task);
-    }
-
-    debugPrint('[ReminderService] Rescheduled notifications for ${tasks.length} tasks');
   }
 
   /// Check for missed notifications (Linux fallback, app restart)
+  /// Respects user's end-of-day setting for all-day task overdue detection
   Future<List<Task>> checkMissed() async {
-    final db = await DatabaseService.instance.database;
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final settings = await _userSettingsService.getUserSettings();
+    final now = DateTime.now();
 
-    // Find active tasks that are overdue and have notifications enabled
-    final overdueTasks = await db.query(
+    final db = await DatabaseService.instance.database;
+    // Query all active tasks with due dates and notifications enabled
+    // (filtering by overdue is done in Dart to respect user's end-of-day)
+    final candidateTasks = await db.query(
       AppConstants.tasksTable,
       where: "deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL "
-             "AND due_date < ? AND notification_type != 'none'",
-      whereArgs: [now],
+             "AND notification_type != 'none'",
     );
 
     final missed = <Task>[];
-    for (final taskMap in overdueTasks) {
+    for (final taskMap in candidateTasks) {
       final task = Task.fromMap(taskMap);
-      missed.add(task);
+      if (_isTaskOverdue(task, settings, now)) {
+        missed.add(task);
 
-      // Show immediate notification for missed reminders
-      await _notificationService.showImmediate(
-        id: task.id.hashCode.abs() % (1 << 31),
-        title: 'Overdue: ${task.title}',
-        body: 'This task was due ${_formatDueDate(task.dueDate!)}',
-        payload: task.id,
-      );
+        // Show immediate notification for missed reminders
+        await _notificationService.showImmediate(
+          id: task.id.hashCode.abs() % (1 << 31),
+          title: 'Overdue: ${task.title}',
+          body: 'This task was due ${_formatDueDate(task.dueDate!)}',
+          payload: task.id,
+        );
+      }
     }
 
     if (missed.isNotEmpty) {
       debugPrint('[ReminderService] Found ${missed.length} missed notifications');
     }
     return missed;
+  }
+
+  /// Check if a task is actually overdue, respecting user's end-of-day setting
+  /// Design principle: EVERYTHING flows from user preferences, no hardcoded
+  /// midnight assumptions. The "user_midnight" concept means overdue is
+  /// determined by the user's configured end-of-day time.
+  bool _isTaskOverdue(Task task, UserSettings settings, DateTime now) {
+    if (task.dueDate == null) return false;
+    if (task.isAllDay) {
+      // All-day task: overdue after user's end-of-day time on the due date
+      // For a user with end-of-day at 4:00 AM, a task "due today" is not
+      // overdue until 4:00 AM the next calendar day
+      final endOfDay = DateTime(
+        task.dueDate!.year, task.dueDate!.month, task.dueDate!.day,
+        settings.endOfDayHour, settings.endOfDayMinute,
+      );
+      // If end-of-day is before noon (e.g., 4 AM), it means "next calendar day"
+      final effectiveDeadline = settings.endOfDayHour < 12
+          ? endOfDay.add(const Duration(days: 1))
+          : endOfDay;
+      return now.isAfter(effectiveDeadline);
+    } else {
+      // Timed task: overdue after the exact due time
+      return now.isAfter(task.dueDate!);
+    }
   }
 
   // --- Computation Helpers ---
@@ -1079,19 +1155,26 @@ class ReminderService {
   }
 
   /// Adjust notification time for quiet hours
+  /// NOTE: Quiet hours are highly user-configurable. All time boundaries
+  /// flow from UserSettings - no hardcoded assumptions about day boundaries.
   tz.TZDateTime _adjustForQuietHours(tz.TZDateTime time, UserSettings settings) {
     if (!settings.quietHoursEnabled) return time;
     if (settings.quietHoursStart == null || settings.quietHoursEnd == null) return time;
-
-    // Check if the day of week is in quiet hours days
-    final dayOfWeek = time.weekday - 1; // Convert to 0=Mon format
-    final activeDays = settings.quietHoursDays.split(',').map(int.parse).toSet();
-    if (!activeDays.contains(dayOfWeek)) return time;
 
     // Convert time to minutes from midnight
     final timeMinutes = time.hour * 60 + time.minute;
     final start = settings.quietHoursStart!;
     final end = settings.quietHoursEnd!;
+
+    // Check if the day of week is in quiet hours days
+    // For cross-midnight ranges (e.g., 22:00-07:00), the early-morning portion
+    // (before 'end') belongs to the PREVIOUS day's quiet hours setting
+    int dayOfWeek = time.weekday - 1; // Convert to 0=Mon format
+    if (start > end && timeMinutes < end) {
+      dayOfWeek = (dayOfWeek - 1 + 7) % 7; // Check previous day
+    }
+    final activeDays = settings.quietHoursDays.split(',').map(int.parse).toSet();
+    if (!activeDays.contains(dayOfWeek)) return time;
 
     bool isInQuietHours;
     if (start < end) {
@@ -1208,6 +1291,19 @@ try {
   await _reminderService.cancelReminders(taskId);
 } catch (e) {
   debugPrint('[TaskProvider] Failed to cancel reminders on delete: $e');
+}
+
+// In restoreTask(), after successful restore:
+try {
+  final restoredTask = await _taskService.getTaskById(taskId);
+  if (restoredTask != null &&
+      restoredTask.dueDate != null &&
+      restoredTask.dueDate!.isAfter(DateTime.now()) &&
+      restoredTask.notificationType != 'none') {
+    await _reminderService.scheduleReminders(restoredTask);
+  }
+} catch (e) {
+  debugPrint('[TaskProvider] Failed to reschedule on restore: $e');
 }
 ```
 
@@ -1546,21 +1642,23 @@ Future<void> updateTask({
 
 ```dart
 // Android actions
+// All actions use showsUserInterface: true to bring app to foreground.
+// Background isolate handling deferred to future polish (see FEATURE_REQUESTS.md).
 final androidActions = <AndroidNotificationAction>[
   const AndroidNotificationAction(
     'complete',
     'Complete',
-    showsUserInterface: false,
+    showsUserInterface: true,
   ),
   const AndroidNotificationAction(
     'snooze',
     'Snooze',
-    showsUserInterface: true,  // Opens app for snooze picker
+    showsUserInterface: true,
   ),
   const AndroidNotificationAction(
     'cancel_all',
     'Cancel',
-    showsUserInterface: false,
+    showsUserInterface: true,
   ),
 ];
 ```
