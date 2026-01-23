@@ -8,6 +8,7 @@ import 'providers/settings_provider.dart'; // Phase 2
 import 'providers/brain_dump_provider.dart'; // Phase 2
 import 'screens/home_screen.dart';
 import 'services/task_service.dart'; // Phase 3.3
+import 'services/date_parsing_service.dart'; // Phase 3.7
 import 'utils/theme.dart';
 
 void main() async {
@@ -32,6 +33,15 @@ void main() async {
     // Don't block app startup on cleanup failure
   }
 
+  // Phase 3.7: Initialize date parsing service
+  try {
+    final dateParser = DateParsingService();
+    await dateParser.initialize();
+  } catch (e) {
+    print('[Phase 3.7] Failed to initialize DateParsingService: $e');
+    // Don't block app startup on date parsing initialization failure
+  }
+
   runApp(const PinAndPaperApp());
 }
 
@@ -42,11 +52,18 @@ class PinAndPaperApp extends StatelessWidget {
   Widget build(BuildContext context) {
     // Phase 2: MultiProvider for multiple state management
     // Phase 3.5: Added TagProvider for tag management
-    // Order matters: SettingsProvider must be created before BrainDumpProvider
+    // Phase 3.6A: TaskProvider now depends on TagProvider (for filter validation)
+    // Order matters: TagProvider must be created before TaskProvider
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => TaskProvider()..loadPreferences()),
         ChangeNotifierProvider(create: (_) => TagProvider()), // Phase 3.5
+        ChangeNotifierProxyProvider<TagProvider, TaskProvider>(
+          create: (context) => TaskProvider(
+            tagProvider: Provider.of<TagProvider>(context, listen: false),
+          )..loadPreferences(),
+          update: (context, tagProvider, previous) =>
+              previous ?? TaskProvider(tagProvider: tagProvider)..loadPreferences(),
+        ),
         ChangeNotifierProvider(create: (_) => SettingsProvider()..initialize()),
         ChangeNotifierProxyProvider<SettingsProvider, BrainDumpProvider>(
           create: (context) => BrainDumpProvider(

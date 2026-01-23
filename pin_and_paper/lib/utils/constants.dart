@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 6; // Phase 3.5: Tags (hybrid deletion)
+  static const int databaseVersion = 8; // Phase 3.6.5: Edit Task Modal Rework (notes + position_before_completion)
 
   // Table names
   static const String tasksTable = 'tasks';
@@ -18,7 +18,7 @@ class AppConstants {
 
   // App metadata
   static const String appName = 'Pin and Paper';
-  static const String appVersion = '0.2.0'; // Phase 2: AI Integration
+  static const String appVersion = '3.6.0'; // Phase 3.6A: Tag Filtering
 
   // Performance targets
   static const int maxTasksInMemory = 500;

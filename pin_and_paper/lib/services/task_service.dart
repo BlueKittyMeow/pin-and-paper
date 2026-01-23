@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
+import '../models/filter_state.dart'; // Phase 3.6A
 import '../models/task.dart';
 import '../models/task_suggestion.dart'; // Phase 2
 import '../utils/constants.dart';
@@ -10,7 +11,11 @@ class TaskService {
   final Uuid _uuid = const Uuid();
 
   // Create a new task
-  Future<Task> createTask(String title) async {
+  Future<Task> createTask(
+    String title, {
+    DateTime? dueDate,
+    bool isAllDay = true,
+  }) async {
     if (title.trim().isEmpty) {
       throw ArgumentError('Task title cannot be empty');
     }
@@ -32,6 +37,8 @@ class TaskService {
       title: title.trim(),
       createdAt: DateTime.now(),
       position: nextPosition, // Phase 3.1: Assign calculated position
+      dueDate: dueDate, // Phase 3.7: Optional due date from Quick Add
+      isAllDay: isAllDay, // Phase 3.7: Optional isAllDay flag
     );
 
     await db.insert(
@@ -157,22 +164,382 @@ class TaskService {
     return maps.map((map) => Task.fromMap(map)).toList();
   }
 
+  /// Get parent chain for a task (for breadcrumb generation)
+  ///
+  /// Phase 3.6B: Returns list of parent tasks from immediate parent up to root.
+  /// Used for generating breadcrumb navigation in search results.
+  ///
+  /// Example: If task hierarchy is: Root > Parent > Child > Target
+  /// This returns: [Child, Parent, Root] (immediate parent first)
+  ///
+  /// Returns empty list if task has no parent (is root-level task).
+  /// Excludes soft-deleted tasks from the chain.
+  Future<List<Task>> getParentChain(String taskId) async {
+    final db = await _dbService.database;
+
+    // Use recursive CTE to walk up the parent chain
+    final maps = await db.rawQuery('''
+      WITH RECURSIVE ancestors AS (
+        SELECT id, parent_id, 0 as depth
+        FROM ${AppConstants.tasksTable}
+        WHERE id = ?
+
+        UNION ALL
+
+        SELECT t.id, t.parent_id, a.depth + 1
+        FROM ${AppConstants.tasksTable} t
+        INNER JOIN ancestors a ON t.id = a.parent_id
+        WHERE t.deleted_at IS NULL
+      )
+      SELECT t.*
+      FROM ${AppConstants.tasksTable} t
+      INNER JOIN ancestors a ON t.id = a.id
+      WHERE a.depth > 0
+      ORDER BY a.depth ASC
+    ''', [taskId]);
+
+    return maps.map((map) => Task.fromMap(map)).toList();
+  }
+
+  /// Phase 3.6A: Get filtered tasks by tags and presence
+  ///
+  /// Returns tasks matching the filter criteria:
+  /// - selectedTagIds with OR logic: tasks with ANY of the selected tags
+  /// - selectedTagIds with AND logic: tasks with ALL of the selected tags
+  /// - onlyTagged: tasks with at least one tag
+  /// - onlyUntagged: tasks with no tags
+  /// - No filter active: returns all tasks for the completed status
+  ///
+  /// Always filters by:
+  /// - `completed` status (active vs completed)
+  /// - Excludes soft-deleted tasks (deleted_at IS NULL)
+  ///
+  /// Returns tasks ordered by position.
+  Future<List<Task>> getFilteredTasks(
+    FilterState filter, {
+    required bool completed,
+  }) async {
+    final db = await _dbService.database;
+
+    // Base WHERE conditions (always apply)
+    final baseConditions = [
+      'tasks.deleted_at IS NULL',
+      'tasks.completed = ?',
+    ];
+    final baseArgs = [completed ? 1 : 0];
+
+    // Build query based on filter state
+    String query;
+    List<dynamic> args;
+
+    if (filter.selectedTagIds.isNotEmpty) {
+      // Specific tag filter
+      if (filter.logic == FilterLogic.or) {
+        // OR logic: tasks with ANY of the selected tags
+        query = '''
+          SELECT DISTINCT tasks.*
+          FROM ${AppConstants.tasksTable} tasks
+          INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+          WHERE task_tags.tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            AND ${baseConditions.join(' AND ')}
+          ORDER BY tasks.position DESC;
+        ''';
+        args = [...filter.selectedTagIds, ...baseArgs];
+      } else {
+        // AND logic: tasks with ALL of the selected tags
+        query = '''
+          SELECT tasks.*
+          FROM ${AppConstants.tasksTable} tasks
+          WHERE tasks.id IN (
+            SELECT task_id
+            FROM ${AppConstants.taskTagsTable}
+            WHERE tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            GROUP BY task_id
+            HAVING COUNT(DISTINCT tag_id) = ?
+          )
+            AND ${baseConditions.join(' AND ')}
+          ORDER BY tasks.position DESC;
+        ''';
+        args = [...filter.selectedTagIds, filter.selectedTagIds.length, ...baseArgs];
+      }
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyTagged) {
+      // Show only tasks with at least one tag
+      query = '''
+        SELECT DISTINCT tasks.*
+        FROM ${AppConstants.tasksTable} tasks
+        INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+        WHERE ${baseConditions.join(' AND ')}
+        ORDER BY tasks.position DESC;
+      ''';
+      args = baseArgs;
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyUntagged) {
+      // Show only tasks with no tags
+      query = '''
+        SELECT tasks.*
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE tasks.id NOT IN (
+          SELECT DISTINCT task_id
+          FROM ${AppConstants.taskTagsTable}
+        )
+          AND ${baseConditions.join(' AND ')}
+        ORDER BY tasks.position DESC;
+      ''';
+      args = baseArgs;
+    } else {
+      // No filter active - return all tasks for this completed status
+      query = '''
+        SELECT tasks.*
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE ${baseConditions.join(' AND ')}
+        ORDER BY tasks.position DESC;
+      ''';
+      args = baseArgs;
+    }
+
+    final maps = await db.rawQuery(query, args);
+    return maps.map((map) => Task.fromMap(map)).toList();
+  }
+
+  /// Phase 3.6A: Count tasks matching filter (for UX preview)
+  ///
+  /// Similar to getFilteredTasks but returns count instead of full list.
+  /// Used in TagFilterDialog to show "X tasks match" preview.
+  ///
+  /// Performance: Much faster than loading full list, typically <5ms
+  Future<int> countFilteredTasks(
+    FilterState filter, {
+    required bool completed,
+  }) async {
+    final db = await _dbService.database;
+
+    // Base WHERE conditions (always apply)
+    final baseConditions = [
+      'tasks.deleted_at IS NULL',
+      'tasks.completed = ?',
+    ];
+    final baseArgs = [completed ? 1 : 0];
+
+    // Build query based on filter state
+    String query;
+    List<dynamic> args;
+
+    if (filter.selectedTagIds.isNotEmpty) {
+      // Specific tag filter
+      if (filter.logic == FilterLogic.or) {
+        // OR logic: tasks with ANY of the selected tags
+        query = '''
+          SELECT COUNT(DISTINCT tasks.id) as count
+          FROM ${AppConstants.tasksTable} tasks
+          INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+          WHERE task_tags.tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            AND ${baseConditions.join(' AND ')}
+        ''';
+        args = [...filter.selectedTagIds, ...baseArgs];
+      } else {
+        // AND logic: tasks with ALL of the selected tags
+        query = '''
+          SELECT COUNT(*) as count
+          FROM ${AppConstants.tasksTable} tasks
+          WHERE tasks.id IN (
+            SELECT task_id
+            FROM ${AppConstants.taskTagsTable}
+            WHERE tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
+            GROUP BY task_id
+            HAVING COUNT(DISTINCT tag_id) = ?
+          )
+            AND ${baseConditions.join(' AND ')}
+        ''';
+        args = [...filter.selectedTagIds, filter.selectedTagIds.length, ...baseArgs];
+      }
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyTagged) {
+      // Show only tasks with at least one tag
+      query = '''
+        SELECT COUNT(DISTINCT tasks.id) as count
+        FROM ${AppConstants.tasksTable} tasks
+        INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
+        WHERE ${baseConditions.join(' AND ')}
+      ''';
+      args = baseArgs;
+    } else if (filter.presenceFilter == TagPresenceFilter.onlyUntagged) {
+      // Show only tasks with no tags
+      query = '''
+        SELECT COUNT(*) as count
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE tasks.id NOT IN (
+          SELECT DISTINCT task_id
+          FROM ${AppConstants.taskTagsTable}
+        )
+          AND ${baseConditions.join(' AND ')}
+      ''';
+      args = baseArgs;
+    } else {
+      // No filter active - return all tasks for this completed status
+      query = '''
+        SELECT COUNT(*) as count
+        FROM ${AppConstants.tasksTable} tasks
+        WHERE ${baseConditions.join(' AND ')}
+      ''';
+      args = baseArgs;
+    }
+
+    final result = await db.rawQuery(query, args);
+    return result.first['count'] as int;
+  }
+
   // Toggle task completion status
+  // Phase 3.6.5: Now saves position before completion for restore capability
   Future<Task> toggleTaskCompletion(Task task) async {
-    final updatedTask = task.copyWith(
-      completed: !task.completed,
-      completedAt: !task.completed ? DateTime.now() : null,
+    final db = await _dbService.database;
+
+    if (!task.completed) {
+      // Completing: Save current position for potential restore
+      final updatedTask = task.copyWith(
+        completed: true,
+        completedAt: DateTime.now(),
+        positionBeforeCompletion: task.position,
+      );
+
+      await db.update(
+        AppConstants.tasksTable,
+        updatedTask.toMap(),
+        where: 'id = ?',
+        whereArgs: [task.id],
+      );
+
+      return updatedTask;
+    } else {
+      // Uncompleting: Use restoreTaskToPosition for proper handling
+      return await uncompleteTask(task.id);
+    }
+  }
+
+  /// Phase 3.6.5: Uncomplete a task and restore its position
+  ///
+  /// Gemini #18: Moved position restore logic to TaskService for cleaner architecture
+  ///
+  /// Steps:
+  /// 1. Get task and its saved position
+  /// 2. Shift siblings at >= target position up by 1
+  /// 3. Restore task to its original position
+  /// 4. Clear position_before_completion
+  Future<Task> uncompleteTask(String taskId) async {
+    final db = await _dbService.database;
+
+    return await db.transaction((txn) async {
+      // 1. Get the task
+      final taskMaps = await txn.query(
+        AppConstants.tasksTable,
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      if (taskMaps.isEmpty) {
+        throw Exception('Task not found: $taskId');
+      }
+
+      final task = Task.fromMap(taskMaps.first);
+
+      // Determine target position
+      final targetPosition = task.positionBeforeCompletion ?? task.position;
+      final parentId = task.parentId;
+
+      // 2. Shift siblings at >= target position up by 1 to make room
+      await txn.rawUpdate('''
+        UPDATE ${AppConstants.tasksTable}
+        SET position = position + 1
+        WHERE ${parentId == null ? 'parent_id IS NULL' : 'parent_id = ?'}
+          AND position >= ?
+          AND completed = 0
+          AND deleted_at IS NULL
+          AND id != ?
+      ''', parentId == null
+          ? [targetPosition, taskId]
+          : [parentId, targetPosition, taskId]);
+
+      // 3. Update task: uncomplete and restore position
+      await txn.update(
+        AppConstants.tasksTable,
+        {
+          'completed': 0,
+          'completed_at': null,
+          'position': targetPosition,
+          'position_before_completion': null, // Clear saved position
+        },
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      // 4. Return updated task
+      return task.copyWith(
+        completed: false,
+        completedAt: null,
+        position: targetPosition,
+        positionBeforeCompletion: null,
+      );
+    });
+  }
+
+  /// Phase 3.6.5: Comprehensive task update
+  ///
+  /// Updates multiple task fields at once:
+  /// - title (required)
+  /// - dueDate (optional)
+  /// - notes (optional)
+  ///
+  /// NOTE: Parent changes are handled separately via updateTaskParent()
+  /// to maintain proper hierarchy validation and position handling.
+  ///
+  /// Returns the updated Task object
+  /// Throws [ArgumentError] if title is empty or whitespace-only
+  /// Throws [Exception] if task not found
+  Future<Task> updateTask(
+    String taskId, {
+    required String title,
+    DateTime? dueDate,
+    bool isAllDay = true,
+    String? notes,
+  }) async {
+    final db = await _dbService.database;
+    final trimmedTitle = title.trim();
+
+    // Validate title
+    if (trimmedTitle.isEmpty) {
+      throw ArgumentError('Task title cannot be empty');
+    }
+
+    // Fetch the original task first to have all its data
+    final maps = await db.query(
+      AppConstants.tasksTable,
+      where: 'id = ?',
+      whereArgs: [taskId],
     );
 
-    final db = await _dbService.database;
+    if (maps.isEmpty) {
+      throw Exception('Task not found: $taskId');
+    }
+
+    final originalTask = Task.fromMap(maps.first);
+
+    // Perform the update
     await db.update(
       AppConstants.tasksTable,
-      updatedTask.toMap(),
+      {
+        'title': trimmedTitle,
+        'due_date': dueDate?.millisecondsSinceEpoch,
+        'is_all_day': isAllDay ? 1 : 0,
+        'notes': notes,
+      },
       where: 'id = ?',
-      whereArgs: [task.id],
+      whereArgs: [taskId],
     );
 
-    return updatedTask;
+    // Return updated copy
+    return originalTask.copyWith(
+      title: trimmedTitle,
+      dueDate: dueDate,
+      isAllDay: isAllDay,
+      notes: notes,
+    );
   }
 
   // Phase 3.4: Update task title

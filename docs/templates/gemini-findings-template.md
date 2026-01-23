@@ -1,16 +1,55 @@
 # Gemini Findings - Phase [X.Y] Validation
 
+**⚠️ TEMPLATE USAGE INSTRUCTIONS ⚠️**
+**DO NOT edit this template directly!**
+**ALWAYS copy to `docs/phase-XX/gemini-findings.md` and customize.**
+
+```bash
+# Correct usage:
+cp docs/templates/gemini-findings-template.md docs/phase-3.6B/gemini-findings.md
+# Then edit gemini-findings.md to fill in phase details
+```
+
+**This template is used for BOTH:**
+- Pre-implementation review (reviewing plans before coding)
+- Post-implementation validation (reviewing code after implementation)
+
+---
+
 **Phase:** [X.Y - Brief Description]
-**Validation Document:** [Link to phase-X.Y-validation-vN.md]
+**Plan/Validation Document:** [Link to phase-X.Y-plan-vN.md OR phase-X.Y-validation-vN.md]
 **Review Date:** [YYYY-MM-DD]
 **Reviewer:** Gemini
+**Review Type:** [Pre-Implementation Review / Post-Implementation Validation]
 **Status:** ⏳ Pending Review
 
 ---
 
 ## Instructions
 
-This document is for **Gemini** to document findings during Phase [X.Y] validation.
+This document is for **Gemini** to document findings during Phase [X.Y] review/validation.
+
+**⚠️ CRITICAL:** These build commands and methodology are here to guide your review. Follow them!
+
+**🚫 NEVER SIMULATE OTHER AGENTS' RESPONSES 🚫**
+**DO NOT write feedback on behalf of Codex, Claude, or anyone else!**
+**ONLY document YOUR OWN findings in this document.**
+
+If you want to reference another agent's work:
+- ✅ "See Codex's findings in codex-findings.md for architecture concerns"
+- ❌ DO NOT write "Codex found..." in this doc
+- ❌ DO NOT create sections for other agents
+- ❌ DO NOT simulate what other agents might say
+
+**This is YOUR document. Other agents have their own documents.**
+
+**📝 RECORD ONLY - DO NOT MODIFY CODE 📝**
+- Your job is to **record findings to THIS file only**
+- Do NOT make any changes to the codebase (no editing source files, tests, configs, etc.)
+- Do NOT create, modify, or delete any files outside of this document
+- Claude will review your findings and implement fixes separately
+
+---
 
 ### Review Focus Areas
 

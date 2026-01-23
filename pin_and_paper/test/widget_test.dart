@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/models/tag.dart';
 import 'package:pin_and_paper/models/task.dart';
+import 'package:pin_and_paper/providers/tag_provider.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/screens/home_screen.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
@@ -20,11 +21,17 @@ class FakeTaskService extends TaskService {
   int _idCounter = 0;
 
   @override
-  Future<Task> createTask(String title) async {
+  Future<Task> createTask(
+    String title, {
+    DateTime? dueDate,
+    bool isAllDay = true,
+  }) async {
     final task = Task(
       id: (++_idCounter).toString(),
       title: title,
       createdAt: DateTime.now(),
+      dueDate: dueDate,
+      isAllDay: isAllDay,
     );
     _storage.insert(0, task);
     return task;
@@ -73,11 +80,19 @@ void main() {
     final fakeTagService = FakeTagService();
 
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => TaskProvider(
-          taskService: fakeTaskService,
-          tagService: fakeTagService,
-        ),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => TaskProvider(
+              taskService: fakeTaskService,
+              tagService: fakeTagService,
+            ),
+          ),
+          // Phase 3.6.5: TagProvider now required by TaskItem
+          ChangeNotifierProvider(
+            create: (_) => TagProvider(tagService: fakeTagService),
+          ),
+        ],
         child: const MaterialApp(
           home: HomeScreen(),
         ),

@@ -91,6 +91,10 @@ class DatabaseService {
         -- Phase 3.3: Soft delete
         deleted_at INTEGER DEFAULT NULL,
 
+        -- Phase 3.6.5: Edit Task Modal Rework
+        notes TEXT DEFAULT NULL,
+        position_before_completion INTEGER DEFAULT NULL,
+
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
       )
     ''');
@@ -384,6 +388,16 @@ class DatabaseService {
     // Migrate from version 5 to 6: Phase 3.5 - Tags (hybrid deletion)
     if (oldVersion < 6) {
       await _migrateToV6(db);
+    }
+
+    // Migrate from version 6 to 7: Phase 3.6B - Universal Search (no schema changes)
+    if (oldVersion < 7) {
+      await _migrateToV7(db);
+    }
+
+    // Migrate from version 7 to 8: Phase 3.6.5 - Edit Task Modal Rework
+    if (oldVersion < 8) {
+      await _migrateToV8(db);
     }
   }
 
@@ -887,6 +901,67 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v6 successfully (case-insensitive tags + soft delete)');
+  }
+
+  /// Phase 3.6B Migration: v6 → v7
+  ///
+  /// No schema changes for Phase 3.6B Universal Search.
+  /// This migration is reserved for future FTS5 (Full-Text Search) implementation
+  /// if performance testing shows the LIKE queries don't meet the <100ms target.
+  ///
+  /// Current approach (v7):
+  /// - Uses SQL LIKE '%query%' for candidate selection
+  /// - No B-tree indexes (they don't help leading-wildcard LIKE)
+  /// - Dart fuzzy scoring with string_similarity package
+  /// - Candidate cap (LIMIT 200) prevents runaway queries
+  ///
+  /// Future FTS5 approach (if needed):
+  /// - Create FTS5 virtual table for tasks (title, notes)
+  /// - Create triggers to keep FTS5 in sync with tasks table
+  /// - Migrate to BM25 relevance ranking
+  /// - Expected performance: 10-50ms for 1000 tasks
+  ///
+  /// See docs/phase-3.6B/fts5-analysis.md for FTS5 migration plan.
+  Future<void> _migrateToV7(Database db) async {
+    debugPrint('Migrating database from v6 to v7: No schema changes (FTS5 reserved)');
+    // No operations needed - this is a version bump to track Phase 3.6B completion
+    // and reserve v7 for future FTS5 implementation if performance requires it
+    debugPrint('✅ Database migrated to v7 successfully');
+  }
+
+  /// Phase 3.6.5 Migration: v7 → v8
+  ///
+  /// Adds:
+  /// - notes field (TEXT, nullable) - for task descriptions/notes
+  /// - position_before_completion field (INTEGER, nullable) - for restoring position on uncomplete
+  ///
+  /// This enables:
+  /// - Comprehensive task editing (title, due date, notes, tags, parent)
+  /// - Position restoration when uncompleting a task
+  ///
+  /// All existing tasks get NULL values (no notes, no saved position)
+  Future<void> _migrateToV8(Database db) async {
+    debugPrint('Migrating database from v7 to v8: Edit Task Modal Rework');
+
+    await db.transaction((txn) async {
+      // ===========================================
+      // 1. ADD NOTES COLUMN
+      // ===========================================
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.tasksTable}
+        ADD COLUMN notes TEXT DEFAULT NULL
+      ''');
+
+      // ===========================================
+      // 2. ADD POSITION_BEFORE_COMPLETION COLUMN
+      // ===========================================
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.tasksTable}
+        ADD COLUMN position_before_completion INTEGER DEFAULT NULL
+      ''');
+    });
+
+    debugPrint('✅ Database migrated to v8 successfully');
   }
 
   Future<void> close() async {

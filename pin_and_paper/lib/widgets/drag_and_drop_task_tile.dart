@@ -81,7 +81,7 @@ class DragAndDropTaskTile extends StatelessWidget {
             child: IgnorePointer(
               child: TaskItem(
                 task: entry.node,
-                depth: entry.node.depth,
+                depth: entry.level, // Phase 3.6A: Use visible tree depth
                 hasChildren: entry.hasChildren,
                 isExpanded: entry.isExpanded,
                 onToggleCollapse: onToggleCollapse,
@@ -118,7 +118,7 @@ class DragAndDropTaskTile extends StatelessWidget {
             decoration: decoration ?? const BoxDecoration(),
             child: TaskItem(
               task: entry.node,
-              depth: entry.node.depth,
+              depth: entry.level, // Phase 3.6A: Use visible tree depth
               hasChildren: entry.hasChildren,
               isExpanded: entry.isExpanded,
               onToggleCollapse: onToggleCollapse,

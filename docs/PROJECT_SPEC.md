@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
-**Version:** 3.5 (Phase 3 In Progress)
-**Last Updated:** 2026-01-06
+**Version:** 3.7 (Phase 3 In Progress)
+**Last Updated:** 2026-01-22
 **Primary Device:** Samsung Galaxy S22 Ultra
-**Current Phase:** Phase 3.5 Complete - Validation & Planning Phase 3.6
+**Current Phase:** Phase 3.7 Complete - Natural Language Date Parsing
 
 ---
 
@@ -33,11 +33,11 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.3:** Recently Deleted (Soft Delete) - Complete (Dec 27, 2025)
 ✅ **Phase 3.4:** Task Editing (Due Dates, Notes, etc.) - Complete (Dec 2025)
 ✅ **Phase 3.5:** Comprehensive Tagging System - Complete (Jan 9, 2026)
-🔜 **Phase 3.6A:** Tag Filtering - In Planning (1 week)
-🔜 **Phase 3.6B:** Universal Search - Planned (1-2 weeks)
-⚠️ **Phase 3.6.5:** Edit Task Modal Rework - Required Before 3.7 (1 week)
-🔜 **Phase 3.7:** Natural Language Date Parsing - Planned (1-2 weeks)
+✅ **Phase 3.6B:** Universal Search - Complete (Jan 19, 2026)
+✅ **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix - Complete (Jan 20, 2026)
+✅ **Phase 3.7:** Natural Language Date Parsing + Sort/Filter - Complete (Jan 22, 2026)
 🔜 **Phase 3.8:** Due Date Notifications - Planned (1-2 weeks)
+🔜 **Phase 3.9:** Onboarding Quiz & User Preferences - Planned (1 week)
 
 ---
 
@@ -491,39 +491,32 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Duplicate tag UI validation (backend prevents duplicates, UI can improve) - Low priority
 - Keyboard capitalization preference - Defer to Settings phase
 - Date-based filtering (due today, this week, overdue) - Consider for 3.6B stretch goal or 3.7
+- ~~Sort by due date (soonest/overdue first)~~ - ✅ Implemented in Phase 3.7.5
 - See `docs/future/future.md` for full details and rationale
 
-**Phase 3.6.5: Edit Task Modal Rework** 🔜 ⚠️ **REQUIRED BEFORE PHASE 3.7** (1 week)
-- **Current limitation:** Edit modal only allows changing task title
-- **Need:** Comprehensive edit modal with all task fields
-  - Title (currently implemented)
-  - Due date picker (needed before Phase 3.7)
-  - Notes/description field
-  - Tag management (inline)
-  - Parent task selector (change nesting)
-- **Rationale:** Must have robust editing UI before adding natural language date parsing
-- **UX Decision:** Already agreed to remove confusing "+ Add Tag" chip; context menu only
-- **Priority:** Blocking for Phase 3.7 date features
+**Phase 3.6.5: Edit Task Modal Rework + TreeController Fix** ✅ (Jan 20, 2026)
+- **TaskTreeController:** Custom ID-based expansion state tracking (fixes object reference corruption)
+- **Edit Task Dialog:** Comprehensive task editing (title, parent, date, time, tags, notes)
+- **Completed Task Metadata Dialog:** Rich details view with View in Context, Uncomplete, Delete actions
+- **Time Picker:** All Day toggle + time selection for due dates
+- **Bug Fixes:** Depth preservation on uncomplete, reorder positioning, widget test TagProvider
+- **290 tests passing** (15 new TreeController tests)
+- **Deferred:** Parent selector filtered list issue (defer to Phase 3.7 if needed)
 
-**New from Fix #C3 Validation (Jan 9, 2026):**
-- **Completed Task Metadata View** (HIGH priority)
-  - Click completed task to open read-only modal
-  - Show: created/completed timestamps, duration, tags, notes, full hierarchy
-  - Actions: "View in Context", "Uncomplete", "Delete Permanently"
-  - Use case: Task history, journaling, "temporal proof of existence"
-- **Show Completed Parents with Incomplete Children** (MEDIUM priority)
-  - Display completed parent in completed section even if children incomplete
-  - Visual indicator: dimmed text, icon, or "X incomplete children" badge
-  - Clicking navigates to active task list to show context
-  - Optional: Make this a user preference
-- See: `docs/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
-
-**Phase 3.7: Natural Language Date Parsing** 🔜 (1-2 weeks)
+**Phase 3.7: Natural Language Date Parsing + Sort/Filter** ✅ (Jan 22, 2026)
 - Parse relative dates ("tomorrow", "next Tuesday", "in 3 days")
 - Parse absolute dates ("Jan 15", "March 3rd")
 - Time-of-day support ("3pm", "morning", "evening")
-- Night owl mode (configurable midnight boundary)
-- Integration with Brain Dump and task creation
+- Real-time Todoist-style highlighting in edit/create fields
+- DateOptionsSheet with quick date options (Today, Tomorrow, Next Week, Pick)
+- Clickable date suffix display on saved tasks
+- **Phase 3.7.5:** Live clock in AppBar, Sort-by (Manual/Recent/Due Soonest), Date filters (Overdue/No Date)
+- flutter_js + chrono.js integration (QuickJS FFI)
+- ~120+ tests, 1,848 lines production code
+- **Deferred:** Night owl mode, recurring dates → Phase 4+
+- **Known behaviors:**
+  - Date filter (Overdue/No Date) applies to root-level tasks only; children inherit visibility from parent. A child matching the filter whose parent doesn't match will be hidden. Evaluate optimal behavior during UX testing.
+  - `onTapHighlight` on `HighlightedTextEditingController` is scaffolded but not invoked in input fields. Tap-to-open-DateOptionsSheet works via `GestureDetector` in `task_item.dart`. Deferred cleanup or activation pending Flutter TapGestureRecognizer resolution in editable TextFields.
 
 **Phase 3.8: Due Date Notifications** 🔜 (1-2 weeks)
 - flutter_local_notifications integration
@@ -532,13 +525,23 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Quick actions from notifications
 - Quiet hours setting
 
+**Phase 3.9: Onboarding Quiz & User Preferences** 🔜 (1 week)
+- Scenario-based quiz to infer user time perception preferences
+- Night owl mode cutoff configuration (from Phase 3.7)
+- Date parsing preferences (Quick Add toggle, time keywords)
+- Notification preferences (from Phase 3.8)
+- Week start day preference
+- Tag system preferences
+- "Retake quiz" and "Explain my settings" features
+- Skip option with sensible defaults
+
 **Phase 3 Completion:**
 - ✅ Git tag: `v3.5.0` (Phase 3.5 complete - Jan 9, 2026)
-- 📦 **Create GitHub Release when Phase 3 fully complete (after 3.8)**
+- 📦 **Create GitHub Release when Phase 3 fully complete (after 3.9)**
   - Milestone release: "Phase 3: Core Productivity Complete"
-  - Include full changelog of 3.1-3.8
+  - Include full changelog of 3.1-3.9
   - Mark as stable release for mobile workflows
-  - Tag: `v3.8.0` or `v3.0.0` (major milestone)
+  - Tag: `v3.9.0` or `v3.0.0` (major milestone)
 
 **Deferred to Phase 6+:**
 - Voice input (speech-to-text)
@@ -1054,35 +1057,34 @@ This section documents major architectural and scope decisions made during plann
 
 ## Next Steps
 
-**Current Phase:** Phase 3.5 Complete - Validation in Progress (Jan 6, 2026)
-
-**Immediate Actions:**
-1. ✅ Complete Phase 3.5 Fix #C3 validation (completed task hierarchy) - Jan 9, 2026
-2. ✅ Document UX decisions (removed "+ Add Tag" chip, context menu only) - Jan 9, 2026
-3. 🔜 Plan Phase 3.6A (Tag Filtering - 1 week)
-4. 🔜 Plan Phase 3.6B (Universal Search - 1-2 weeks)
-5. ⚠️ **Plan Phase 3.6.5 (Edit Task Modal Rework)** - Required before Phase 3.7
+**Current Phase:** Phase 3.7 Complete - Natural Language Date Parsing (Jan 22, 2026)
 
 **Completed Recently:**
-- ✅ Phase 3.5: Comprehensive Tagging System (Jan 5-6, 2026)
-  - 154+ tests passing (including 6 new hierarchy tests)
-  - Dual AI code review (Gemini + Codex)
-  - Fix #C3: Completed task hierarchy preserved (depth + hasChildren)
-  - UX improvements: breadcrumb icons, right-click support, removed confusing UI
-  - Database v6 migration complete
+1. ✅ Phase 3.7 Natural Language Date Parsing + Sort/Filter (Jan 20-22, 2026)
+   - chrono.js NL parsing via flutter_js (QuickJS FFI)
+   - Real-time inline highlighting in TextFields
+   - DateOptionsSheet with quick date options
+   - Live clock, Sort-by, Date filters (Phase 3.7.5)
+   - ~120+ tests, 1,848 lines production code
+2. ✅ Phase 3.6.5 Edit Task Modal Rework + TreeController Fix (Jan 19-20, 2026)
+   - Custom TaskTreeController with ID-based expansion state
+   - Comprehensive edit dialog (title, parent, date, time, tags, notes)
+
+**Next Up:**
+1. 🔜 Implement Phase 3.8 (Due Date Notifications)
+2. 🔜 Implement Phase 3.9 (Onboarding Quiz & User Preferences)
+3. 🔜 Complete Phase 3 → Release v3.9.0
 
 **Upcoming Phases:**
-- Phase 3.6: Tag Search & Filtering (2-3 weeks)
-- **Phase 3.6.5: Edit Task Modal Rework (1 week)** ⚠️ BLOCKING for 3.7
-- Phase 3.7: Natural Language Date Parsing (1-2 weeks)
 - Phase 3.8: Due Date Notifications (1-2 weeks)
+- Phase 3.9: Onboarding Quiz & User Preferences (1 week)
 - Phase 4: Bounded Workspace View (4-5 weeks)
 
 ---
 
-**Document Status:** ✅ Up to Date (Phase 3.5 Complete + 3.6.5 Planning Added)
-**Last Review:** January 6, 2026
-**Next Review:** After Phase 3.6.5-3.8 completion
+**Document Status:** ✅ Up to Date (Phase 3.7 Complete)
+**Last Review:** January 22, 2026
+**Next Review:** After Phase 3.8-3.9 completion
 
 **See Also:**
 - `visual-design.md` - Complete aesthetic specification

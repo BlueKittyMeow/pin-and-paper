@@ -80,11 +80,11 @@ Muted Lavender:#9B8FA5  (dried flowers, soft accents)
 - **Custom rendering** - Skia engine for torn paper effects, dynamic lighting, shadows
 
 ### Data & State
-- **SQLite v6** (via sqflite) - Local-first, offline-capable, battle-tested
-  - 6 schema migrations (v1 → v6)
-  - Supports task hierarchy, tags, soft delete, due dates
+- **SQLite v7** (via sqflite) - Local-first, offline-capable, battle-tested
+  - 7 schema migrations (v1 → v7, FTS5 reserved)
+  - Supports task hierarchy, tags, soft delete, due dates, search
 - **Provider** - Simple state management (upgrading to Riverpod later)
-- **154 comprehensive tests** - Models, services, utilities, migrations, widgets (95%+ pass rate)
+- **390+ comprehensive tests** - Models, services, utilities, migrations, widgets (95%+ pass rate)
 
 ### AI Integration
 - **Claude API** (Phase 2) - Natural language task extraction from brain dumps
@@ -138,18 +138,41 @@ Data Layer (SQLite)
   - Performance optimized for 60+ hierarchical completed tasks
   - Breadcrumbs with visual indicators (↳ icon + italic text)
   - Validation complete with future enhancements identified
+- ✅ **Phase 3.6A:** Tag Filtering Polish & Validation (Jan 2026)
+  - 22 comprehensive automated tests (100% passing)
+  - 6 critical bugs discovered and fixed (filter persistence, hierarchy display, indentation)
+  - 7 UX improvements (clear button, tooltips, scroll fade, usage-based sorting, visual highlights, selection preservation, result count preview)
+  - Performance validated (<10ms filtering, <5ms counting)
+  - Production-ready tag filtering with multi-select and AND/OR logic
+  - Active filter bar with chip removal and clear all
+- ✅ **Phase 3.6B:** Universal Search (Jan 2026)
+  - Two-stage search algorithm (SQL LIKE + Dart fuzzy scoring)
+  - Weighted relevance scoring (title 70%, tags 30%)
+  - Advanced filtering (scope, tags, presence)
+  - Navigation with scroll-to-task and highlighting
+  - Debounced search with race condition protection
+  - Match highlighting and breadcrumb navigation
+  - Expand/collapse all functionality
+  - App icon integration
+  - Enter key functionality breakthrough (6 attempts documented)
+- ✅ **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix (Jan 2026)
+  - Custom TaskTreeController with ID-based expansion state tracking
+  - Comprehensive edit dialog (title, parent, date, time, tags, notes)
+  - Completed task metadata dialog with View in Context, Uncomplete, Delete
+  - Time picker with All Day toggle
+  - Bug fixes: depth preservation on uncomplete, reorder positioning
+  - 290 tests passing (15 new TreeController unit tests)
+
+- ✅ **Phase 3.7:** Natural Language Date Parsing + Sort/Filter (Jan 2026)
+  - chrono.js NL parsing via flutter_js (QuickJS FFI)
+  - Real-time inline highlighting in task titles
+  - DateOptionsSheet (Today/Tomorrow/Next Week/Pick)
+  - Live clock, Sort-by, Date filters (Overdue/No Date)
+  - ~120+ tests, 1,848 lines production code
 
 **Next Up:**
-- 🔜 **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
-  - Universal search (active + completed tasks)
-  - Tag-based filtering with multi-select
-  - Clickable tag chips throughout app
-- ⚠️ **Phase 3.6.5:** Edit Task Modal Rework (1 week) - **Required before 3.7**
-  - Comprehensive edit modal with all task fields
-  - **Completed task metadata view** (created/completed timestamps, full details)
-  - Show completed parents with incomplete children (with visual indicator)
-- 🔜 **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
 - 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
+- 🔜 **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 
 **Deferred to Phase 6+:**
 - ⏸️ Voice input (speech-to-text)
@@ -268,31 +291,44 @@ Each phase builds on the previous:
   - Database v6
   - **Dual AI code review:** All 11 findings addressed (6 UX + 5 technical)
 
+- [x] **Phase 3.6A:** Tag Filtering Polish & Validation (Jan 2026)
+  - **22 comprehensive automated tests** (100% passing)
+  - **6 critical bugs** discovered and resolved (filter persistence, hierarchy, indentation)
+  - **7 UX improvements** (clear button, tooltips, scroll fade, sorting, highlights, state preservation, result preview)
+  - **Performance validated:** <10ms filtering, <5ms counting
+  - Production-ready tag filtering with AND/OR logic
+  - Active filter bar with chip interactions
+
+- [x] **Phase 3.6B:** Universal Search (Jan 2026)
+  - Two-stage search algorithm with fuzzy scoring
+  - Navigation with scroll-to-task and highlighting
+  - Advanced filtering with debounced search
+
+- [x] **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix (Jan 2026)
+  - Custom TaskTreeController with ID-based expansion state
+  - Comprehensive edit dialog (title, parent, date, time, tags, notes)
+  - Completed task metadata dialog
+  - Time picker with All Day toggle
+
+- [x] **Phase 3.7:** Natural Language Date Parsing + Sort/Filter (Jan 2026)
+  - chrono.js NL parsing via flutter_js (QuickJS FFI)
+  - Real-time inline highlighting in task titles
+  - DateOptionsSheet, clickable date suffixes
+  - Live clock, Sort-by (Manual/Recent/Due Soonest)
+  - Date filters (Overdue/No Date) in filter dialog
+  - ~120+ tests, 1,848 lines production code
+
 ### Current Stats
-- **~8,000+ lines of production code**
-- **160+ tests passing** (100% pass rate)
+- **~11,000+ lines of production code**
+- **394 tests passing** (95%+ pass rate)
 - **Database:** v6 (6 migrations complete)
-- **Phases completed:** 2 full phases + 5 subphases
-- **Fix #C3 validated:** Completed task hierarchy preserved for Phase 4 daybook
+- **Phases completed:** 2 full phases + 9 subphases
+- **Latest:** Phase 3.7 - Natural Language Date Parsing + Sort/Filter
 
 ### Next Up
-- **Phase 3.6:** Tag Search & Filtering (2-3 weeks)
-  - Universal search with magnifying glass icon (active + completed)
-  - Tag filtering with clickable chips and multi-select
-  - Search includes titles, notes, tags
-- **Phase 3.6.5:** Edit Task Modal Rework (1 week) ⚠️ **Blocking for Phase 3.7**
-  - Current edit modal only allows title changes
-  - Need comprehensive modal with due date picker, notes, tags, parent selector
-  - **Completed task metadata view** - Click completed task to see full details:
-    - Created/completed timestamps, duration calculation
-    - Tags, notes, full hierarchy breadcrumb
-    - Actions: View in Context, Uncomplete, Delete
-    - Foundation for Phase 4 "card view" in desk GUI
-  - Show completed parents with incomplete children (visual indicator)
-  - Required before natural language date parsing features
-- **Phase 3.7:** Natural Language Date Parsing (1-2 weeks)
 - **Phase 3.8:** Due Date Notifications (1-2 weeks)
-- **Then:** Phase 4 (Spatial Workspace View)
+- **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
+- **Phase 4:** Bounded Workspace View (4-5 weeks)
 
 ---
 

@@ -26,6 +26,10 @@ class Task {
   // Phase 3.3: Soft delete support
   final DateTime? deletedAt; // NULL = active, non-NULL = soft-deleted
 
+  // Phase 3.6.5: Edit Task Modal Rework
+  final String? notes; // Task description/notes
+  final int? positionBeforeCompletion; // For restoring position on uncomplete
+
   Task({
     required this.id,
     required this.title,
@@ -43,6 +47,8 @@ class Task {
     this.notificationType = 'use_global',
     this.notificationTime,
     this.deletedAt,
+    this.notes,
+    this.positionBeforeCompletion,
   });
 
   /// Serialize to database map
@@ -64,6 +70,8 @@ class Task {
       'notification_type': notificationType,
       'notification_time': notificationTime?.millisecondsSinceEpoch,
       'deleted_at': deletedAt?.millisecondsSinceEpoch,
+      'notes': notes,
+      'position_before_completion': positionBeforeCompletion,
     };
   }
 
@@ -102,6 +110,8 @@ class Task {
       deletedAt: map['deleted_at'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['deleted_at'] as int)
           : null,
+      notes: map['notes'] as String?,
+      positionBeforeCompletion: map['position_before_completion'] as int?,
     );
   }
 
@@ -122,6 +132,8 @@ class Task {
     String? notificationType,
     DateTime? notificationTime,
     DateTime? deletedAt,
+    String? notes,
+    int? positionBeforeCompletion,
   }) {
     return Task(
       id: id ?? this.id,
@@ -139,6 +151,8 @@ class Task {
       notificationType: notificationType ?? this.notificationType,
       notificationTime: notificationTime ?? this.notificationTime,
       deletedAt: deletedAt ?? this.deletedAt,
+      notes: notes ?? this.notes,
+      positionBeforeCompletion: positionBeforeCompletion ?? this.positionBeforeCompletion,
     );
   }
 

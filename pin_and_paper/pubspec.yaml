@@ -2,9 +2,9 @@ name: pin_and_paper
 description: ADHD-friendly task management with beautiful aesthetic
 publish_to: 'none'
 # Version format: MAJOR.MINOR.PATCH+BUILD
-# 0.3.5 = Phase 3.5 complete (tagging system + Fix #C3 validated)
-# +3 = Build number (increment with each build)
-version: 0.3.5+3
+# 3.6.0 = Phase 3.6A complete (tag filtering system)
+# +4 = Build number (increment with each build)
+version: 3.6.0+4
 
 environment:
   sdk: '>=3.5.0 <4.0.0'  # Supports Flutter 3.24+ (Dart 3.5+) through current stable
@@ -40,6 +40,9 @@ dependencies:
   shared_preferences: ^2.2.0  # UI preferences (hide completed toggle)
   string_similarity: ^2.0.0  # Fuzzy matching for natural language task completion
 
+  # Phase 3.7: Natural Language Date Parsing
+  flutter_js: ^0.8.5  # JavaScript runtime for chrono.js integration
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -50,3 +53,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Phase 3.7: Natural Language Date Parsing assets
+  assets:
+    - assets/js/chrono.min.js
