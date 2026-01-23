@@ -260,21 +260,25 @@ class NotificationService {
     );
 
     // Use exact scheduling if permitted, fall back to inexact otherwise
-    final exactAllowed = await canScheduleExactAlarms();
-    await _plugin.zonedSchedule(
-      id,
-      title,
-      body,
-      scheduledTime,
-      details,
-      payload: payload,
-      androidScheduleMode: exactAllowed
-          ? AndroidScheduleMode.exactAllowWhileIdle
-          : AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: null, // One-shot, not recurring
-    );
-
-    debugPrint('[NotificationService] Scheduled #$id at $scheduledTime');
+    try {
+      final exactAllowed = await canScheduleExactAlarms();
+      await _plugin.zonedSchedule(
+        id,
+        title,
+        body,
+        scheduledTime,
+        details,
+        payload: payload,
+        androidScheduleMode: exactAllowed
+            ? AndroidScheduleMode.exactAllowWhileIdle
+            : AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: null, // One-shot, not recurring
+      );
+      debugPrint('[NotificationService] Scheduled #$id at $scheduledTime');
+    } on UnimplementedError {
+      // zonedSchedule not supported on this platform (e.g. Linux)
+      // Scheduled notifications silently skipped; immediate notifications still work
+    }
   }
 
   /// Show an immediate notification (for missed/overdue on app open)

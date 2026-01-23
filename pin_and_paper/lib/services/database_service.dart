@@ -127,6 +127,7 @@ class DatabaseService {
         quiet_hours_end INTEGER DEFAULT NULL,
         quiet_hours_days TEXT DEFAULT '0,1,2,3,4,5,6',
         default_reminder_types TEXT DEFAULT 'at_time',
+        notifications_enabled INTEGER DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -360,6 +361,7 @@ class DatabaseService {
       'quiet_hours_end': null,
       'quiet_hours_days': '0,1,2,3,4,5,6',
       'default_reminder_types': 'at_time',
+      'notifications_enabled': 1,
       'voice_smart_punctuation': 1,
       'created_at': now,
       'updated_at': now,
@@ -435,6 +437,11 @@ class DatabaseService {
     // Migrate from version 8 to 9: Phase 3.8 - Due Date Notifications
     if (oldVersion < 9) {
       await _migrateToV9(db);
+    }
+
+    // Migrate from version 9 to 10: Phase 3.8 - Master notifications toggle
+    if (oldVersion < 10) {
+      await _migrateToV10(db);
     }
   }
 
@@ -1083,6 +1090,19 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v9 successfully');
+  }
+
+  /// Phase 3.8 Migration: v9 → v10
+  ///
+  /// Adds:
+  /// - notifications_enabled column (master toggle for all notifications)
+  Future<void> _migrateToV10(Database db) async {
+    debugPrint('Migrating database from v9 to v10: Notifications master toggle');
+    await db.execute('''
+      ALTER TABLE ${AppConstants.userSettingsTable}
+      ADD COLUMN notifications_enabled INTEGER DEFAULT 1
+    ''');
+    debugPrint('✅ Database migrated to v10 successfully');
   }
 
   Future<void> close() async {

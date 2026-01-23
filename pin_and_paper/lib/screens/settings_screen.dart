@@ -37,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Phase 3.8: Notification settings state
   final UserSettingsService _userSettingsService = UserSettingsService();
+  bool _notificationsEnabled = true;
   bool _notifyWhenOverdue = true;
   bool _quietHoursEnabled = false;
   int _quietHoursStart = 1320; // 22:00 in minutes
@@ -253,36 +254,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Permission status
-                    FutureBuilder<bool>(
-                      future: NotificationService().isPermissionGranted(),
-                      builder: (context, snapshot) {
-                        final granted = snapshot.data ?? false;
-                        return ListTile(
-                          leading: Icon(
-                            granted
-                                ? Icons.notifications_active
-                                : Icons.notifications_off,
-                            color: granted ? Colors.green : Colors.red,
-                          ),
-                          title: Text(granted
-                              ? 'Notifications enabled'
-                              : 'Notifications disabled'),
-                          trailing: granted
-                              ? null
-                              : TextButton(
-                                  onPressed: () async {
-                                    await PermissionExplanationDialog.show(
-                                        context);
-                                    setState(() {}); // Refresh status
-                                  },
-                                  child: const Text('Enable'),
-                                ),
-                          contentPadding: EdgeInsets.zero,
-                        );
+                    // Master notifications toggle
+                    SwitchListTile(
+                      secondary: Icon(
+                        _notificationsEnabled
+                            ? Icons.notifications_active
+                            : Icons.notifications_off,
+                        color: _notificationsEnabled ? Colors.green : Colors.red,
+                      ),
+                      title: Text(_notificationsEnabled
+                          ? 'Notifications enabled'
+                          : 'Notifications disabled'),
+                      value: _notificationsEnabled,
+                      onChanged: (value) {
+                        setState(() => _notificationsEnabled = value);
+                        _updateNotificationSettings();
                       },
+                      contentPadding: EdgeInsets.zero,
                     ),
 
+                    if (_notificationsEnabled) ...[
                     const Divider(),
 
                     // Default reminder timing
@@ -375,6 +366,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.notifications_none, size: 18),
                       label: const Text('Send Test Notification'),
                     ),
+                    ], // end if (_notificationsEnabled)
                   ],
                 ),
               ),
@@ -775,6 +767,7 @@ Package Name: ${info.packageName}
       final settings = await _userSettingsService.getUserSettings();
       if (!mounted) return;
       setState(() {
+        _notificationsEnabled = settings.notificationsEnabled;
         _notifyWhenOverdue = settings.notifyWhenOverdue;
         _quietHoursEnabled = settings.quietHoursEnabled;
         _quietHoursStart = settings.quietHoursStart ?? 1320;
@@ -799,6 +792,7 @@ Package Name: ${info.packageName}
     try {
       final settings = await _userSettingsService.getUserSettings();
       final updated = settings.copyWith(
+        notificationsEnabled: _notificationsEnabled,
         notifyWhenOverdue: _notifyWhenOverdue,
         quietHoursEnabled: _quietHoursEnabled,
         quietHoursStart: Value(_quietHoursStart),

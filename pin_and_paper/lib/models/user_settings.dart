@@ -46,6 +46,7 @@ class UserSettings {
   final int defaultNotificationMinute;
 
   // Phase 3.8: Notification scheduling preferences
+  final bool notificationsEnabled; // Master toggle: enable/disable all notifications
   final bool notifyWhenOverdue; // Global: notify when tasks become overdue
   final bool quietHoursEnabled; // Quiet hours toggle
   final int? quietHoursStart; // Minutes from midnight (e.g., 1320 = 22:00)
@@ -76,6 +77,7 @@ class UserSettings {
     this.autoCompleteChildren = 'prompt',
     this.defaultNotificationHour = 9,
     this.defaultNotificationMinute = 0,
+    this.notificationsEnabled = true,
     this.notifyWhenOverdue = false,
     this.quietHoursEnabled = false,
     this.quietHoursStart,
@@ -104,6 +106,7 @@ class UserSettings {
       'auto_complete_children': autoCompleteChildren,
       'default_notification_hour': defaultNotificationHour,
       'default_notification_minute': defaultNotificationMinute,
+      'notifications_enabled': notificationsEnabled ? 1 : 0,
       'notify_when_overdue': notifyWhenOverdue ? 1 : 0,
       'quiet_hours_enabled': quietHoursEnabled ? 1 : 0,
       'quiet_hours_start': quietHoursStart,
@@ -133,6 +136,7 @@ class UserSettings {
       autoCompleteChildren: map['auto_complete_children'] as String,
       defaultNotificationHour: map['default_notification_hour'] as int,
       defaultNotificationMinute: map['default_notification_minute'] as int,
+      notificationsEnabled: (map['notifications_enabled'] as int?) != 0, // default true
       notifyWhenOverdue: (map['notify_when_overdue'] as int?) == 1,
       quietHoursEnabled: (map['quiet_hours_enabled'] as int?) == 1,
       quietHoursStart: map['quiet_hours_start'] as int?,
@@ -169,6 +173,7 @@ class UserSettings {
     String? autoCompleteChildren,
     int? defaultNotificationHour,
     int? defaultNotificationMinute,
+    bool? notificationsEnabled,
     bool? notifyWhenOverdue,
     bool? quietHoursEnabled,
     Value<int?>? quietHoursStart,
@@ -196,6 +201,7 @@ class UserSettings {
           defaultNotificationHour ?? this.defaultNotificationHour,
       defaultNotificationMinute:
           defaultNotificationMinute ?? this.defaultNotificationMinute,
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       notifyWhenOverdue: notifyWhenOverdue ?? this.notifyWhenOverdue,
       quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
       quietHoursStart: quietHoursStart != null

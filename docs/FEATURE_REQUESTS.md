@@ -62,6 +62,11 @@
 - **Description:** Several tag colors need adjustment: red appears too pink, two blue shades are too similar, brown doesn't clearly read as brown.
 - **Source:** Phase 3.5 validation
 
+#### Inline Tag Creation in Edit Task Dialog
+- **Priority:** MEDIUM | **Complexity:** LOW
+- **Description:** When searching for a tag in the Edit Task dialog's tag picker, if the search term doesn't match any existing tag, offer an option to create that tag inline (without leaving the dialog). Currently users must create tags separately before they can be assigned.
+- **Source:** User request (Phase 3.8 testing)
+
 #### Standalone Tag Creation UI
 - **Priority:** MEDIUM | **Complexity:** MEDIUM
 - **Description:** Currently tags can only be created while attached to a task (via tag picker). Add ability to create/manage tags independently in a tag management screen.

@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 9; // Phase 3.8: Due Date Notifications (task_reminders + notification settings)
+  static const int databaseVersion = 10; // Phase 3.8: notifications_enabled master toggle
 
   // Table names
   static const String tasksTable = 'tasks';

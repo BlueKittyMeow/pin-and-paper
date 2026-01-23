@@ -79,6 +79,7 @@ class ReminderService {
     if (!_notificationService.isInitialized) return;
     if (_isRescheduling) return; // Skip per-task during bulk reschedule
     final settings = await _userSettingsService.getUserSettings();
+    if (!settings.notificationsEnabled) return; // Master toggle off
     await _scheduleRemindersInternal(task, settings);
   }
 
@@ -113,12 +114,17 @@ class ReminderService {
   /// Uses _isRescheduling flag to prevent per-task scheduling from racing.
   Future<void> rescheduleAll() async {
     if (!_notificationService.isInitialized) return;
+    final settings = await _userSettingsService.getUserSettings();
+    if (!settings.notificationsEnabled) {
+      // Master toggle off: cancel everything and return
+      await _notificationService.cancelAll();
+      return;
+    }
     _isRescheduling = true;
     try {
       await _notificationService.cancelAll();
 
       final db = await DatabaseService.instance.database;
-      final settings = await _userSettingsService.getUserSettings();
       // Get all active tasks with due dates and notification_type != 'none'
       final tasks = await db.query(
         AppConstants.tasksTable,
@@ -169,6 +175,7 @@ class ReminderService {
   Future<List<Task>> checkMissed() async {
     if (!_notificationService.isInitialized) return [];
     final settings = await _userSettingsService.getUserSettings();
+    if (!settings.notificationsEnabled) return []; // Master toggle off
     final now = DateTime.now();
 
     final db = await DatabaseService.instance.database;
