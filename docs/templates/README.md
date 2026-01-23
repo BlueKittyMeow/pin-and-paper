@@ -2,7 +2,7 @@
 
 **Purpose:** Central guide for all project documentation templates
 **Audience:** BlueKitty + Claude + Team Agents (Codex, Gemini)
-**Last Updated:** 2026-01-06
+**Last Updated:** 2026-01-22
 
 ---
 
@@ -13,8 +13,10 @@
 | [review-template.md](./review-template.md) | Pre-implementation review | Before coding starts (OPTIONAL) | `phase-XXA-review-v1.md` |
 | [validation-template.md](./validation-template.md) | Post-implementation validation | After coding complete | `phase-X.Y-validation-v1.md` |
 | [manual-test-plan-template.md](./manual-test-plan-template.md) | Manual testing checklist | During validation | `phase-X.Y-manual-test-plan.md` |
-| **[codex-findings-template.md](./codex-findings-template.md)** | **Codex review/validation** | **ALWAYS for agent reviews** | **`codex-findings.md`** |
-| **[gemini-findings-template.md](./gemini-findings-template.md)** | **Gemini review/validation** | **ALWAYS for agent reviews** | **`gemini-findings.md`** |
+| **[codex-findings-template.md](./codex-findings-template.md)** | **Codex ongoing bug hunting** | **During implementation** | **`codex-findings.md`** |
+| **[gemini-findings-template.md](./gemini-findings-template.md)** | **Gemini ongoing bug hunting** | **During implementation** | **`gemini-findings.md`** |
+| [codex-validation-template.md](./codex-validation-template.md) | Codex post-implementation validation | During validation phase | `codex-validation.md` |
+| [gemini-validation-template.md](./gemini-validation-template.md) | Gemini post-implementation validation | During validation phase | `gemini-validation.md` |
 | [phase-start-checklist.md](./phase-start-checklist.md) | Phase initialization | Starting new phase | Follow checklist steps |
 | [phase-end-checklist.md](./phase-end-checklist.md) | Phase closeout | Finishing phase | `phase-XX-summary.md` + archive |
 | [build-and-release.md](./build-and-release.md) | Build and release guide | Before building release | Version updates + testing |
@@ -25,32 +27,36 @@
 
 ---
 
-## ⚠️ CRITICAL: Agent Findings Templates
+## ⚠️ CRITICAL: Agent Templates (Findings vs Validation)
 
-**ALWAYS create individual agent findings docs from templates!**
+**Two types of agent docs, for different phases of the workflow:**
 
-**DO THIS:**
+### Findings Templates (During Implementation)
+Use these for **ongoing bug hunting** while Claude is implementing:
 ```bash
-cp docs/templates/codex-findings-template.md docs/phase-3.6B/codex-findings.md
-cp docs/templates/gemini-findings-template.md docs/phase-3.6B/gemini-findings.md
+cp docs/templates/codex-findings-template.md docs/phase-XX/codex-findings.md
+cp docs/templates/gemini-findings-template.md docs/phase-XX/gemini-findings.md
 ```
+- Living documents, updated throughout implementation
+- Agents explore codebase and log issues as they find them
+- Claude periodically reviews and applies fixes
 
-**DON'T DO THIS:**
-- ❌ Create findings docs from scratch
+### Validation Templates (Post-Implementation)
+Use these for **focused validation** after implementation is complete:
+```bash
+cp docs/templates/codex-validation-template.md docs/phase-XX/codex-validation.md
+cp docs/templates/gemini-validation-template.md docs/phase-XX/gemini-validation.md
+```
+- One-time focused review of completed code
+- Codex: code correctness, data integrity, security, test coverage
+- Gemini: build verification, static analysis, schema, UI/accessibility
+- Each produces a verdict (Release Ready: YES/NO/YES WITH FIXES)
+
+### DON'T:
+- ❌ Create agent docs from scratch (always use templates)
 - ❌ Use review-template.md for agent reviews
 - ❌ Have agents add feedback to a shared doc
-- ❌ Skip the template instructions
-
-**Why it matters:**
-- Templates contain critical methodology (grep commands, codebase navigation)
-- Codex especially needs these instructions to explore code effectively
-- Ensures consistent feedback format
-- Prevents agents from getting lost
-
-**When to create:**
-- ✅ Pre-implementation review (reviewing plans)
-- ✅ Post-implementation validation (reviewing code)
-- ✅ Ongoing bug hunting during implementation
+- ❌ Mix findings (ongoing) with validation (post-implementation)
 
 ---
 
@@ -65,8 +71,13 @@ cp docs/templates/gemini-findings-template.md docs/phase-3.6B/gemini-findings.md
 ├─ Have a detailed plan ready for review?
 │  └─> review-template.md
 │
+├─ Currently implementing? (agents hunting bugs in parallel)
+│  └─> codex-findings-template.md / gemini-findings-template.md
+│
 ├─ Just finished implementation and need validation?
-│  └─> validation-template.md
+│  ├─> validation-template.md (Claude's validation doc)
+│  ├─> codex-validation-template.md (Codex's focused review)
+│  └─> gemini-validation-template.md (Gemini's build/analysis review)
 │
 ├─ Ready to build a release version?
 │  └─> build-and-release.md
@@ -550,6 +561,12 @@ All templates support customization:
 ✅ claude-findings.md (one per phase, living doc)
 ```
 
+### Agent Validation (Post-Implementation)
+```
+✅ codex-validation.md (one per validation cycle)
+✅ gemini-validation.md (one per validation cycle)
+```
+
 ### Implementation Reports
 ```
 ✅ phase-3.1-implementation-report.md
@@ -658,6 +675,7 @@ All templates support customization:
 | 1.0 | 2025-10-30 | Initial templates created based on Phase 3.1 learnings |
 | 1.1 | 2025-01-05 | Added README.md based on Phase 3.5 experience |
 | 1.2 | 2026-01-06 | Added manual-test-plan-template.md with checkbox legend system |
+| 1.3 | 2026-01-22 | Added codex-validation-template.md and gemini-validation-template.md for post-implementation validation |
 
 ---
 

@@ -1,7 +1,7 @@
 # Development Workflow Summary
 
 **Created:** 2025-10-30
-**Updated:** 2025-10-30 (v2 - refined naming system)
+**Updated:** 2026-01-22 (v3 - added agent validation templates)
 **Purpose:** Quick reference for the complete development cycle
 
 ---
@@ -152,6 +152,9 @@ IMPLEMENTATION (per subphase)
 └─ Create phase-X.Y-validation-v1.md
       ↓
 VALIDATION (per subphase)
+├─ Create agent validation docs:
+│   ├─ codex-validation.md (from codex-validation-template.md)
+│   └─ gemini-validation.md (from gemini-validation-template.md)
 ├─ Cycle 1 (validation-v1.md): Review → fix
 ├─ Cycle 2 (validation-v2.md): Verify → repeat if needed
 ├─ Mark final version: "FINAL - Phase X.Y VALIDATED"
@@ -182,10 +185,14 @@ END PHASE (see phase-end-checklist.md)
 - `phase-04A-review-v1.md`, `v2.md` (mark FINAL in header)
 - `phase-04B-review-v1.md`, `v2.md`
 
-**Bug Hunting:**
+**Bug Hunting (ongoing during implementation):**
 - `codex-findings.md` (Codex's log)
 - `gemini-findings.md` (Gemini's log)
 - `claude-findings.md` (Claude's log)
+
+**Agent Validation (post-implementation):**
+- `codex-validation.md` (Codex's focused validation review)
+- `gemini-validation.md` (Gemini's build/analysis review)
 
 **Validation:**
 - `phase-4.1-validation-v1.md`, `v2.md` (mark FINAL in header)
@@ -216,7 +223,6 @@ END PHASE (see phase-end-checklist.md)
 ### ❌ DON'T
 
 - ❌ Multiple files per validation cycle (`validation-cycle-1.md`, `cycle-2.md`)
-- ❌ Agent-specific validation docs (`codex-validation.md`)
 - ❌ Vague names (`issues.md`, `bugs.md`, `fixes.md`)
 - ❌ Mixing ongoing findings with EOP validation
 - ❌ Using "group" terminology (use letter suffixes: A, B, C)
@@ -266,6 +272,10 @@ All templates and checklists in: `docs/templates/`
 | `review-template-about.md` | How to use review template | Guide |
 | `validation-template.md` | End-of-subphase validation | Template |
 | `validation-template-about.md` | How to use validation template | Guide |
+| `codex-findings-template.md` | Codex ongoing bug hunting | Template |
+| `gemini-findings-template.md` | Gemini ongoing bug hunting | Template |
+| `codex-validation-template.md` | Codex post-implementation validation | Template |
+| `gemini-validation-template.md` | Gemini post-implementation validation | Template |
 | `phase-start-checklist.md` | Start new phase workflow | Checklist |
 | `phase-end-checklist.md` | Close out phase workflow | Checklist |
 | `build-and-release.md` | Build/release and version updates | Guide |
@@ -387,5 +397,5 @@ README.md (Phase 4 section updated, stats current)
 
 ---
 
-**Last Updated:** 2025-10-30 (v2 - refined naming)
+**Last Updated:** 2026-01-22 (v3 - added agent validation templates)
 **Maintained By:** BlueKitty + Claude
