@@ -1,129 +1,166 @@
-# Feature Requests
+# Feature Requests & Deferred Items
 
-**Track user-requested features and enhancements**
-
----
-
-## 🗑️ Recently Deleted / Trash Feature ✅
-
-**Requested:** 2025-12-22
-**Priority:** Medium
-**Complexity:** Medium
-**Assigned Phase:** 3.3 (Soft Delete with 30-Day Auto-Cleanup)
-**Status:** ✅ COMPLETE (Merged to main 2025-12-27)
-
-### Description
-Add a "Recently Deleted" section to prevent accidental data loss, similar to iOS/Android trash functionality.
-
-### User Story
-> "Can we have a section for recently deleted tasks somewhere? Just in case things get accidentally deleted."
-
-### Proposed Implementation
-
-#### Database Changes
-- Add `deleted_at` timestamp column to tasks table
-- Soft delete: Set `deleted_at = NOW()` instead of actual deletion
-- Hard delete: Remove tasks where `deleted_at` > 30 days old
-
-#### UI/UX
-- **Settings Screen:** Add "Recently Deleted" menu item
-- **Recently Deleted Screen:**
-  - Show tasks deleted within last 30 days
-  - Each task shows "Deleted X days ago"
-  - Actions: Restore, Delete Permanently
-  - "Empty Trash" button (deletes all)
-  - Auto-delete after 30 days warning
-
-#### Task Flow
-```
-Long-press task → Delete → Confirmation
-  ↓
-Soft delete (set deleted_at timestamp)
-  ↓
-Task moves to Recently Deleted
-  ↓
-User has 30 days to restore or permanently delete
-  ↓
-After 30 days: Background job hard-deletes
-```
-
-#### Database Schema
-```sql
--- Add to migration v5
-ALTER TABLE tasks ADD COLUMN deleted_at INTEGER DEFAULT NULL;
-
--- Query for active tasks
-WHERE deleted_at IS NULL
-
--- Query for recently deleted
-WHERE deleted_at IS NOT NULL AND deleted_at > (NOW() - 30 days)
-
--- Restore task
-UPDATE tasks SET deleted_at = NULL WHERE id = ?
-
--- Hard delete old trash
-DELETE FROM tasks WHERE deleted_at < (NOW() - 30 days)
-```
-
-#### Files to Create/Modify
-- `lib/screens/recently_deleted_screen.dart` (new)
-- `lib/services/task_service.dart` (add soft delete methods)
-- `lib/providers/task_provider.dart` (add restore methods)
-- `lib/services/database_service.dart` (migration v5)
-- `lib/screens/settings_screen.dart` (add menu item)
-- `lib/utils/background_jobs.dart` (new - cleanup task)
-
-### Benefits
-- ✅ Prevents accidental data loss
-- ✅ Familiar UX (iOS/Android users expect this)
-- ✅ Peace of mind for users with ADHD
-- ✅ Undo mistakes without complex undo stack
-
-### Considerations
-- Storage: Deleted tasks take up space for 30 days
-- Performance: Need index on `deleted_at` column
-- Background jobs: Need periodic cleanup mechanism
-- UX: Clear communication about auto-delete after 30 days
-
-### Alternative Approaches
-
-#### Option 1: Simple Archive (Recommended for MVP)
-- Add `archived` boolean instead of `deleted_at`
-- Archive screen shows all archived tasks (no auto-delete)
-- Simpler, no background jobs needed
-- User manually clears archive
-
-#### Option 2: Undo Toast (Lighter Weight)
-- Show "Deleted [task]" with "Undo" button for 5 seconds
-- Keep deleted task in memory temporarily
-- If undo clicked: restore, else hard delete
-- Pro: No schema changes
-- Con: Only 5 second window to undo
-
-#### Option 3: Full Revision History
-- Track all changes to tasks (like Git)
-- See full history, restore any version
-- Pro: Maximum safety
-- Con: Complex, storage-intensive
-
-### Recommendation
-Start with **Option 1 (Archive)** in Phase 3.3:
-- Simpler than soft delete with auto-cleanup
-- Familiar concept (email archive)
-- User controls when to permanently delete
-- Easy to add auto-delete later if needed
+**Purpose:** Track user-requested features, deferred enhancements, and backlog items
+**Last Updated:** 2026-01-22
+**Maintained By:** BlueKitty + Claude
 
 ---
 
-## 📝 Other Requested Features
+## How to Use This Document
 
-*Future feature requests will be added here*
+1. Add new feature requests as they come up (user requests, deferred from phases, polish items)
+2. Include: description, source, priority, complexity estimate
+3. Move items to "Completed" when fulfilled (with date and phase)
+4. At phase-end, review plan docs for unlogged future features (see phase-end-checklist.md step 4.5)
+
+**Priority:** HIGH / MEDIUM / LOW
+**Complexity:** HIGH / MEDIUM / LOW
 
 ---
 
-**How to Use This Document:**
-1. Add new feature requests as they come up
-2. Include user quotes and use cases
-3. Estimate complexity and priority
-4. Link to related GitHub issues
-5. Move to implementation docs when ready
+## Completed
+
+### Recently Deleted / Trash Feature
+- **Completed:** Phase 3.3 (Dec 27, 2025)
+- **Description:** Soft delete with 30-day recovery window, permanent auto-delete
+- **Original request:** "Can we have a section for recently deleted tasks somewhere? Just in case things get accidentally deleted."
+
+### Date-Based Filtering (Partial)
+- **Completed:** Phase 3.7.5 (Jan 22, 2026)
+- **Description:** Overdue and No Date filters implemented. More granular filters (due today, this week) deferred.
+- **Source:** Phase 3.6B stretch goal
+
+---
+
+## Planned (Assigned to Phase)
+
+### Night Owl Mode Configuration UI
+- **Target:** Phase 3.9 (Onboarding Quiz & User Preferences)
+- **Priority:** MEDIUM | **Complexity:** LOW
+- **Description:** UI for configuring the "today" start/end time (Today Window). The backend logic exists in `DateParsingService.getCurrentEffectiveToday()` since Phase 3.7, but there's no user-facing settings UI to configure the cutoff hour/minute.
+- **Source:** Phase 3.7 deferral
+
+### Custom Notification Sounds
+- **Target:** Future (post-Phase 3.9)
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** Allow users to select custom notification sounds per task or globally. System default used initially in Phase 3.8.
+- **Source:** Phase 3.8 plan v2
+
+---
+
+## Backlog (Unassigned)
+
+### UX Polish
+
+#### Tag Color Palette Review
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** Several tag colors need adjustment: red appears too pink, two blue shades are too similar, brown doesn't clearly read as brown.
+- **Source:** Phase 3.5 validation
+
+#### Standalone Tag Creation UI
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Currently tags can only be created while attached to a task (via tag picker). Add ability to create/manage tags independently in a tag management screen.
+- **Source:** Phase 3.5 validation
+
+#### Duplicate Tag UI Validation
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** Backend prevents duplicate tag names, but the UI could show clearer feedback when a user tries to create a tag that already exists.
+- **Source:** Phase 3.5 validation
+
+#### Keyboard Capitalization Preference
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** Add user preference for default keyboard capitalization behavior (sentence case, lowercase, etc.) in task input fields.
+- **Source:** Phase 3.5 validation, defer to Settings/Preferences phase
+
+#### Reorder Mode Icon Replacement
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** Current reorder mode uses hamburger icon (≡) which looks like a menu icon. Replace with a more intuitive list-with-arrows or drag-handle icon.
+- **Source:** Phase 3.6 UX review
+
+#### Date Filter for Child Tasks
+- **Priority:** LOW | **Complexity:** MEDIUM
+- **Description:** Date filter (Overdue/No Date) currently applies to root-level tasks only. Children inherit visibility from parent. A child matching the filter whose parent doesn't match will be hidden. Evaluate optimal behavior during UX testing.
+- **Source:** Phase 3.7 known behaviors
+
+### Task Management
+
+#### Parent Task: Show Children + "Complete All" Option
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Parent task card/notification could show child tasks (each clickable/tappable). Include a "Complete all child tasks" action with double-verify confirmation ("Are you sure?").
+- **Source:** Phase 3.8 plan discussion
+
+#### Recurring Dates Support
+- **Priority:** MEDIUM | **Complexity:** HIGH
+- **Description:** Support recurring date patterns (e.g., "every Monday", "first of month", "weekly"). Would integrate with date parsing and notification scheduling.
+- **Source:** Phase 3.7 deferral
+
+#### Recurring Task Notifications
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Notifications that repeat on a schedule for recurring tasks (depends on recurring dates support).
+- **Source:** Phase 3.8 plan v2
+
+#### Saved Filter Presets
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Save named filter views (e.g., "Work tasks", "Due today", "Urgent"). Dropdown to select saved views. User-configurable default task list view.
+- **Source:** Phase 3.6A plan, deferred to Phase 6+
+
+### Notifications & Reminders
+
+#### Location-Based Reminders
+- **Priority:** LOW | **Complexity:** HIGH
+- **Description:** "Remind me when I get home" or "Remind me when I'm at the store." Requires geofencing and location permissions.
+- **Source:** Phase 3.8 plan v2
+
+#### Upcoming Due Tasks Widget
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Home screen widget showing upcoming due tasks at a glance. Platform-specific (Android widget, iOS widget).
+- **Source:** Phase 3.8 plan v2
+
+#### Wear OS / watchOS Notification Mirroring
+- **Priority:** LOW | **Complexity:** MEDIUM
+- **Description:** Smartwatch integration for task notifications and quick actions (complete, snooze).
+- **Source:** Phase 3.8 plan v2
+
+### Code Quality & Technical Debt
+
+#### onTapHighlight Cleanup
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** `onTapHighlight` callback on `HighlightedTextEditingController` is scaffolded but never invoked. Tap-to-edit works via GestureDetector in task_item.dart. Either remove the dead code or activate if Flutter resolves TapGestureRecognizer conflicts in editable TextFields.
+- **Source:** Phase 3.7 known behaviors
+
+#### Provider → Riverpod Migration
+- **Priority:** LOW | **Complexity:** HIGH
+- **Description:** Current state management uses Provider. Riverpod offers better testability, compile-time safety, and scoped state. Migrate when complexity warrants the effort.
+- **Source:** Phase 1 tech decision (deferred)
+
+#### Draft Management Duplication Fix
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Brain dump draft loading can create ambiguity between loaded draft content (already saved) and new user input (not yet saved). Need to distinguish via `_loadedDraftIds` tracking or similar.
+- **Source:** Phase 2 stretch goals
+
+### More Granular Date Filters
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** Add "Due Today", "Due This Week" filter options alongside existing "Overdue" and "No Date" filters.
+- **Source:** Phase 3.6B stretch goal (partially fulfilled by 3.7.5)
+
+### Input & Interaction
+
+#### Voice Input (Speech-to-Text)
+- **Priority:** LOW | **Complexity:** HIGH
+- **Description:** Voice-based task creation using speech-to-text. Integrate with natural language date parsing for seamless hands-free task entry.
+- **Source:** PROJECT_SPEC.md Phase 6+ deferral
+
+#### Task Templates
+- **Priority:** LOW | **Complexity:** MEDIUM
+- **Description:** Pre-defined or user-created task templates for common task patterns (e.g., "Weekly review", "Grocery list"). Quick-create tasks from templates.
+- **Source:** PROJECT_SPEC.md Phase 6+ deferral
+
+#### Quick Swipe Actions
+- **Priority:** LOW | **Complexity:** MEDIUM
+- **Description:** Swipe gestures on task items for quick actions (complete, delete, snooze, edit). Configurable swipe-left/swipe-right actions.
+- **Source:** PROJECT_SPEC.md Phase 6+ deferral
+
+---
+
+**Document Version:** 2.0
+**Restructured:** 2026-01-22 (from single feature request to comprehensive backlog)

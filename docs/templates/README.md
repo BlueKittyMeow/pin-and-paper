@@ -18,7 +18,7 @@
 | [codex-validation-template.md](./codex-validation-template.md) | Codex post-implementation validation | During validation phase | `codex-validation.md` |
 | [gemini-validation-template.md](./gemini-validation-template.md) | Gemini post-implementation validation | During validation phase | `gemini-validation.md` |
 | [phase-start-checklist.md](./phase-start-checklist.md) | Phase initialization | Starting new phase | Follow checklist steps |
-| [phase-end-checklist.md](./phase-end-checklist.md) | Phase closeout | Finishing phase | `phase-XX-summary.md` + archive |
+| [phase-end-checklist.md](./phase-end-checklist.md) | Phase closeout | Finishing phase | `phase-XX-summary.md` + archive + `FEATURE_REQUESTS.md` update |
 | [build-and-release.md](./build-and-release.md) | Build and release guide | Before building release | Version updates + testing |
 | [documentation-workflow.md](./documentation-workflow.md) | Master doc update workflow | Completing phases | Updated PROJECT_SPEC + README |
 | [WORKFLOW-SUMMARY.md](./WORKFLOW-SUMMARY.md) | Development cycle overview | Reference anytime | N/A (reference only) |

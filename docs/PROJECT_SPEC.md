@@ -485,14 +485,8 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
   - Target: <100ms for 1000 tasks
 - See: `archive/phase-03/phase-3.6-and-3.6.5-enhancements-from-validation.md`
 
-**Deferred from Phase 3.5 Validation:**
-- Tag color palette review (red too pink, blues too similar, brown unclear) - Low priority UX polish
-- Standalone tag creation UI (currently requires task attachment) - Medium priority enhancement
-- Duplicate tag UI validation (backend prevents duplicates, UI can improve) - Low priority
-- Keyboard capitalization preference - Defer to Settings phase
-- Date-based filtering (due today, this week, overdue) - Consider for 3.6B stretch goal or 3.7
+**Deferred from Phase 3.5 Validation:** See `docs/FEATURE_REQUESTS.md` (UX Polish section)
 - ~~Sort by due date (soonest/overdue first)~~ - ✅ Implemented in Phase 3.7.5
-- See `docs/future/future.md` for full details and rationale
 
 **Phase 3.6.5: Edit Task Modal Rework + TreeController Fix** ✅ (Jan 20, 2026)
 - **TaskTreeController:** Custom ID-based expansion state tracking (fixes object reference corruption)
@@ -513,7 +507,7 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - **Phase 3.7.5:** Live clock in AppBar, Sort-by (Manual/Recent/Due Soonest), Date filters (Overdue/No Date)
 - flutter_js + chrono.js integration (QuickJS FFI)
 - ~120+ tests, 1,848 lines production code
-- **Deferred:** Night owl mode, recurring dates → Phase 4+
+- **Deferred items:** See `docs/FEATURE_REQUESTS.md`
 - **Known behaviors:**
   - Date filter (Overdue/No Date) applies to root-level tasks only; children inherit visibility from parent. A child matching the filter whose parent doesn't match will be hidden. Evaluate optimal behavior during UX testing.
   - `onTapHighlight` on `HighlightedTextEditingController` is scaffolded but not invoked in input fields. Tap-to-open-DateOptionsSheet works via `GestureDetector` in `task_item.dart`. Deferred cleanup or activation pending Flutter TapGestureRecognizer resolution in editable TextFields.
@@ -543,11 +537,7 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
   - Mark as stable release for mobile workflows
   - Tag: `v3.9.0` or `v3.0.0` (major milestone)
 
-**Deferred to Phase 6+:**
-- Voice input (speech-to-text)
-- Task templates
-- Home screen widget (Android)
-- Quick swipe actions
+**Deferred to Phase 6+:** See `docs/FEATURE_REQUESTS.md` (Input & Interaction section)
 
 **Database Evolution:**
 - v1: Phase 1 (basic tasks)

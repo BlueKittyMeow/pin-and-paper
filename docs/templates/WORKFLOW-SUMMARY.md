@@ -165,9 +165,11 @@ VALIDATION (per subphase)
 END PHASE (see phase-end-checklist.md)
 ├─ 1. Verify all implementation reports exist
 ├─ 2. Create phase-XX-summary.md
-├─ 3. Confirm team done with findings docs
-├─ 4. Archive EVERYTHING to docs/archive/phase-XX/
-└─ 5. docs/phase-XX/ now empty → ready for next phase
+├─ 3. Update master docs (PROJECT_SPEC.md, README.md)
+├─ 4. Harvest future features → docs/FEATURE_REQUESTS.md
+├─ 5. Confirm team done with findings docs
+├─ 6. Archive EVERYTHING to docs/archive/phase-XX/
+└─ 7. docs/phase-XX/ now empty → ready for next phase
 ```
 
 ---

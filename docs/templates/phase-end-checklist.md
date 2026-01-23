@@ -311,6 +311,29 @@ Phase X.Y complete with [key achievement summary]"
 
 ---
 
+### 4.5 Harvest Future Features → FEATURE_REQUESTS.md
+
+**Purpose:** Capture any deferred features, future enhancements, or scattered "nice to have" items before archiving phase docs.
+
+**Review these sources:**
+- [ ] Phase plan docs (phase-XX-plan-v*.md) - Any "Open Questions", "Future Enhancements", or "Deferred" sections?
+- [ ] Implementation reports - Any "Deferred Work" sections?
+- [ ] Validation docs - Any issues deferred to future phases?
+- [ ] Agent findings docs - Any suggestions tagged as "future enhancement"?
+- [ ] PROJECT_SPEC.md - Any new "Deferred" notes added during this phase?
+
+**For each unlogged feature found:**
+- [ ] Add to `docs/FEATURE_REQUESTS.md` using the standard format
+- [ ] Include: description, source phase, priority, complexity estimate
+- [ ] Remove from source doc (or replace with "See `docs/FEATURE_REQUESTS.md`")
+
+**Also check FEATURE_REQUESTS.md for items fulfilled this phase:**
+- [ ] Mark completed items with ✅ and completion date
+
+**Confirm:** "✅ Future features harvested to FEATURE_REQUESTS.md"
+
+---
+
 ### 5. Confirm Team Finished with Findings Docs
 
 **Important:** Don't archive while team is still working!
@@ -373,6 +396,8 @@ ls docs/phase-XX/
 ✅ All implementation reports verified/created
 ✅ All validation docs closed with sign-off
 ✅ Phase summary document created
+✅ Master documents updated (PROJECT_SPEC.md, README.md)
+✅ Future features harvested to FEATURE_REQUESTS.md
 ✅ Team confirmed finished with findings docs
 ✅ Everything archived to docs/archive/phase-XX/
 ✅ docs/phase-XX/ empty and ready for next phase
@@ -451,6 +476,6 @@ Ready to start Phase 4 when you are."
 
 ---
 
-**Template Version:** 1.0
-**Last Updated:** 2025-10-30
+**Template Version:** 1.1
+**Last Updated:** 2026-01-22
 **Maintained By:** BlueKitty + Claude
