@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// Custom TextEditingController that highlights a range of text
@@ -17,6 +18,7 @@ import 'package:flutter/material.dart';
 class HighlightedTextEditingController extends TextEditingController {
   TextRange? highlightRange;
   VoidCallback? onTapHighlight;
+  TapGestureRecognizer? _tapRecognizer;
 
   HighlightedTextEditingController({
     String? text,
@@ -53,9 +55,9 @@ class HighlightedTextEditingController extends TextEditingController {
         if (range.start > 0)
           TextSpan(text: text.substring(0, range.start)),
 
-        // Highlighted text (visual only)
-        // Tap-to-edit handled by GestureDetector in task_item.dart
-        // (TapGestureRecognizer on TextSpan conflicts with TextField gesture handling)
+        // Highlighted text with tap-to-refine gesture
+        // task_input.dart wires onTapHighlight to open DateOptionsSheet
+        // task_item.dart uses its own GestureDetector on the date suffix instead
         TextSpan(
           text: text.substring(range.start, range.end),
           style: baseStyle.copyWith(
@@ -63,6 +65,9 @@ class HighlightedTextEditingController extends TextEditingController {
             color: Colors.blue[700],
             fontWeight: FontWeight.w500,
           ),
+          recognizer: onTapHighlight != null
+              ? (_tapRecognizer = TapGestureRecognizer()..onTap = onTapHighlight)
+              : null,
         ),
 
         // Text after highlight
@@ -90,8 +95,8 @@ class HighlightedTextEditingController extends TextEditingController {
 
   @override
   void dispose() {
-    // Note: TapGestureRecognizer is automatically disposed by Flutter
-    // when TextSpan is rebuilt, so no manual cleanup needed
+    _tapRecognizer?.dispose();
+    _tapRecognizer = null;
     super.dispose();
   }
 }

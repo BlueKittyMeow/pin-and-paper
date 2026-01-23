@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/widgets/highlighted_text_editing_controller.dart';
@@ -248,14 +249,47 @@ void main() {
       );
     });
 
-    // Note: onTapHighlight is scaffolded but not wired via TextSpan recognizer.
-    // Tap-to-edit is handled by GestureDetector in task_item.dart instead.
-    // This test is skipped because the controller intentionally omits the
-    // TapGestureRecognizer (conflicts with TextField gesture handling).
-    testWidgets('onTapHighlight callback is invoked', (tester) async {
-      // Intentionally skipped - tap handled by GestureDetector in task_item.dart,
-      // not via TextSpan recognizer in this controller.
-    }, skip: true); // onTapHighlight not wired via TextSpan - tap handled by task_item GestureDetector
+    testWidgets('onTapHighlight wires TapGestureRecognizer to highlighted TextSpan', (tester) async {
+      // Skip on web (highlighting disabled)
+      if (kIsWeb) return;
+
+      bool callbackFired = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                final controller = HighlightedTextEditingController(
+                  text: 'meet tomorrow',
+                  onTapHighlight: () => callbackFired = true,
+                );
+                controller.setHighlight(const TextRange(start: 5, end: 13));
+
+                final textSpan = controller.buildTextSpan(
+                  context: context,
+                  style: const TextStyle(color: Colors.black),
+                  withComposing: false,
+                );
+
+                // Find the highlighted child span
+                final children = textSpan.children!;
+                final highlightSpan = children[1] as TextSpan;
+                expect(highlightSpan.text, 'tomorrow');
+                expect(highlightSpan.recognizer, isA<TapGestureRecognizer>());
+
+                // Simulate the tap via the recognizer directly
+                (highlightSpan.recognizer as TapGestureRecognizer).onTap!();
+                expect(callbackFired, isTrue);
+
+                controller.dispose();
+                return Container();
+              },
+            ),
+          ),
+        ),
+      );
+    });
 
     testWidgets('handles highlight at start of text', (tester) async {
       // Skip on web (highlighting disabled)
