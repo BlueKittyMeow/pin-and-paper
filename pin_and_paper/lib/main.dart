@@ -10,6 +10,7 @@ import 'screens/home_screen.dart';
 import 'services/task_service.dart'; // Phase 3.3
 import 'services/date_parsing_service.dart'; // Phase 3.7
 import 'services/notification_service.dart'; // Phase 3.8
+import 'services/reminder_service.dart'; // Phase 3.8.4
 import 'utils/theme.dart';
 
 void main() async {
@@ -47,6 +48,13 @@ void main() async {
   try {
     final notificationService = NotificationService();
     await notificationService.initialize();
+
+    // Phase 3.8.4: Check for missed notifications on app start
+    try {
+      await ReminderService().checkMissed();
+    } catch (e) {
+      print('[Phase 3.8] Failed to check missed notifications: $e');
+    }
   } catch (e) {
     print('[Phase 3.8] Failed to initialize NotificationService: $e');
     // Don't block app startup on notification initialization failure

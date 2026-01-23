@@ -44,6 +44,26 @@ class NotificationService {
   /// Set by the app to enable navigation to a specific task
   void Function(String? taskId)? onNotificationTapped;
 
+  /// Callback for snooze action (foreground: opens snooze sheet)
+  void Function(String taskId)? onSnoozeRequested;
+
+  /// Callback for complete action (marks task done, cancels reminders)
+  Future<void> Function(String taskId)? onCompleteRequested;
+
+  /// Callback for cancel/dismiss action (cancels all reminders for task)
+  Future<void> Function(String taskId)? onCancelRequested;
+
+  /// Default notification action buttons
+  /// All use showsUserInterface: true to bring app to foreground for handling.
+  static const _defaultActions = <AndroidNotificationAction>[
+    AndroidNotificationAction('complete', 'Complete',
+        showsUserInterface: true),
+    AndroidNotificationAction('snooze', 'Snooze',
+        showsUserInterface: true),
+    AndroidNotificationAction('cancel_all', 'Dismiss',
+        showsUserInterface: true),
+  ];
+
   /// Initialize the notification plugin and timezone data
   Future<void> initialize() async {
     if (_initialized) return;
@@ -124,11 +144,24 @@ class NotificationService {
   void _onForegroundAction(NotificationResponse response) {
     debugPrint(
         '[NotificationService] Foreground action: ${response.actionId}, payload: ${response.payload}');
-    if (response.actionId == null || response.actionId!.isEmpty) {
-      // Notification body tapped - navigate to task
-      onNotificationTapped?.call(response.payload);
+    final taskId = response.payload;
+
+    switch (response.actionId) {
+      case 'complete':
+        if (taskId != null) onCompleteRequested?.call(taskId);
+        break;
+      case 'snooze':
+        if (taskId != null) onSnoozeRequested?.call(taskId);
+        break;
+      case 'cancel_all':
+        if (taskId != null) onCancelRequested?.call(taskId);
+        break;
+      case null:
+      case '':
+        // Notification body tapped - navigate to task
+        onNotificationTapped?.call(taskId);
+        break;
     }
-    // Action-specific handling will be added by ReminderService in 3.8.2
   }
 
   /// Request notification permission (call after showing explanation dialog)
@@ -198,6 +231,9 @@ class NotificationService {
       return;
     }
 
+    // Phase 3.8.4: Use default actions if none provided
+    final effectiveActions = actions ?? _defaultActions;
+
     final androidDetails = AndroidNotificationDetails(
       AppConstants.notificationChannelId,
       AppConstants.notificationChannelName,
@@ -205,7 +241,7 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       groupKey: AppConstants.notificationGroupKey,
-      actions: actions,
+      actions: effectiveActions,
     );
 
     const darwinDetails = DarwinNotificationDetails(

@@ -5,6 +5,8 @@ import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../providers/tag_provider.dart'; // Phase 3.6A
 import '../services/tag_service.dart'; // Phase 3.6A
+import '../services/notification_service.dart'; // Phase 3.8.4
+import '../services/reminder_service.dart'; // Phase 3.8.4
 import '../models/task_sort_mode.dart'; // Phase 3.7.5
 import '../widgets/task_input.dart';
 import '../widgets/task_item.dart';
@@ -13,6 +15,7 @@ import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2
 import '../widgets/active_filter_bar.dart'; // Phase 3.6A
 import '../widgets/tag_filter_dialog.dart'; // Phase 3.6A
 import '../widgets/search_dialog.dart'; // Phase 3.6B
+import '../widgets/snooze_options_sheet.dart'; // Phase 3.8.4
 import 'brain_dump_screen.dart'; // Phase 2
 import 'settings_screen.dart'; // Phase 2
 import 'quick_complete_screen.dart'; // Phase 2 Stretch
@@ -31,7 +34,73 @@ class _HomeScreenState extends State<HomeScreen> {
     // Load tasks when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().loadTasks();
+      _setupNotificationCallbacks();
     });
+  }
+
+  /// Phase 3.8.4: Set up notification action callbacks
+  void _setupNotificationCallbacks() {
+    final notificationService = NotificationService();
+
+    notificationService.onNotificationTapped = (taskId) {
+      if (taskId != null && mounted) {
+        // Scroll to and highlight the task
+        final taskProvider = context.read<TaskProvider>();
+        taskProvider.navigateToTask(taskId);
+      }
+    };
+
+    notificationService.onSnoozeRequested = (taskId) {
+      if (!mounted) return;
+      _showSnoozeSheet(taskId);
+    };
+
+    notificationService.onCompleteRequested = (taskId) async {
+      try {
+        final taskProvider = context.read<TaskProvider>();
+        final task = taskProvider.getTaskById(taskId);
+        if (task != null && !task.completed) {
+          await taskProvider.toggleTaskCompletion(task);
+        }
+      } catch (e) {
+        debugPrint('[HomeScreen] Failed to complete task from notification: $e');
+      }
+    };
+
+    notificationService.onCancelRequested = (taskId) async {
+      try {
+        await ReminderService().cancelReminders(taskId);
+      } catch (e) {
+        debugPrint('[HomeScreen] Failed to cancel reminders: $e');
+      }
+    };
+  }
+
+  /// Phase 3.8.4: Show snooze options and schedule snoozed notification
+  Future<void> _showSnoozeSheet(String taskId) async {
+    final duration = await SnoozeOptionsSheet.show(context, taskId);
+    if (duration == null) return;
+
+    if (duration == Duration.zero) {
+      // Custom time picker
+      if (!mounted) return;
+      final picked = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+      if (picked == null) return;
+
+      // Calculate duration from now to picked time (today or tomorrow if past)
+      final now = DateTime.now();
+      var target = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+      if (target.isBefore(now)) {
+        target = target.add(const Duration(days: 1));
+      }
+      final customDuration = target.difference(now);
+      await ReminderService().snooze(taskId, customDuration);
+    } else {
+      await ReminderService().snooze(taskId, duration);
+    }
   }
 
   @override

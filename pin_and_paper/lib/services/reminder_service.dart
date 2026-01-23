@@ -230,6 +230,60 @@ class ReminderService {
     }
   }
 
+  // --- Snooze ---
+
+  /// Snooze a reminder: cancel current notifications, schedule new at snoozed time.
+  /// Duration sentinels:
+  /// - Duration(hours: -1): "Tomorrow" at user's preferred notification time
+  /// - Duration.zero: Custom (handled by caller opening a time picker)
+  /// - Positive duration: snooze for that amount from now
+  Future<void> snooze(String taskId, Duration snoozeDuration) async {
+    if (!_notificationService.isInitialized) return;
+    if (snoozeDuration == Duration.zero) return; // Custom - handled by caller
+
+    await cancelReminders(taskId);
+
+    final settings = await _userSettingsService.getUserSettings();
+
+    tz.TZDateTime snoozeTime;
+
+    if (snoozeDuration == const Duration(hours: -1)) {
+      // "Tomorrow at preferred time" - uses user's configured notification time
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      snoozeTime = tz.TZDateTime(
+        _notificationService.localTimezone,
+        tomorrow.year, tomorrow.month, tomorrow.day,
+        settings.defaultNotificationHour,
+        settings.defaultNotificationMinute,
+      );
+    } else {
+      final now = tz.TZDateTime.now(tz.local);
+      snoozeTime = tz.TZDateTime.from(now.add(snoozeDuration), tz.local);
+    }
+
+    // Look up task for notification body
+    final db = await DatabaseService.instance.database;
+    final taskMaps = await db.query(
+      AppConstants.tasksTable,
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+    if (taskMaps.isEmpty) return;
+
+    final task = Task.fromMap(taskMaps.first);
+    final snoozeId = '${taskId}_snooze'.hashCode.abs() % (1 << 31);
+
+    await _notificationService.schedule(
+      id: snoozeId,
+      title: 'Snoozed reminder',
+      body: task.title,
+      scheduledTime: snoozeTime,
+      payload: taskId,
+    );
+
+    debugPrint('[ReminderService] Snoozed $taskId until $snoozeTime');
+  }
+
   // --- Computation Helpers ---
 
   /// Compute the exact notification time for a reminder.
