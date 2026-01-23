@@ -10,9 +10,6 @@ enum TaskSortMode {
 
   /// By due date, soonest first (nulls last)
   dueSoonest,
-
-  /// Overdue tasks first, then by how overdue
-  overdue,
 }
 
 extension TaskSortModeExtension on TaskSortMode {
@@ -24,8 +21,6 @@ extension TaskSortModeExtension on TaskSortMode {
         return 'Recently Created';
       case TaskSortMode.dueSoonest:
         return 'Due Soonest';
-      case TaskSortMode.overdue:
-        return 'Overdue';
     }
   }
 
@@ -37,8 +32,6 @@ extension TaskSortModeExtension on TaskSortMode {
         return Icons.schedule;
       case TaskSortMode.dueSoonest:
         return Icons.event;
-      case TaskSortMode.overdue:
-        return Icons.warning_amber;
     }
   }
 }

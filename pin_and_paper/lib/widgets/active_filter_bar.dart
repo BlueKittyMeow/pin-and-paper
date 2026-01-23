@@ -76,6 +76,12 @@ class ActiveFilterBar extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
 
+                  // Phase 3.7.5: Date filter indicator
+                  if (filterState.dateFilter != DateFilter.any) ...[
+                    _buildDateFilterChip(context),
+                    const SizedBox(width: 8),
+                  ],
+
                   // Logic indicator (if multiple tags)
                   if (filterState.selectedTagIds.length > 1) ...[
                     _buildLogicIndicator(context),
@@ -135,6 +141,25 @@ class ActiveFilterBar extends StatelessWidget {
     return Chip(
       label: Text(label),
       backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+    );
+  }
+
+  Widget _buildDateFilterChip(BuildContext context) {
+    final label = filterState.dateFilter == DateFilter.overdue
+        ? 'Overdue'
+        : 'No date';
+
+    return Chip(
+      label: Text(label),
+      avatar: Icon(
+        filterState.dateFilter == DateFilter.overdue
+            ? Icons.warning_amber
+            : Icons.event_busy,
+        size: 16,
+      ),
+      backgroundColor: filterState.dateFilter == DateFilter.overdue
+          ? Colors.red.shade50
+          : Theme.of(context).colorScheme.secondaryContainer,
     );
   }
 

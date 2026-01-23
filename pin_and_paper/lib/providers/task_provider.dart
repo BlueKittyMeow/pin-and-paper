@@ -274,7 +274,7 @@ class TaskProvider extends ChangeNotifier {
     // Phase 3.6.5: Prune orphaned IDs (Codex/Gemini recommendation for memory hygiene)
     _treeController.pruneOrphanedIds(taskIds);
 
-    final activeRoots = _tasks.where((t) {
+    var activeRoots = _tasks.where((t) {
       // Phase 3.6A: In filtered views, treat as root if parent not in filtered results
       if (t.parentId != null) {
         // If parent exists in current task list, this is not a root
@@ -287,6 +287,21 @@ class TaskProvider extends ChangeNotifier {
       if (!t.completed) return true; // Incomplete tasks always active
       return _hasIncompleteDescendants(t); // Completed with incomplete children
     }).toList();
+
+    // Phase 3.7.5: Apply date filter
+    if (_filterState.dateFilter != DateFilter.any) {
+      final now = DateTime.now();
+      activeRoots = activeRoots.where((t) {
+        switch (_filterState.dateFilter) {
+          case DateFilter.overdue:
+            return t.dueDate != null && t.dueDate!.isBefore(now);
+          case DateFilter.noDueDate:
+            return t.dueDate == null;
+          case DateFilter.any:
+            return true;
+        }
+      }).toList();
+    }
 
     // Phase 3.7.5: Apply sort to root-level tasks
     _sortTasks(activeRoots);
@@ -828,30 +843,6 @@ class TaskProvider extends ChangeNotifier {
 
       case TaskSortMode.dueSoonest:
         tasks.sort((a, b) {
-          if (a.dueDate == null && b.dueDate == null) {
-            return a.position.compareTo(b.position);
-          }
-          if (a.dueDate == null) return 1;
-          if (b.dueDate == null) return -1;
-          final cmp = a.dueDate!.compareTo(b.dueDate!);
-          return _sortReversed ? -cmp : cmp;
-        });
-
-      case TaskSortMode.overdue:
-        final now = DateTime.now();
-        tasks.sort((a, b) {
-          final aOverdue = a.dueDate != null && a.dueDate!.isBefore(now);
-          final bOverdue = b.dueDate != null && b.dueDate!.isBefore(now);
-
-          if (aOverdue && !bOverdue) return _sortReversed ? 1 : -1;
-          if (!aOverdue && bOverdue) return _sortReversed ? -1 : 1;
-
-          if (aOverdue && bOverdue) {
-            final cmp = a.dueDate!.compareTo(b.dueDate!);
-            return _sortReversed ? -cmp : cmp;
-          }
-
-          // Neither overdue: by due date if available, else position
           if (a.dueDate == null && b.dueDate == null) {
             return a.position.compareTo(b.position);
           }

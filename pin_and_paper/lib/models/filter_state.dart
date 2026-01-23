@@ -20,11 +20,15 @@ class FilterState {
   /// Filter by tag presence. Default is 'any' (no filter).
   final TagPresenceFilter presenceFilter;
 
+  /// Phase 3.7.5: Filter by due date status.
+  final DateFilter dateFilter;
+
   /// Private constructor - use factory constructor or named constructors.
   const FilterState._(
     this.selectedTagIds,
     this.logic,
     this.presenceFilter,
+    this.dateFilter,
   );
 
   /// Create a filter state with immutable list guarantee.
@@ -39,11 +43,13 @@ class FilterState {
     List<String> selectedTagIds = const [],
     FilterLogic logic = FilterLogic.or,
     TagPresenceFilter presenceFilter = TagPresenceFilter.any,
+    DateFilter dateFilter = DateFilter.any,
   }) {
     // M1: Optimization - return const empty for default parameters
     if (selectedTagIds.isEmpty &&
         logic == FilterLogic.or &&
-        presenceFilter == TagPresenceFilter.any) {
+        presenceFilter == TagPresenceFilter.any &&
+        dateFilter == DateFilter.any) {
       return FilterState.empty;
     }
 
@@ -51,6 +57,7 @@ class FilterState {
       List<String>.unmodifiable(selectedTagIds),
       logic,
       presenceFilter,
+      dateFilter,
     );
   }
 
@@ -60,14 +67,14 @@ class FilterState {
     const <String>[],
     FilterLogic.or,
     TagPresenceFilter.any,
+    DateFilter.any,
   );
 
   /// Whether any filters are active
   bool get isActive {
-    // Filter is active if either:
-    // 1. Specific tags are selected, OR
-    // 2. Presence filter is not 'any' (showing only tagged/untagged tasks)
-    return selectedTagIds.isNotEmpty || presenceFilter != TagPresenceFilter.any;
+    return selectedTagIds.isNotEmpty ||
+        presenceFilter != TagPresenceFilter.any ||
+        dateFilter != DateFilter.any;
   }
 
   /// Create a copy with updated fields
@@ -77,11 +84,13 @@ class FilterState {
     List<String>? selectedTagIds,
     FilterLogic? logic,
     TagPresenceFilter? presenceFilter,
+    DateFilter? dateFilter,
   }) {
     return FilterState(
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       logic: logic ?? this.logic,
       presenceFilter: presenceFilter ?? this.presenceFilter,
+      dateFilter: dateFilter ?? this.dateFilter,
     );
   }
 
@@ -93,6 +102,7 @@ class FilterState {
       'selectedTagIds': selectedTagIds,
       'logic': logic.name,
       'presenceFilter': presenceFilter.name,
+      'dateFilter': dateFilter.name,
     };
   }
 
@@ -107,6 +117,9 @@ class FilterState {
         logic: FilterLogic.values.byName(json['logic'] ?? 'or'),
         presenceFilter: TagPresenceFilter.values.byName(
           json['presenceFilter'] ?? 'any',
+        ),
+        dateFilter: DateFilter.values.byName(
+          json['dateFilter'] ?? 'any',
         ),
       );
     } catch (e) {
@@ -123,11 +136,12 @@ class FilterState {
           runtimeType == other.runtimeType &&
           listEquals(selectedTagIds, other.selectedTagIds) &&
           logic == other.logic &&
-          presenceFilter == other.presenceFilter;
+          presenceFilter == other.presenceFilter &&
+          dateFilter == other.dateFilter;
 
   @override
   int get hashCode =>
-      Object.hash(Object.hashAll(selectedTagIds), logic, presenceFilter);
+      Object.hash(Object.hashAll(selectedTagIds), logic, presenceFilter, dateFilter);
 
   @override
   String toString() {
@@ -135,6 +149,7 @@ class FilterState {
         'selectedTagIds: $selectedTagIds, '
         'logic: ${logic.name}, '
         'presenceFilter: ${presenceFilter.name}, '
+        'dateFilter: ${dateFilter.name}, '
         'isActive: $isActive'
         ')';
   }
@@ -170,4 +185,16 @@ enum TagPresenceFilter {
 
   /// Show only tasks WITHOUT any tags
   onlyUntagged,
+}
+
+/// Phase 3.7.5: Filter by due date status
+enum DateFilter {
+  /// Show all tasks (no date filter)
+  any,
+
+  /// Show only overdue tasks (due date in the past)
+  overdue,
+
+  /// Show only tasks with no due date set
+  noDueDate,
 }

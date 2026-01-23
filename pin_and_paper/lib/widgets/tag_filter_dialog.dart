@@ -43,6 +43,7 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
   late Set<String> _selectedTagIds; // Preserved across search changes
   late FilterLogic _logic;
   late TagPresenceFilter _presenceFilter;
+  late DateFilter _dateFilter; // Phase 3.7.5
   String _searchQuery = '';
   Set<String> _savedSelections = {}; // UX7: Remember selections when switching to Untagged
   final TextEditingController _searchController = TextEditingController(); // UX1: For clear button
@@ -62,6 +63,7 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
     _selectedTagIds = Set.from(widget.initialFilter.selectedTagIds);
     _logic = widget.initialFilter.logic;
     _presenceFilter = widget.initialFilter.presenceFilter;
+    _dateFilter = widget.initialFilter.dateFilter; // Phase 3.7.5
 
     // FIX #2: Load all tag counts in one query
     _loadTagCounts();
@@ -123,6 +125,7 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
         selectedTagIds: _selectedTagIds.toList(),
         logic: _logic,
         presenceFilter: _presenceFilter,
+        dateFilter: _dateFilter,
       );
 
       final taskService = TaskService();
@@ -192,6 +195,7 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
       selectedTagIds: _selectedTagIds.toList(),
       logic: _logic,
       presenceFilter: _presenceFilter,
+      dateFilter: _dateFilter,
     );
     Navigator.pop(context, filter);
   }
@@ -199,12 +203,61 @@ class _TagFilterDialogState extends State<TagFilterDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Filter by Tags'),
+      title: const Text('Filter'),
       content: SizedBox(
         width: double.maxFinite,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Phase 3.7.5: Due date filter section
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Due Date',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<DateFilter>(
+              segments: const [
+                ButtonSegment(
+                  value: DateFilter.any,
+                  label: Text('Any'),
+                ),
+                ButtonSegment(
+                  value: DateFilter.overdue,
+                  label: Text('Overdue'),
+                ),
+                ButtonSegment(
+                  value: DateFilter.noDueDate,
+                  label: Text('No Date'),
+                ),
+              ],
+              selected: {_dateFilter},
+              onSelectionChanged: (Set<DateFilter> selected) {
+                setState(() {
+                  _dateFilter = selected.first;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+
+            // Tag filter section header
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Tags',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+
             // Search field
             // UX1: Clear button for search
             TextField(
