@@ -59,21 +59,20 @@ Many preference fields already exist in `UserSettings` model but have NO setting
 pin_and_paper/assets/
 ├── js/
 │   └── chrono.min.js          # (existing)
-├── images/
-│   ├── quiz/                  # Quiz scenario illustrations
-│   │   ├── clock_230am.png
-│   │   ├── calendar_week.png
-│   │   ├── time_ranges.png
-│   │   └── sleep_moon.png
-│   ├── badges/                # Photorealistic embroidered patches
-│   │   ├── 1x/                # Base resolution
-│   │   ├── 2x/                # 2x density
-│   │   └── 3x/                # 3x density
-│   └── onboarding/
-│       ├── welcome.png
-│       └── celebration.png
-└── animations/
-    └── badge_reveal.json      # Lottie animation
+└── images/
+    ├── quiz/                  # Quiz scenario illustrations
+    │   ├── clock_230am.png
+    │   ├── calendar_week.png
+    │   ├── time_ranges.png
+    │   └── sleep_moon.png
+    ├── badges/                # Photorealistic embroidered patches
+    │   ├── 1x/                # Base resolution
+    │   ├── 2x/                # 2x density
+    │   └── 3x/                # 3x density
+    └── onboarding/
+        ├── welcome.png
+        ├── celebration.png
+        └── sash_background.png  # Diagonal scout sash for badge reveal
 ```
 
 ### Format Recommendations
@@ -82,7 +81,7 @@ pin_and_paper/assets/
 |-----------|--------|-----------|
 | **Embroidered badges** | PNG or WebP with transparency | Photorealistic style requires raster; WebP for smaller file size |
 | **Quiz illustrations** | PNG or SVG | Simple illustrations can be SVG for scalability; complex ones PNG |
-| **Badge reveal animation** | Lottie (JSON) | Embroidery hoop effect, badge appearance ceremony |
+| **Sash background** | PNG or WebP | Fabric texture, diagonal layout for badge reveal ceremony |
 | **Density variants** | @1x, @2x, @3x | Required for crisp rendering across device densities |
 
 **Badge re-theming strategy (photorealistic):**
@@ -90,14 +89,11 @@ pin_and_paper/assets/
 - **Option B:** Use Flutter's `ColorFiltered` widget with blend modes (e.g., `BlendMode.modulate`) to apply color tints at runtime. Limited effectiveness on photorealistic imagery but can shift hue/warmth.
 - **Option C:** Accept badges as part of the theme identity — they don't need to change when theme changes (like how brand logos stay consistent).
 
-**Package needed:** `lottie` for badge reveal animations (or `rive` for more complex interactive animations).
+**Animation approach:** Built-in Flutter animations (`AnimationController`, `Tween`, fade/scale effects). No external packages required.
 
 ### pubspec.yaml Update
 
 ```yaml
-dependencies:
-  lottie: ^3.0.0  # Badge reveal animations
-
 flutter:
   assets:
     - assets/js/chrono.min.js
@@ -106,7 +102,6 @@ flutter:
     - assets/images/badges/2x/
     - assets/images/badges/3x/
     - assets/images/onboarding/
-    - assets/animations/
 ```
 
 ---
@@ -264,19 +259,29 @@ class Badge {
 }
 ```
 
-**Badge reveal flow:**
+**Badge reveal flow (Scouting Sash Ceremony):**
 1. Quiz completion → "Analyzing your time personality..." (2 sec loading)
-2. Badge reveal screen (one badge at a time with Lottie animation)
-3. Collection screen: all earned badges + combo title
-4. Settings preview: "Here's what we configured"
-5. CTA: "Start capturing tasks"
+2. Badge reveal screen: Scouting sash background appears (diagonal fabric texture)
+3. Each earned badge fades in + bounces onto the sash (staggered, 200-300ms per badge)
+4. Collection screen: completed sash with all badges + combo title
+5. Settings preview: "Here's what we configured"
+6. CTA: "Start capturing tasks"
+
+**Animation implementation:**
+- Uses Flutter's built-in `AnimationController` + `Tween` (no Lottie required)
+- Fade + scale/bounce effect per badge
+- Staggered timing for multiple badges (~5-8 seconds total reveal)
+- Optional: Confetti particle effect on final badge appearance
 
 **Deliverables:**
 - 9 question screens with illustrations
 - Inference engine: `QuizInferenceService.inferSettings(answers) → UserSettings`
 - Badge catalog: `lib/models/badge.dart` + `lib/utils/badge_definitions.dart`
-- Badge reveal screen with Lottie animations
+- Badge reveal screen with sash background + Flutter animations
 - Photorealistic badge assets (AI-generated embroidered patches)
+- Sash background asset (fabric texture, diagonal layout)
+
+**Stretch goal (deferred):** Embroidery hoop reveal effect with Lottie animations
 
 ### 3.9.3: Comprehensive Preferences UI
 
@@ -379,8 +384,7 @@ class Badge {
   - OR: Store in shared_preferences for first-launch detection only
 
 ### Dependencies
-- `lottie: ^3.0.0` (badge reveal animations)
-- No other new dependencies expected
+- No new package dependencies required (uses built-in Flutter animations)
 
 ### Navigation
 - First launch: QuizScreen → HomeScreen
@@ -464,3 +468,4 @@ No blockers.
 **Date:** 2026-01-23
 **Changelog:**
 - v2: Added theme cleanup pre-requisite, incorporated onboarding-quiz.md details (9 questions, badge system), updated asset strategy for photorealistic badges, answered open questions
+- v2.1: Updated badge reveal approach to scouting sash ceremony with built-in Flutter animations (removed Lottie dependency, simpler implementation). Embroidery hoop effect deferred as stretch goal.
