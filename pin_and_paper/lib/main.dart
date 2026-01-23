@@ -9,6 +9,7 @@ import 'providers/brain_dump_provider.dart'; // Phase 2
 import 'screens/home_screen.dart';
 import 'services/task_service.dart'; // Phase 3.3
 import 'services/date_parsing_service.dart'; // Phase 3.7
+import 'services/notification_service.dart'; // Phase 3.8
 import 'utils/theme.dart';
 
 void main() async {
@@ -40,6 +41,15 @@ void main() async {
   } catch (e) {
     print('[Phase 3.7] Failed to initialize DateParsingService: $e');
     // Don't block app startup on date parsing initialization failure
+  }
+
+  // Phase 3.8: Initialize notification service (timezone + plugin)
+  try {
+    final notificationService = NotificationService();
+    await notificationService.initialize();
+  } catch (e) {
+    print('[Phase 3.8] Failed to initialize NotificationService: $e');
+    // Don't block app startup on notification initialization failure
   }
 
   runApp(const PinAndPaperApp());

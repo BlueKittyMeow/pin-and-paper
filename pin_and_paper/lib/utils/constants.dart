@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 8; // Phase 3.6.5: Edit Task Modal Rework (notes + position_before_completion)
+  static const int databaseVersion = 9; // Phase 3.8: Due Date Notifications (task_reminders + notification settings)
 
   // Table names
   static const String tasksTable = 'tasks';
@@ -15,6 +15,13 @@ class AppConstants {
   static const String tagsTable = 'tags';
   static const String taskEntitiesTable = 'task_entities';
   static const String taskTagsTable = 'task_tags';
+  static const String taskRemindersTable = 'task_reminders'; // Phase 3.8
+
+  // Phase 3.8: Notification constants
+  static const String notificationChannelId = 'pin_paper_task_reminders';
+  static const String notificationChannelName = 'Task Reminders';
+  static const String notificationChannelDescription = 'Notifications for upcoming task due dates';
+  static const String notificationGroupKey = 'pin_paper_task_group';
 
   // App metadata
   static const String appName = 'Pin and Paper';
