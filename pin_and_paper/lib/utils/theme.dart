@@ -1,5 +1,21 @@
 import 'package:flutter/material.dart';
 
+/// Central theme definition for Pin and Paper
+///
+/// **IMPORTANT - Color Usage Policy:**
+/// - DO NOT use hardcoded Colors.green, Colors.red, Colors.blue, etc. in widgets
+/// - DO NOT use Color(0x...) literals in screens/widgets
+/// - ALWAYS use AppTheme semantic colors: success, danger, warning, info, muted
+/// - ALWAYS use AppTheme palette colors: warmWood, kraftPaper, creamPaper, etc.
+///
+/// **Why:** Enables easy re-theming by changing colors in ONE place instead of
+/// hunting through 100+ files. See Phase 3.9.0 for migration details.
+///
+/// **To check for violations, run:**
+/// ```bash
+/// grep -r "Colors\." lib/screens/ lib/widgets/
+/// grep -r "Color(0x" lib/screens/ lib/widgets/
+/// ```
 class AppTheme {
   // Witchy Flatlay Color Palette
   static const Color warmWood = Color(0xFF8B7355);
