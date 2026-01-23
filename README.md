@@ -170,8 +170,15 @@ Data Layer (SQLite)
   - Live clock, Sort-by, Date filters (Overdue/No Date)
   - ~120+ tests, 1,848 lines production code
 
+- ✅ **Phase 3.8:** Due Date Notifications (Jan 2026)
+  - flutter_local_notifications (Android, iOS, Linux graceful degradation)
+  - Stacked reminders: at time, 1h before, 1d before (global + per-task)
+  - Quick actions: Complete, Snooze, Dismiss from notification tray
+  - Quiet hours, overdue detection, master toggle
+  - Cold-start navigation (tap notification → scroll to task)
+  - 1,965 lines production code, DB v8→v10
+
 **Next Up:**
-- 🔜 **Phase 3.8:** Due Date Notifications (1-2 weeks)
 - 🔜 **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 
 **Deferred to Phase 6+:**
@@ -318,15 +325,22 @@ Each phase builds on the previous:
   - Date filters (Overdue/No Date) in filter dialog
   - ~120+ tests, 1,848 lines production code
 
+- [x] **Phase 3.8:** Due Date Notifications (Jan 2026)
+  - flutter_local_notifications (Android, iOS, Linux)
+  - Stacked reminders, quiet hours, overdue detection
+  - Quick actions (Complete/Snooze/Dismiss), snooze presets
+  - Master toggle, per-task custom/none overrides
+  - Cold-start navigation (notification tap → task focus)
+  - 1,965 lines production code, DB v8→v10
+
 ### Current Stats
-- **~11,000+ lines of production code**
+- **~13,000+ lines of production code**
 - **394 tests passing** (95%+ pass rate)
-- **Database:** v6 (6 migrations complete)
-- **Phases completed:** 2 full phases + 9 subphases
-- **Latest:** Phase 3.7 - Natural Language Date Parsing + Sort/Filter
+- **Database:** v10 (10 migrations complete)
+- **Phases completed:** 2 full phases + 10 subphases
+- **Latest:** Phase 3.8 - Due Date Notifications
 
 ### Next Up
-- **Phase 3.8:** Due Date Notifications (1-2 weeks)
 - **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 - **Phase 4:** Bounded Workspace View (4-5 weeks)
 

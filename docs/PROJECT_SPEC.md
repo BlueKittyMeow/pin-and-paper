@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
-**Version:** 3.7 (Phase 3 In Progress)
-**Last Updated:** 2026-01-22
+**Version:** 3.8 (Phase 3 In Progress)
+**Last Updated:** 2026-01-23
 **Primary Device:** Samsung Galaxy S22 Ultra
-**Current Phase:** Phase 3.7 Complete - Natural Language Date Parsing
+**Current Phase:** Phase 3.8 Complete - Due Date Notifications
 
 ---
 
@@ -36,7 +36,7 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.6B:** Universal Search - Complete (Jan 19, 2026)
 ✅ **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix - Complete (Jan 20, 2026)
 ✅ **Phase 3.7:** Natural Language Date Parsing + Sort/Filter - Complete (Jan 22, 2026)
-🔜 **Phase 3.8:** Due Date Notifications - Planned (1-2 weeks)
+✅ **Phase 3.8:** Due Date Notifications - Complete (Jan 23, 2026)
 🔜 **Phase 3.9:** Onboarding Quiz & User Preferences - Planned (1 week)
 
 ---
@@ -512,12 +512,18 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
   - Date filter (Overdue/No Date) applies to root-level tasks only; children inherit visibility from parent. A child matching the filter whose parent doesn't match will be hidden. Evaluate optimal behavior during UX testing.
   - Highlighted date text in input fields uses `TextField.onTap` + cursor position check for tap detection (TapGestureRecognizer cannot be used in editable TextFields due to Flutter assertion). Saved tasks use `GestureDetector` on date suffix chip in `task_item.dart`.
 
-**Phase 3.8: Due Date Notifications** 🔜 (1-2 weeks)
-- flutter_local_notifications integration
-- Notification scheduling (at time, 1 hour before, 1 day before)
-- Platform-specific permissions (Android + iOS)
-- Quick actions from notifications
-- Quiet hours setting
+**Phase 3.8: Due Date Notifications** ✅ (Jan 22-23, 2026)
+- flutter_local_notifications integration (Android, iOS, Linux)
+- Stacked reminders: at time, 1 hour before, 1 day before (per-task or global)
+- Platform-specific permissions (Android exact alarms + iOS provisional)
+- Quick actions: Complete, Snooze, Dismiss from notification tray
+- Snooze with presets + custom time picker
+- Quiet hours with cross-midnight and day-of-week support
+- Master enable/disable toggle
+- Overdue detection using user's end-of-day setting
+- Cold-start navigation (tap → scroll to task)
+- **5 subphases**, 1,965 lines Dart, DB v8→v10
+- **Deferred:** Background isolate actions, custom sounds, location reminders
 
 **Phase 3.9: Onboarding Quiz & User Preferences** 🔜 (1 week)
 - Scenario-based quiz to infer user time perception preferences
@@ -1047,34 +1053,33 @@ This section documents major architectural and scope decisions made during plann
 
 ## Next Steps
 
-**Current Phase:** Phase 3.7 Complete - Natural Language Date Parsing (Jan 22, 2026)
+**Current Phase:** Phase 3.8 Complete - Due Date Notifications (Jan 23, 2026)
 
 **Completed Recently:**
-1. ✅ Phase 3.7 Natural Language Date Parsing + Sort/Filter (Jan 20-22, 2026)
+1. ✅ Phase 3.8 Due Date Notifications (Jan 22-23, 2026)
+   - Full notification pipeline: scheduling, delivery, interaction
+   - Stacked reminders, quiet hours, overdue detection
+   - Quick actions (Complete/Snooze/Dismiss) from notification tray
+   - Master toggle, per-task overrides, platform-safe scheduling
+   - 1,965 lines Dart, DB v8→v10, 5 subphases
+2. ✅ Phase 3.7 Natural Language Date Parsing + Sort/Filter (Jan 20-22, 2026)
    - chrono.js NL parsing via flutter_js (QuickJS FFI)
    - Real-time inline highlighting in TextFields
-   - DateOptionsSheet with quick date options
    - Live clock, Sort-by, Date filters (Phase 3.7.5)
-   - ~120+ tests, 1,848 lines production code
-2. ✅ Phase 3.6.5 Edit Task Modal Rework + TreeController Fix (Jan 19-20, 2026)
-   - Custom TaskTreeController with ID-based expansion state
-   - Comprehensive edit dialog (title, parent, date, time, tags, notes)
 
 **Next Up:**
-1. 🔜 Implement Phase 3.8 (Due Date Notifications)
-2. 🔜 Implement Phase 3.9 (Onboarding Quiz & User Preferences)
-3. 🔜 Complete Phase 3 → Release v3.9.0
+1. 🔜 Implement Phase 3.9 (Onboarding Quiz & User Preferences)
+2. 🔜 Complete Phase 3 → Release v3.9.0
 
 **Upcoming Phases:**
-- Phase 3.8: Due Date Notifications (1-2 weeks)
 - Phase 3.9: Onboarding Quiz & User Preferences (1 week)
 - Phase 4: Bounded Workspace View (4-5 weeks)
 
 ---
 
-**Document Status:** ✅ Up to Date (Phase 3.7 Complete)
-**Last Review:** January 22, 2026
-**Next Review:** After Phase 3.8-3.9 completion
+**Document Status:** ✅ Up to Date (Phase 3.8 Complete)
+**Last Review:** January 23, 2026
+**Next Review:** After Phase 3.9 completion
 
 **See Also:**
 - `visual-design.md` - Complete aesthetic specification
