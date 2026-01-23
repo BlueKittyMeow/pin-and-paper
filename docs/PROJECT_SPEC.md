@@ -491,6 +491,7 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - Duplicate tag UI validation (backend prevents duplicates, UI can improve) - Low priority
 - Keyboard capitalization preference - Defer to Settings phase
 - Date-based filtering (due today, this week, overdue) - Consider for 3.6B stretch goal or 3.7
+- Sort by due date (soonest/overdue first) - Medium priority, identified during Phase 3.7
 - See `docs/future/future.md` for full details and rationale
 
 **Phase 3.6.5: Edit Task Modal Rework + TreeController Fix** ✅ (Jan 20, 2026)

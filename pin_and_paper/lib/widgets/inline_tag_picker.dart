@@ -48,7 +48,11 @@ class _InlineTagPickerState extends State<InlineTagPicker> {
   @override
   void initState() {
     super.initState();
-    _loadTags();
+    // Defer tag loading to after build phase to avoid
+    // "setState() or markNeedsBuild() called during build" error
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadTags();
+    });
     _searchController.addListener(_onSearchChanged);
   }
 

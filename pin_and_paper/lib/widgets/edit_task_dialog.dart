@@ -173,7 +173,30 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   }
 
   void _clearDueDate() {
+    // Phase 3.7: Also strip date text from title and clear highlight
+    final text = _titleController.text;
+    String cleanText = text;
+
+    // Try stripping via parsed date range first
+    if (_parsedDate != null) {
+      final range = _parsedDate!.matchedRange;
+      if (range.start >= 0 && range.end <= text.length) {
+        cleanText = (text.substring(0, range.start) +
+            text.substring(range.end)).trim();
+      }
+    }
+    // Fallback: strip formatted suffix
+    if (cleanText == text) {
+      final suffixResult = DateSuffixParser.parse(text.trim());
+      if (suffixResult != null) {
+        cleanText = suffixResult.prefix.trim();
+      }
+    }
+
     setState(() {
+      _titleController.clearHighlight();
+      _titleController.text = cleanText;
+      _parsedDate = null;
       _dueDate = null;
       _dueTime = null;
       _isAllDay = true;

@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// Custom TextEditingController that highlights a range of text
@@ -54,7 +53,9 @@ class HighlightedTextEditingController extends TextEditingController {
         if (range.start > 0)
           TextSpan(text: text.substring(0, range.start)),
 
-        // Highlighted text (clickable)
+        // Highlighted text (visual only - tap handled separately)
+        // Note: TapGestureRecognizer not allowed in editable TextFields
+        // (Flutter assertion: readOnly && !obscureText)
         TextSpan(
           text: text.substring(range.start, range.end),
           style: baseStyle.copyWith(
@@ -62,12 +63,6 @@ class HighlightedTextEditingController extends TextEditingController {
             color: Colors.blue[700],
             fontWeight: FontWeight.w500,
           ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () {
-              if (onTapHighlight != null) {
-                onTapHighlight!();
-              }
-            },
         ),
 
         // Text after highlight
