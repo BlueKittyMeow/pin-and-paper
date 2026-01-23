@@ -367,21 +367,69 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
       builder: (context) => DateOptionsSheet(
         parsedDate: _parsedDate!,
         onRemove: () {
+          // Strip date text from title
+          final text = _titleController.text;
+          String cleanText = text;
+          if (_parsedDate != null) {
+            final range = _parsedDate!.matchedRange;
+            if (range.start >= 0 && range.end <= text.length) {
+              cleanText = (text.substring(0, range.start) +
+                  text.substring(range.end)).trim();
+            }
+          }
+          // Fallback: strip formatted suffix if range didn't work
+          if (cleanText == text) {
+            final suffixResult = DateSuffixParser.parse(text.trim());
+            if (suffixResult != null) {
+              cleanText = suffixResult.prefix.trim();
+            }
+          }
+
           setState(() {
             _parsedDate = null;
-            _userDismissedParsing = true;
             _titleController.clearHighlight();
-            // Note: Don't clear _dueDate here, user might want to keep manual date
+            _titleController.text = cleanText;
+            // Clear due date fields
+            _dueDate = null;
+            _dueTime = null;
+            _isAllDay = true;
           });
           Navigator.pop(context);
         },
         onSelectDate: (DateTime date, bool isAllDay) {
+          // Strip old date text and replace with new formatted suffix
+          final text = _titleController.text;
+          String cleanText = text;
+          final range = _parsedDate!.matchedRange;
+          if (range.start >= 0 && range.end <= text.length) {
+            cleanText = (text.substring(0, range.start) +
+                text.substring(range.end)).trim();
+          } else {
+            final suffixResult = DateSuffixParser.parse(text.trim());
+            if (suffixResult != null) {
+              cleanText = suffixResult.prefix.trim();
+            }
+          }
+
+          // Append new suffix for the selected date
+          final newSuffix = DateFormatter.formatTitleSuffix(
+            date,
+            isAllDay: isAllDay,
+          );
+          final newTitle = '$cleanText $newSuffix';
+          final suffixStart = cleanText.length + 1; // +1 for the space
+          final suffixEnd = newTitle.length;
+
           setState(() {
+            _titleController.text = newTitle;
             _parsedDate = ParsedDate(
-              matchedText: _parsedDate!.matchedText,
-              matchedRange: _parsedDate!.matchedRange,
+              matchedText: newSuffix,
+              matchedRange: TextRange(start: suffixStart, end: suffixEnd),
               date: date,
               isAllDay: isAllDay,
+            );
+            _titleController.setHighlight(
+              TextRange(start: suffixStart, end: suffixEnd),
             );
             // Update the actual due date fields
             _dueDate = date;

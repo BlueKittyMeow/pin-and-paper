@@ -280,6 +280,9 @@ class TaskItem extends StatelessWidget {
         ? (isCompletedParent ? 0.5 : 0.7)
         : 1.0;
 
+    // Compute display suffix with relative label (Today/Tomorrow)
+    final displaySuffix = _getDisplaySuffix(suffixResult);
+
     // Use Row with Text + tappable suffix chip
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -305,7 +308,7 @@ class TaskItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              suffixResult.suffix,
+              displaySuffix,
               style: baseTextStyle.copyWith(
                 color: suffixColor.withValues(alpha: suffixOpacity),
                 fontWeight: FontWeight.w500,
@@ -316,6 +319,32 @@ class TaskItem extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  // Phase 3.7: Add relative label (Today/Tomorrow) to suffix for display
+  String _getDisplaySuffix(DateSuffixResult suffixResult) {
+    final effectiveToday = DateParsingService().getCurrentEffectiveToday();
+    final date = suffixResult.date;
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final todayOnly = DateTime(effectiveToday.year, effectiveToday.month, effectiveToday.day);
+    final diff = dateOnly.difference(todayOnly).inDays;
+
+    // Strip outer parentheses from saved suffix to rebuild
+    final inner = suffixResult.suffix.substring(1, suffixResult.suffix.length - 1);
+
+    String? relativeLabel;
+    if (diff == 0) {
+      relativeLabel = 'Today';
+    } else if (diff == 1) {
+      relativeLabel = 'Tomorrow';
+    } else if (diff == -1) {
+      relativeLabel = 'Yesterday';
+    }
+
+    if (relativeLabel != null) {
+      return '($relativeLabel, $inner)';
+    }
+    return suffixResult.suffix;
   }
 
   // Phase 3.7: Show DateOptionsSheet for tapped suffix in task list
