@@ -1,0 +1,5 @@
+# Image backups (temporary - can be deleted once verified)
+docs/images_backup_*/
+pin_and_paper/assets/images_backup_*/
+pin_and_paper/assets/images/badges_backup_*/
+*_backup_*/

@@ -8,6 +8,13 @@ pin_and_paper/.packages
 # Coverage reports
 pin_and_paper/coverage/**
 
+# Test files (exclude unless actively debugging)
+pin_and_paper/test/**
+pin_and_paper/integration_test/**
+
+# Lock files and dependency manifests
+pin_and_paper/pubspec.lock
+
 # Archived documentation (exclude old phases, but keep recent phase-3.9.0 for reference)
 docs/archive/phase-01/**
 docs/archive/phase-02/**
@@ -21,6 +28,12 @@ docs/archive/phase-03-revised-plan.md
 docs/archive/plan-original.md
 docs/archive/project-plan-original.md
 docs/archive/README-updates-needed.md
+
+# Most recent documentation
+docs/archive/phase-3.9.0/missing-assets-checklist.md
+docs/archive/phase-3.9.0/phase-3.9-plan-v1.md
+docs/archive/phase-3.9.0/phase-3.9-plan-v2.md
+docs/archive/phase-3.9.0/phase-3.9.0-summary.md
 
 # Image backups (temporary - can be deleted once verified)
 docs/images_backup_*/**
