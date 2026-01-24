@@ -106,6 +106,8 @@ class TaskProvider extends ChangeNotifier {
   Future<void> _onFilterChanged() async {
     final filter = _filterProvider.filterState;
     final operationId = _filterProvider.filterOperationId;
+    // Capture previous filter for true rollback on error (Codex MEDIUM finding #2)
+    final previousFilter = _previousFilterState;
 
     try {
       if (filter.isActive) {
@@ -139,17 +141,27 @@ class TaskProvider extends ChangeNotifier {
           // Refresh tree controller (filtered view is flat, not hierarchical)
           _refreshTreeController();
 
+          // Success! Update previous filter for next rollback
+          _previousFilterState = filter;
+
           notifyListeners();
         }
         // Else discard stale results (newer filter already applied)
       } else {
         // No filter active - reload all tasks with hierarchy
-        await loadTasks();
+        // Phase 3.9: Check operation ID to prevent race condition
+        // (Codex MEDIUM finding #1: clear-filter can flash unfiltered results)
+        if (operationId == _filterProvider.filterOperationId) {
+          await loadTasks();
+          // Success! Update previous filter
+          _previousFilterState = filter;
+        }
+        // Else: newer operation already started, this clear is stale, skip
       }
     } catch (e) {
       debugPrint('Error applying filter: $e');
-      // Rollback filter to empty state
-      _filterProvider.rollbackFilter(FilterState.empty, operationId);
+      // True rollback: restore previous filter state (Codex MEDIUM finding #2)
+      _filterProvider.rollbackFilter(previousFilter, operationId);
       // Try to reload all tasks (if DB is available)
       try {
         await loadTasks();
@@ -162,6 +174,9 @@ class TaskProvider extends ChangeNotifier {
   List<Task> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Phase 3.9 Refactor: Track previous filter for true rollback on error (Codex MEDIUM finding)
+  FilterState _previousFilterState = FilterState.empty;
 
   // Phase 3.5: Tag storage (loaded with tasks)
   Map<String, List<Tag>> _taskTags = {};
