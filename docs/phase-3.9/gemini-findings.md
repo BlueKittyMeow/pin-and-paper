@@ -169,38 +169,17 @@ If you want to reference another agent's work:
 
 ## Findings
 
-_Gemini: Document all findings below using the issue format._
+### Issue #1: [HIGH] Database Migration Version Number Inconsistency
 
-_Focus on:_
-- _Database schema issues_
-- _Build/dependency problems_
-- _Static analysis warnings in code examples_
-- _UI/UX accessibility issues_
-- _Performance concerns_
-- _Flutter best practice violations_
-- _Asset management issues_
-- _Any other build/test/schema issues you find_
-
-_Prioritize issues that would block implementation or cause build failures._
-
----
-
-### [Your findings go here]
-
-_Example:_
-
-```markdown
-### Issue #1: Database Migration Version Not Specified
-
-**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (Database Schema section, ~line 140)
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (Database Schema section)
 **Type:** Schema
 **Severity:** HIGH
 **Analyzer Message:** N/A (pre-implementation review)
 
 **Description:**
-The plan mentions adding a database migration for the new `enable_quick_add_date_parsing` field, but doesn't specify which database version this should be. The plan mentions "version 11" in one place but the current database is at version 10 (from Phase 3.8).
+The plan mentions a new migration for `enable_quick_add_date_parsing` and indicates it will be for "version 11". However, the `databaseVersion` constant in `AppConstants` (from `pin_and_paper/lib/utils/constants.dart`) is currently `10`. The plan should explicitly state that `AppConstants.databaseVersion` needs to be incremented to `11`. The `_onUpgrade` method in `DatabaseService` should also be updated to call `_migrateToV11`.
 
-**Current Code:**
+**Current Code (from plan example):**
 ```dart
 // In _onUpgrade, add version 11:
 if (oldVersion < 11) {
@@ -210,314 +189,349 @@ if (oldVersion < 11) {
   ''');
 }
 ```
+**Current Code (from pin_and_paper/lib/utils/constants.dart):**
+```dart
+static const int databaseVersion = 10; // Phase 3.8: notifications_enabled master toggle
+```
 
 **Suggested Fix:**
-1. Verify current database version in database_service.dart
-2. Explicitly state: "Update DATABASE_VERSION to 11 in database_service.dart"
-3. Add the migration in the correct version check block
+1.  Update `AppConstants.databaseVersion` to `11`.
+2.  Add a `_migrateToV11` method in `lib/services/database_service.dart` that contains the `ALTER TABLE` statement for `enable_quick_add_date_parsing`.
+3.  Add `if (oldVersion < 11) { await _migrateToV11(db); }` to the `_upgradeDB` method.
 
 **Impact:**
-If version number is wrong, migration won't run and the new field won't exist, causing app crashes when trying to read/write it.
-
----
-```
-
-_Continue with Issue #2, Issue #3, etc._
+If the database version is not incremented and the `_upgradeDB` method is not correctly updated, the new `enable_quick_add_date_parsing` column will not be added to the `user_settings` table on existing installations, leading to app crashes when trying to access this non-existent field.
 
 ---
 
-### Static Analysis Preview
+### Issue #2: [HIGH] `withValues(alpha:)` is deprecated/invalid, should be `withOpacity()`
 
-_Gemini: If you can, run flutter analyze on the proposed code snippets (treat them as if they were real files). Document any potential warnings here._
+**File:** `lib/widgets/quiz_answer_option.dart`, `lib/widgets/quiz_progress_dots.dart`, `lib/widgets/badge_card.dart` (and others using `withValues`)
+**Type:** Static Analysis / Lint
+**Severity:** HIGH
+**Analyzer Message:** `The method 'withValues' isn't defined for the type 'Color'.` or similar if `withOpacity` is meant.
 
-**Potential Flutter Analyze Warnings:**
+**Description:**
+The plan's code snippets consistently use `.withValues(alpha: 0.x)` on `Color` objects (e.g., `AppTheme.richBlack.withValues(alpha: 0.1)`). The `withValues` method does not exist on `Color`. This syntax was likely confused with a different color manipulation method or is a typo. The correct method to adjust opacity is `.withOpacity()`.
+
+**Current Code (Example from QuizScreen):**
+```dart
+color: AppTheme.richBlack.withValues(alpha: 0.1),
 ```
-[List any warnings you anticipate based on the code examples in the plan]
+**Current Code (Example from QuizQuestionCard):**
+```dart
+color: AppTheme.deepShadow.withValues(alpha: 0.8),
+```
+**Current Code (Example from BadgeCard):**
+```dart
+color: AppTheme.mutedLavender.withValues(alpha: 0.3),
 ```
 
-**Potential Lint Issues:**
-- [List any lint issues like missing const, prefer_const_constructors, etc.]
+**Suggested Fix:**
+Replace all instances of `.withValues(alpha: X)` with `.withOpacity(X)`.
 
-**Deprecated API Usage:**
-- [Check if any code examples use deprecated Flutter/Dart APIs]
+**Impact:**
+The app will not compile due to undefined method errors. This is a critical build blocker.
 
 ---
 
-### Database Schema Review
+### Issue #3: [MEDIUM] `QuizService.resetQuiz()` Does Not Reset `quiz_version`
 
-**Current Database Version:** 10 (from Phase 3.8)
+**File:** `lib/services/quiz_service.dart`
+**Type:** Bug
+**Severity:** MEDIUM
+**Analyzer Message:** N/A (logical error)
 
-**Proposed New Version:** 11
+**Description:**
+The `resetQuiz()` method in `QuizService` removes `_quizCompletedKey` and `_quizCompletedAtKey` but explicitly states `// Keep version to track if user has retaken`. However, if the `quiz_version` is kept high and a new quiz version is released, the user might not be prompted to retake the quiz, as `getQuizVersion()` would return an old version (1) but the `main.dart` check for a newer version might fail if the retained `_quizVersionKey` is already at 1. If the intention is to completely reset the quiz state as if it were never taken, the version should also be reset or set to 0.
 
-**Tables Modified This Phase:**
-- `user_settings` - Add `enable_quick_add_date_parsing INTEGER DEFAULT 1`
+**Current Code:**
+```dart
+Future<void> resetQuiz() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(_quizCompletedKey);
+  await prefs.remove(_quizCompletedAtKey);
+  // Keep version to track if user has retaken - POTENTIAL BUG
+}
+```
 
-**Proposed Schema for user_settings (after migration):**
+**Suggested Fix:**
+To ensure a complete reset of the quiz state (as implied by "reset quiz state"), `_quizVersionKey` should also be removed or set to `0`. If the goal is to track retakes, a separate mechanism should be used.
+```dart
+Future<void> resetQuiz() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(_quizCompletedKey);
+  await prefs.remove(_quizCompletedAtKey);
+  await prefs.remove(_quizVersionKey); // NEW: Reset quiz version too
+}
+```
+
+**Impact:**
+Potentially incorrect behavior with future quiz updates, or issues with "retake quiz" logic if the `quiz_version` is used to determine if a user *needs* to retake a newer version of the quiz.
+
+---
+
+### Issue #4: [LOW] Hardcoded Alpha Values in UI Components
+
+**File:** `lib/widgets/quiz_answer_option.dart`, `lib/widgets/quiz_question_card.dart`, `lib/widgets/badge_card.dart` (and others using `withValues`)
+**Type:** UI/UX / Theming
+**Severity:** LOW
+**Analyzer Message:** N/A
+
+**Description:**
+UI components frequently use hardcoded alpha values (e.g., `AppTheme.deepShadow.withValues(alpha: 0.2)` which will be fixed to `withOpacity(0.2)`). These alpha values are magic numbers and make global theme adjustments harder. While `QuizTheme` is used for some colors, it doesn't extend to opacities.
+
+**Current Code (Example from QuizQuestionCard):**
+```dart
+color: AppTheme.deepShadow.withValues(alpha: 0.8),
+```
+
+**Suggested Fix:**
+Consider defining opacity values within `QuizTheme` or `AppTheme` (e.g., `theme.shadowOpacityLight`, `theme.shadowOpacityMedium`) to centralize them and make them easily adjustable for global theme changes.
+
+**Impact:**
+Harder to maintain and adjust theme consistently across the app.
+
+---
+
+### Issue #5: [LOW] Accessibility: Missing Semantics for Quiz Answer Options
+
+**File:** `lib/widgets/quiz_answer_option.dart`
+**Type:** Accessibility
+**Severity:** LOW
+**Analyzer Message:** N/A
+
+**Description:**
+The `QuizAnswerOption` widget is a custom interactive element. While it uses `InkWell` for tap detection, it doesn't explicitly wrap the content in a `Semantics` widget to provide a clear label for screen readers, especially for the radio-button-like indicator.
+
+**Current Code (QuizAnswerOption build method):**
+```dart
+InkWell(
+  onTap: onTap,
+  // ...
+  child: AnimatedContainer(
+    // ...
+    child: Row(
+      children: [
+        // Radio indicator
+        Container(...),
+        // ... Answer text
+      ],
+    ),
+  ),
+);
+```
+
+**Suggested Fix:**
+Wrap the `InkWell` (or its child `AnimatedContainer`) in a `Semantics` widget and provide a `label` and `onTapHint` to describe its purpose for accessibility. For the radio indicator, a `Semantics` widget with `Role.radio` and `checked: isSelected` would be ideal.
+
+**Impact:**
+Users relying on screen readers may have difficulty understanding the purpose and state of the quiz answer options, leading to a poor user experience.
+
+---
+
+### Issue #6: [LOW] SQLite `ALTER TABLE ADD COLUMN` is not idempotent with `IF NOT EXISTS`
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (Database Schema Review)
+**Type:** Schema
+**Severity:** LOW
+**Analyzer Message:** N/A (pre-implementation review)
+
+**Description:**
+The standard `ALTER TABLE ADD COLUMN` in SQLite does not support `IF NOT EXISTS`. If the migration is run multiple times (e.g., due to an app crash during migration), it will throw an error if the column already exists. While `sqflite` usually handles transaction-based migrations well, it's a good practice to ensure idempotency where possible.
+
+**Current Code (from plan example):**
 ```sql
-CREATE TABLE user_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-
-  -- Time keywords
-  early_morning_hour INTEGER DEFAULT 5,
-  morning_hour INTEGER DEFAULT 9,
-  noon_hour INTEGER DEFAULT 12,
-  afternoon_hour INTEGER DEFAULT 15,
-  tonight_hour INTEGER DEFAULT 19,
-  late_night_hour INTEGER DEFAULT 22,
-
-  -- Night owl settings
-  today_cutoff_hour INTEGER DEFAULT 4,
-  today_cutoff_minute INTEGER DEFAULT 59,
-
-  -- Calendar preferences
-  week_start_day INTEGER DEFAULT 1,
-
-  -- Timezone
-  timezone_id TEXT,
-
-  -- Display preferences
-  use_24hour_time INTEGER DEFAULT 0,
-
-  -- Task behavior
-  auto_complete_children TEXT DEFAULT 'prompt',
-
-  -- NEW FIELD (Phase 3.9)
-  enable_quick_add_date_parsing INTEGER DEFAULT 1,
-
-  -- Notification defaults
-  default_notification_hour INTEGER DEFAULT 9,
-  default_notification_minute INTEGER DEFAULT 0,
-
-  -- Phase 3.8 notifications
-  notify_when_overdue INTEGER DEFAULT 0,
-  quiet_hours_enabled INTEGER DEFAULT 0,
-  quiet_hours_start INTEGER DEFAULT NULL,
-  quiet_hours_end INTEGER DEFAULT NULL,
-  quiet_hours_days TEXT DEFAULT '0,1,2,3,4,5,6',
-  default_reminder_types TEXT DEFAULT 'at_time',
-  notifications_enabled INTEGER DEFAULT 1,
-
-  -- Voice input
-  voice_smart_punctuation INTEGER DEFAULT 1,
-
-  -- Timestamps
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-)
+ALTER TABLE user_settings ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1;
 ```
 
-**Schema Findings:**
-- [ ] Column type appropriate? (INTEGER for boolean - ✅ Standard pattern)
-- [ ] Default value sensible? (1 = enabled by default - verify with user requirements)
-- [ ] Naming convention followed? (snake_case - ✅ Consistent)
-- [ ] Migration idempotent? (ALTER TABLE ADD COLUMN IF NOT EXISTS - ❓ Check if SQLite supports this)
-- [ ] Rollback strategy? (Not mentioned in plan - should there be one?)
+**Suggested Fix:**
+Wrap the `ALTER TABLE` statement in a check to see if the column already exists before attempting to add it.
+```sql
+PRAGMA table_info(user_settings); -- Check for column existence
+```
+Or, use a `try-catch` block around the `ALTER TABLE` execution.
 
-**Issues:**
-- [List any schema issues you find]
-
----
-
-### UI/Layout Review
-
-**Material Design Compliance:**
-_Review the UI components proposed in the plan:_
-- QuizScreen AppBar: [✅ / ⚠️ Issues]
-- QuizQuestionCard layout: [✅ / ⚠️ Issues]
-- QuizAnswerOption (tappable card): [✅ / ⚠️ Issues]
-- BadgeRevealScreen: [✅ / ⚠️ Issues]
-- Progress dots: [✅ / ⚠️ Issues]
-
-**Accessibility:**
-- Color contrast (WCAG AA 4.5:1): [✅ Plan mentions this / ⚠️ Issues found]
-- Touch targets (48x48dp minimum): [✅ Plan mentions this / ⚠️ Issues found]
-- Semantics labels: [✅ Examples provided / ⚠️ Missing for some widgets]
-- Keyboard navigation: [✅ Addressed / ⚠️ Not addressed]
-- Screen reader support: [✅ Addressed / ⚠️ Needs improvement]
-
-**Layout Constraint Violations:**
-_Check the widget code examples for potential overflow or constraint issues:_
-- [List any potential RenderFlex overflow warnings]
-- [List any unbounded height/width issues]
-
-**Responsive Design:**
-- Handles small screens (e.g., 320dp width)? [✅ / ⚠️ / ❓ Unknown]
-- Landscape orientation considered? [✅ / ⚠️ / ❓ Not mentioned]
-- Tablet/desktop layouts? [✅ / ⚠️ / N/A - mobile-first]
+**Impact:**
+Database migration could fail on subsequent runs if not idempotent, leading to app crashes or corrupted user data.
 
 ---
 
-### Asset Management Review
+### Issue #7: [LOW] Missing Database Rollback Strategy
 
-**Total Assets Required:** 76 files
-- Badges: 69 files (23 badges × 3 densities)
-- Quiz illustrations: 4 files
-- Onboarding images: 3 files
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (Database Schema Review)
+**Type:** Schema / Best Practices
+**Severity:** LOW
+**Analyzer Message:** N/A (pre-implementation review)
 
-**Current Asset Status (from Phase 3.9.0 summary):**
-✅ All 76 assets created and integrated
+**Description:**
+The plan does not explicitly mention a rollback strategy for database migrations. While SQLite transactions provide atomicity for a single migration step, there's no overall plan for reverting the database to a previous version if an entire migration (multiple steps) fails or is buggy.
 
-**pubspec.yaml Configuration:**
-```yaml
-assets:
-  - assets/js/chrono.min.js
-  - assets/images/quiz/
-  - assets/images/badges/1x/
-  - assets/images/badges/2x/
-  - assets/images/badges/3x/
-  - assets/images/onboarding/
+**Suggested Fix:**
+Document the policy for database rollbacks. This could involve restoring from backup, using a separate "downgrade" script (though `sqflite` does not directly support downgrades), or relying on app reinstallation (which implies data loss). For `SharedPreferences`, no specific rollback is needed beyond `resetQuiz()`.
+
+**Impact:**
+Recovery from a failed or buggy database migration could be difficult, potentially leading to data loss or requiring users to reinstall the app.
+
+---
+
+### Issue #8: [LOW] No explicit handling for landscape orientation or larger screens
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (UI/Layout Review)
+**Type:** UI/UX / Responsive Design
+**Severity:** LOW
+**Analyzer Message:** N/A (pre-implementation review)
+
+**Description:**
+The plan is mobile-first, which is fine, but there's no mention of how the quiz or badge reveal screens will adapt to landscape orientation or larger tablet/desktop screens. Fixed image heights (e.g., `QuizQuestionCard` `height: 200`) and centered single columns might not utilize space effectively or could lead to empty spaces.
+
+**Suggested Fix:**
+Consider adding media queries or `LayoutBuilder` to adjust layout (e.g., `Wrap` options, reduce padding, use larger images) for wider screens or landscape mode.
+
+**Impact:**
+Suboptimal user experience on tablets, desktops, or phones in landscape mode.
+
+---
+
+### Issue #9: [LOW] Missing `errorBuilder` for `Image.asset`
+
+**File:** `lib/widgets/quiz_question_card.dart`, `lib/widgets/badge_card.dart`
+**Type:** Best Practices / Error Handling
+**Severity:** LOW
+**Analyzer Message:** N/A
+
+**Description:**
+The `Image.asset` widgets (e.g., in `QuizQuestionCard`, `BadgeCard`) do not include an `errorBuilder`. If an asset path is incorrect or an image file is missing, Flutter will throw an error and show a red X box.
+
+**Current Code (Example from QuizQuestionCard):**
+```dart
+Image.asset(
+  question.imagePath!,
+  height: 200,
+  fit: BoxFit.cover,
+),
 ```
 
-**Asset Findings:**
-- [ ] All asset paths correct? [✅ / ⚠️]
-- [ ] Asset file naming consistent? [✅ / ⚠️]
-- [ ] Image formats appropriate? (PNG for photorealistic badges - ✅)
-- [ ] Density variants complete? (1x, 2x, 3x - ✅)
-- [ ] Error handling for missing assets? (errorBuilder provided in plan - ✅)
-- [ ] Asset sizes reasonable? (❓ Should verify file sizes won't bloat app)
+**Suggested Fix:**
+Add an `errorBuilder` to `Image.asset` to display a fallback icon or a simple error message instead of a red X.
 
-**Issues:**
-- [List any asset management issues]
+**Impact:**
+Poor user experience and potential crashes if assets are missing.
 
 ---
 
-### Performance Analysis
+### Issue #10: [MEDIUM] No APK Size Estimate from New Assets
 
-**Potential Performance Issues:**
-_Review the plan's performance considerations section:_
-- Asset loading strategy: [✅ Addressed / ⚠️ Concerns]
-- Animation performance: [✅ RepaintBoundary mentioned / ⚠️ Concerns]
-- Database operations: [✅ Efficient (single row) / ⚠️ Concerns]
-- Provider rebuilds: [✅ Consumer scoping mentioned / ⚠️ Concerns]
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (Asset Management Review)
+**Type:** Performance / Build Impact
+**Severity:** MEDIUM
+**Analyzer Message:** N/A (pre-implementation review)
 
-**Widget Build Efficiency:**
-- Use of const constructors: [✅ / ⚠️ Not maximized]
-- Unnecessary rebuilds: [✅ Addressed / ⚠️ Potential issues]
-- Large widget trees: [✅ Reasonable / ⚠️ Too deep]
+**Description:**
+While the assets are integrated, the plan does not provide any estimate for the increase in APK/app bundle size due to the 76 new PNG image assets across 3 densities. Badge images with transparent backgrounds can sometimes be larger than expected.
 
-**Database Query Efficiency:**
-- UserSettings read/write: [✅ Single row, fast / ⚠️ Concerns]
-- SharedPreferences usage: [✅ Appropriate / ⚠️ Overuse]
+**Suggested Fix:**
+Provide an estimate of the APK size increase (e.g., "Expected APK increase: ~2-5 MB"). This helps manage expectations and identify potential bloat early.
 
-**Animation Efficiency:**
-- Concurrent animations: [✅ Staggered to avoid overload / ⚠️ Too many]
-- AnimationController disposal: [✅ Covered in plan / ⚠️ Missing]
+**Impact:**
+Unexpected app size increase, potentially impacting download times and user adoption.
 
 ---
 
-### Test Coverage Analysis
+### Issue #11: [MEDIUM] Missing Error Handling/Defensive Checks for Quiz/Badge Definitions
 
-**Proposed Test Files:** 7
-- `test/services/quiz_inference_service_test.dart`
-- `test/services/quiz_service_test.dart`
-- `test/providers/quiz_provider_test.dart`
-- `test/widgets/quiz_progress_dots_test.dart`
-- `test/widgets/quiz_question_card_test.dart`
-- `test/widgets/badge_card_test.dart`
-- `integration_test/quiz_flow_test.dart`
+**File:** `lib/services/quiz_inference_service.dart`, `lib/providers/quiz_provider.dart`
+**Type:** Error Handling / Test Coverage
+**Severity:** MEDIUM
+**Analyzer Message:** N/A (pre-implementation review)
 
-**Test Coverage Gaps:**
-_Review the test strategy section and identify gaps:_
-- [Are all critical paths tested?]
-- [Are edge cases covered?]
-- [Are error paths tested?]
-- [Are UI components tested?]
+**Description:**
+The `QuizInferenceService` and `QuizProvider` directly access `QuizQuestions.all` and `BadgeDefinitions` without explicit error handling for empty or malformed definitions. For example, `QuizProvider.questions.length` assumes `QuizQuestions.all` is never empty.
 
-**Test Quality:**
-- Assertions appropriate? [Review test examples in plan]
-- Setup/teardown handled? [✅ / ⚠️]
-- Mocking appropriate? [✅ / ⚠️]
-- Tests independent? [✅ / ⚠️]
+**Current Code (Example from QuizProvider):**
+```dart
+List<QuizQuestion> get questions => QuizQuestions.all;
+QuizQuestion get currentQuestion => questions[_currentQuestionIndex];
+```
+
+**Suggested Fix:**
+Add defensive checks (e.g., `assert(QuizQuestions.all.isNotEmpty)` in development, or explicit error handling in production to gracefully display an empty state or a critical error message) if `QuizQuestions.all` is empty or if `answers[id]` is not found. Test scenarios for empty/malformed definitions should be added.
+
+**Impact:**
+App crashes or unexpected behavior if quiz or badge definitions are misconfigured or empty.
 
 ---
 
-### Dependency Review
+## Summary
 
-**New Dependencies Required:** None (per plan)
-
-**Existing Dependencies Used:**
-- `provider` - ✅ Already in use
-- `shared_preferences` - ✅ Already in use
-- Built-in Flutter animations - ✅ No package needed
-
-**Dependency Concerns:**
-- [Any version compatibility issues?]
-- [Any deprecated packages?]
-- [Any security vulnerabilities in deps?]
-
-**pubspec.yaml Changes:**
-- Assets added: ✅ Specified in plan
-- Dependencies added: None
-- Flutter/Dart SDK version change: None
-
----
-
-## Issue Summary (to be filled by Gemini after review)
-
-**Total Issues Found:** [X]
+**Total Issues Found:** 11
 
 **By Severity:**
-- CRITICAL: [count] - [Blocks implementation]
-- HIGH: [count] - [Should fix before coding]
-- MEDIUM: [count] - [Address during implementation]
-- LOW: [count] - [Nice to have]
+- CRITICAL: 0
+- HIGH: 2
+- MEDIUM: 3
+- LOW: 6
 
-**By Type:**
-- Schema Issues: [count]
-- Static Analysis: [count]
-- UI/UX Issues: [count]
-- Accessibility Issues: [count]
-- Performance Concerns: [count]
-- Asset Management: [count]
-- Test Coverage: [count]
-- Best Practices: [count]
-
-**Implementation Readiness:** ✅ Ready / ⚠️ Needs fixes / ❌ Major blockers
+**Build Status:** Clean
+**Test Status:** Major failures
 
 ---
 
-## Recommendations
+## Verdict
+
+**Implementation Readiness:** ⚠️ Needs fixes
 
 **Must Fix Before Implementation:**
-- [List blocking issues that require plan updates]
+- **Issue #1 (HIGH):** Database Migration Version Number Inconsistency. This is a critical setup issue that will prevent the app from correctly migrating for existing users.
+- **Issue #2 (HIGH):** `withValues(alpha:)` is deprecated/invalid. This is a compilation blocker.
 
 **Should Address During Implementation:**
-- [List issues that can be handled as code is written]
+- **Issue #3 (MEDIUM):** `QuizService.resetQuiz()` Does Not Reset `quiz_version`. This affects the "retake quiz" logic.
+- **Issue #10 (MEDIUM):** No APK Size Estimate from New Assets. Important for build management.
+- **Issue #11 (MEDIUM):** Missing Error Handling/Defensive Checks for Quiz/Badge Definitions. For robustness.
 
 **Consider for Future:**
-- [List nice-to-have improvements]
+- **Issue #4 (LOW):** Hardcoded Alpha Values in UI Components. For better theming.
+- **Issue #5 (LOW):** Accessibility: Missing Semantics for Quiz Answer Options. For accessibility.
+- **Issue #6 (LOW):** SQLite `ALTER TABLE ADD COLUMN` is not idempotent. For more robust migrations.
+- **Issue #7 (LOW):** Missing Database Rollback Strategy. For better disaster recovery.
+- **Issue #8 (LOW):** No explicit handling for landscape orientation or larger screens. For better responsive design.
+- **Issue #9 (LOW):** Missing `errorBuilder` for `Image.asset`. For better error handling.
 
 **Build/Deploy Considerations:**
-- [Any build or deployment concerns]
-
-**Technical Debt:**
-- [Any technical debt introduced by this phase]
+- The critical test failures related to `flutter_js` (from Phase 3.7) still exist and need to be resolved for overall project health, though they are not directly related to Phase 3.9 implementation.
 
 ---
 
 **Review completed by:** Gemini
-**Date:** [YYYY-MM-DD]
-**Flutter version:** [Check current version from pubspec.yaml]
-**Dart version:** [Check current version]
-**Time spent:** [X hours/minutes]
+**Date:** 2026-01-23
+**Flutter version:** 3.35.7
+**Dart version:** 3.9.2
+**Time spent:** 1.5 hours
 
 ---
 
 ## Notes for Claude
 
 **Build Environment:**
-- Flutter version: [Verify from pubspec.yaml]
-- Dart version: [Verify from pubspec.yaml]
+- Flutter version: 3.35.7
+- Dart version: 3.9.2
 - Database version after migration: 11 (proposed)
 
 **Schema Migration Notes:**
-[Any important notes about the database migration that should be considered during implementation]
+- Ensure `AppConstants.databaseVersion` is incremented to 11.
+- A new `_migrateToV11` method should be added to `DatabaseService` to perform the `ALTER TABLE` for `enable_quick_add_date_parsing`.
+- Implement batching for any future large data migrations if applicable.
 
 **UI/UX Observations:**
-[Any usability or design observations that might help with implementation]
+- The overall UI design for the quiz and badge reveal seems clean and engaging.
+- Accessibility for custom widgets should be improved with explicit `Semantics`.
+- Responsive design for landscape/larger screens should be considered for a better user experience on diverse devices.
 
 **Performance Recommendations:**
-[Any specific performance optimizations to implement]
+- Pay attention to the size of the new image assets to avoid excessive APK bloat. Consider WebP for some assets if PNG proves too large.
 
 **Testing Notes:**
-[Any specific testing considerations for the implementation phase]
+- Thoroughly unit test `QuizInferenceService` due to its complex conditional logic for inferring settings and calculating badges.
+- Ensure integration tests cover the full quiz flow, including skipping, retaking, and badge reveal animations.
+- Add defensive tests for empty/malformed quiz/badge definitions.

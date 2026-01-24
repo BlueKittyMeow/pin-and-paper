@@ -31,13 +31,13 @@
 
 ## Overview
 
-Phase 3.9 implements a scenario-based onboarding quiz that infers user time perception preferences through 9 intuitive questions, awards personality badges, and exposes comprehensive settings UI for all user-configurable preferences.
+Phase 3.9 implements a scenario-based onboarding quiz that infers user time perception preferences through 8 intuitive questions, awards personality badges, and exposes comprehensive settings UI for all user-configurable preferences.
 
 **Key Features:**
-- 9-question onboarding quiz with progress indicator
+- 8-question onboarding quiz with progress indicator
 - Scenario-based questions (no technical jargon)
 - Badge reveal ceremony with staggered animations
-- 23+ individual badges + 4 special combo badges
+- 20+ individual badges + 3 special combo badges
 - Comprehensive settings UI expansion
 - "Retake Quiz" and "Explain My Settings" features
 - First-launch detection with graceful skip option
@@ -46,7 +46,7 @@ Phase 3.9 implements a scenario-based onboarding quiz that infers user time perc
 - Theme centralization with semantic colors
 - QuizTheme class created
 - 6 screens migrated (38 color instances)
-- All 23 badges organized (69 PNG files @1x/@2x/@3x)
+- All 20 badges organized (60 PNG files @1x/@2x/@3x for active badges)
 - All 7 quiz/onboarding images created and integrated
 
 **Ready to implement:** 3.9.1 (Quiz Framework) → 3.9.2 (Questions & Badges) → 3.9.3 (Settings UI) → 3.9.4 (Explain/Retake)
@@ -65,7 +65,7 @@ Phase 3.9 implements a scenario-based onboarding quiz that infers user time perc
 - ✅ UserSettingsService (CRUD operations)
 - ✅ QuizTheme class (`lib/utils/quiz_theme.dart`)
 - ✅ AppTheme semantic colors (success, danger, warning, info, muted)
-- ✅ Badge assets: 23 badges × 3 densities = 69 PNG files
+- ✅ Badge assets: 20 active badges × 3 densities = 60 PNG files (+ 3 unused Q2 badges)
 - ✅ Quiz illustrations: 4 scenario images
 - ✅ Onboarding images: welcome, celebration, sash_background
 
@@ -112,7 +112,7 @@ lib/
 │   └── badge.dart                        # NEW - Badge metadata
 │
 └── utils/
-    ├── badge_definitions.dart            # NEW - All 27 badge definitions
+    ├── badge_definitions.dart            # NEW - All 23 badge definitions (20 individual + 3 combo)
     └── quiz_questions.dart               # NEW - All 9 question definitions
 ```
 
@@ -126,8 +126,8 @@ main.dart
   │
 QuizScreen
   ├─ QuizProvider (state management)
-  ├─ PageView (9 questions)
-  │   └─ QuizQuestionCard × 9
+  ├─ PageView (8 questions)
+  │   └─ QuizQuestionCard × 8
   │       └─ QuizAnswerOption × 2-4 per question
   └─ QuizProgressDots
   │
@@ -154,7 +154,6 @@ New version: 11
 
 This migration adds:
 - New field `enable_quick_add_date_parsing` to `user_settings` table
-- New field `weekday_reference_logic` to `user_settings` table
 - New table `quiz_responses` for persistent quiz answers and badges
 
 ---
@@ -234,15 +233,10 @@ if (oldVersion < 11) {
 }
 
 Future<void> _migrateToV11(Database db) async {
-  // Add new fields to user_settings
+  // Add new field to user_settings
   await db.execute('''
     ALTER TABLE user_settings
     ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1
-  ''');
-
-  await db.execute('''
-    ALTER TABLE user_settings
-    ADD COLUMN weekday_reference_logic TEXT DEFAULT 'forward'
   ''');
 
   // Create quiz_responses table
@@ -263,7 +257,7 @@ Future<void> _migrateToV11(Database db) async {
 
 **Update AppConstants.databaseVersion:**
 ```dart
-static const int databaseVersion = 11; // Phase 3.9: quiz responses + enable_quick_add_date_parsing + weekday_reference_logic
+static const int databaseVersion = 11; // Phase 3.9: quiz responses + enable_quick_add_date_parsing
 ```
 
 ### New UserSettings Fields
@@ -272,12 +266,8 @@ static const int databaseVersion = 11; // Phase 3.9: quiz responses + enable_qui
 
 Add to `user_settings` table (see migration above in Option 2):
 ```sql
--- Question 7: Quick Add Date Parsing
+-- Question 6: Quick Add Date Parsing
 ALTER TABLE user_settings ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1;
-
--- Question 2: Weekday Reference Logic (for future NL parsing)
-ALTER TABLE user_settings ADD COLUMN weekday_reference_logic TEXT DEFAULT 'forward';
--- Options: 'forward', 'calendar_week', 'flexible'
 ```
 
 **Update UserSettings Model:**
@@ -287,13 +277,11 @@ ALTER TABLE user_settings ADD COLUMN weekday_reference_logic TEXT DEFAULT 'forwa
 class UserSettings {
   // ... existing fields ...
 
-  final bool enableQuickAddDateParsing; // NEW: Q7 - Quick Add date parsing
-  final String weekdayReferenceLogic; // NEW: Q2 - "this Friday" logic
+  final bool enableQuickAddDateParsing; // NEW: Q6 - Quick Add date parsing
 
   const UserSettings({
     // ... existing params ...
     this.enableQuickAddDateParsing = true, // Default: ON
-    this.weekdayReferenceLogic = 'forward', // Default: forward-looking
   });
 
   factory UserSettings.fromMap(Map<String, dynamic> map) {
@@ -301,7 +289,6 @@ class UserSettings {
       // ... existing mappings ...
       // CRITICAL: Use != 0 (not == 1) to default true on null
       enableQuickAddDateParsing: (map['enable_quick_add_date_parsing'] as int?) != 0,
-      weekdayReferenceLogic: (map['weekday_reference_logic'] as String?) ?? 'forward',
     );
   }
 
@@ -309,19 +296,16 @@ class UserSettings {
     return {
       // ... existing mappings ...
       'enable_quick_add_date_parsing': enableQuickAddDateParsing ? 1 : 0,
-      'weekday_reference_logic': weekdayReferenceLogic,
     };
   }
 
   UserSettings copyWith({
     // ... existing params ...
     bool? enableQuickAddDateParsing,
-    String? weekdayReferenceLogic,
   }) {
     return UserSettings(
       // ... existing assignments ...
       enableQuickAddDateParsing: enableQuickAddDateParsing ?? this.enableQuickAddDateParsing,
-      weekdayReferenceLogic: weekdayReferenceLogic ?? this.weekdayReferenceLogic,
     );
   }
 }
@@ -354,7 +338,7 @@ class AppConstants {
 // lib/models/quiz_question.dart
 
 class QuizQuestion {
-  final int id; // 1-9
+  final int id; // 1-8
   final String question;
   final String? description; // Optional context/scenario
   final String? imagePath; // Optional illustration
@@ -391,9 +375,9 @@ class QuizAnswer {
 ```
 
 **Notes:**
-- `showTimePicker = true` is used for Q4 and Q5 custom time options
+- `showTimePicker = true` is used for Q3 and Q4 custom time options
 - When user selects a custom answer, `showTimePicker()` is triggered
-- Selected hour is appended to answer ID: `q4_custom_20` (20:00 selected)
+- Selected hour is appended to answer ID: `q3_custom_20` (20:00 selected)
 
 ### Badge Model
 
@@ -593,68 +577,56 @@ class QuizInferenceService {
       );
     }
 
-    // Question 2: Weekday Reference Logic
+    // Question 2: Week Start Preference
     final q2Answer = answers[2];
     if (q2Answer == 'q2_a') {
-      inferred = inferred.copyWith(weekdayReferenceLogic: 'forward');
-    } else if (q2Answer == 'q2_b') {
-      inferred = inferred.copyWith(weekdayReferenceLogic: 'calendar_week');
-    } else if (q2Answer == 'q2_c') {
-      inferred = inferred.copyWith(weekdayReferenceLogic: 'flexible');
-    }
-    // Note: This setting is not actively used yet, but will be available for
-    // "text tuesday" style NL date parsing when DateParsingService needs it.
-
-    // Question 3: Week Start Preference
-    final q3Answer = answers[3];
-    if (q3Answer == 'q3_a') {
       inferred = inferred.copyWith(weekStartDay: 0); // Sunday
-    } else if (q3Answer == 'q3_b') {
+    } else if (q2Answer == 'q2_b') {
       inferred = inferred.copyWith(weekStartDay: 1); // Monday
-    } else if (q3Answer?.startsWith('q3_c_') == true) {
-      // Custom day: q3_c_0 through q3_c_6
-      final day = int.parse(q3Answer!.split('_').last);
+    } else if (q2Answer?.startsWith('q2_c_') == true) {
+      // Custom day: q2_c_0 through q2_c_6
+      final day = int.parse(q2Answer!.split('_').last);
       inferred = inferred.copyWith(weekStartDay: day);
     }
 
-    // Question 4: "Tonight" / "Evening" Keyword (with custom time support)
-    final q4Answer = answers[4];
-    if (q4Answer == 'q4_a') {
+    // Question 3: "Tonight" / "Evening" Keyword (with custom time support)
+    final q3Answer = answers[3];
+    if (q3Answer == 'q3_a') {
       inferred = inferred.copyWith(tonightHour: 18); // 6-8pm
-    } else if (q4Answer == 'q4_b') {
+    } else if (q3Answer == 'q3_b') {
       inferred = inferred.copyWith(tonightHour: 20); // 8-10pm
-    } else if (q4Answer == 'q4_c') {
+    } else if (q3Answer == 'q3_c') {
       inferred = inferred.copyWith(tonightHour: 22); // 10pm+
-    } else if (q4Answer?.startsWith('q4_custom_') == true) {
-      // Custom time: q4_custom_[hour]
-      final hour = int.parse(q4Answer!.split('_').last);
+    } else if (q3Answer?.startsWith('q3_custom_') == true) {
+      // Custom time: q3_custom_[hour]
+      final hour = int.parse(q3Answer!.split('_').last);
       inferred = inferred.copyWith(tonightHour: hour);
     }
 
-    // Question 5: "Morning" Keyword (with custom time support)
-    final q5Answer = answers[5];
-    if (q5Answer == 'q5_a') {
+    // Question 4: "Morning" Keyword (with custom time support)
+    final q4Answer = answers[4];
+    if (q4Answer == 'q4_a') {
       // Early morning preference
       inferred = inferred.copyWith(
         morningHour: 7,
         earlyMorningHour: 5,
       );
-    } else if (q5Answer == 'q5_b') {
+    } else if (q4Answer == 'q4_b') {
       // Mid-morning (defaults)
       inferred = inferred.copyWith(
         morningHour: 9,
         earlyMorningHour: 5,
       );
-    } else if (q5Answer == 'q5_c') {
+    } else if (q4Answer == 'q4_c') {
       // Late morning
       inferred = inferred.copyWith(
         morningHour: 11,
         earlyMorningHour: 7,
         noonHour: 13, // Shift noon later too
       );
-    } else if (q5Answer?.startsWith('q5_custom_') == true) {
-      // Custom time: q5_custom_[hour]
-      final hour = int.parse(q5Answer!.split('_').last);
+    } else if (q4Answer?.startsWith('q4_custom_') == true) {
+      // Custom time: q4_custom_[hour]
+      final hour = int.parse(q4Answer!.split('_').last);
       final earlyMorningHour = hour <= 8 ? hour - 2 : (hour >= 11 ? hour - 4 : 5);
       inferred = inferred.copyWith(
         morningHour: hour,
@@ -662,37 +634,37 @@ class QuizInferenceService {
       );
     }
 
-    // Question 6: Display Time Format
-    final q6Answer = answers[6];
-    if (q6Answer == 'q6_a') {
+    // Question 5: Display Time Format
+    final q5Answer = answers[5];
+    if (q5Answer == 'q5_a') {
       inferred = inferred.copyWith(use24HourTime: false); // 12-hour
-    } else if (q6Answer == 'q6_b') {
+    } else if (q5Answer == 'q5_b') {
       inferred = inferred.copyWith(use24HourTime: true); // 24-hour
     }
 
-    // Question 7: Quick Add Date Parsing Preference
-    final q7Answer = answers[7];
-    if (q7Answer == 'q7_a') {
+    // Question 6: Quick Add Date Parsing Preference
+    final q6Answer = answers[6];
+    if (q6Answer == 'q6_a') {
       inferred = inferred.copyWith(enableQuickAddDateParsing: true);
-    } else if (q7Answer == 'q7_b') {
+    } else if (q6Answer == 'q6_b') {
       inferred = inferred.copyWith(enableQuickAddDateParsing: false);
     }
 
-    // Question 8: Task Completion Behavior
-    final q8Answer = answers[8];
-    if (q8Answer == 'q8_a') {
+    // Question 7: Task Completion Behavior
+    final q7Answer = answers[7];
+    if (q7Answer == 'q7_a') {
       inferred = inferred.copyWith(autoCompleteChildren: 'prompt');
-    } else if (q8Answer == 'q8_b') {
+    } else if (q7Answer == 'q7_b') {
       inferred = inferred.copyWith(autoCompleteChildren: 'always');
-    } else if (q8Answer == 'q8_c') {
+    } else if (q7Answer == 'q7_c') {
       inferred = inferred.copyWith(autoCompleteChildren: 'never');
     }
 
-    // Question 9: Sleep Schedule (Cross-validates Q1)
-    final q9Answer = answers[9];
+    // Question 8: Sleep Schedule (Cross-validates Q1)
+    final q8Answer = answers[8];
     final q1CutoffHour = inferred.todayCutoffHour;
 
-    if (q9Answer == 'q9_a') {
+    if (q8Answer == 'q8_a') {
       // Before midnight - reinforce early cutoff (if not midnight purist)
       if (q1CutoffHour != 0) {
         inferred = inferred.copyWith(
@@ -700,19 +672,19 @@ class QuizInferenceService {
           todayCutoffMinute: 59,
         );
       }
-    } else if (q9Answer == 'q9_b') {
+    } else if (q8Answer == 'q8_b') {
       // 12am-2am - standard night owl
       inferred = inferred.copyWith(
         todayCutoffHour: 4,
         todayCutoffMinute: 59,
       );
-    } else if (q9Answer == 'q9_c') {
+    } else if (q8Answer == 'q8_c') {
       // 2am-4am - strong night owl
       inferred = inferred.copyWith(
         todayCutoffHour: 5,
         todayCutoffMinute: 59,
       );
-    } else if (q9Answer == 'q9_d') {
+    } else if (q8Answer == 'q8_d') {
       // 4am+ or varies - extreme night owl
       inferred = inferred.copyWith(
         todayCutoffHour: 6,
@@ -735,91 +707,81 @@ class QuizInferenceService {
       badges.add(BadgeDefinitions.midnightPurist);
     }
 
-    // Question 3: Week Structure Badges
-    final q3 = answers[3];
-    if (q3 == 'q3_a') {
+    // Question 2: Week Structure Badges
+    final q2 = answers[2];
+    if (q2 == 'q2_a') {
       badges.add(BadgeDefinitions.sundayTraditionalist);
-    } else if (q3 == 'q3_b') {
+    } else if (q2 == 'q2_b') {
       badges.add(BadgeDefinitions.mondayStarter);
-    } else if (q3?.startsWith('q3_c_') == true) {
-      final day = int.parse(q3!.split('_').last);
+    } else if (q2?.startsWith('q2_c_') == true) {
+      final day = int.parse(q2!.split('_').last);
       if (day != 0 && day != 1) {
         badges.add(BadgeDefinitions.calendarRebel);
       }
     }
 
-    // Question 2: Time Perception Badges
-    final q2 = answers[2];
-    if (q2 == 'q2_a') {
-      badges.add(BadgeDefinitions.forwardThinker);
-    } else if (q2 == 'q2_b') {
-      badges.add(BadgeDefinitions.calendarContextual);
-    } else if (q2 == 'q2_c') {
-      badges.add(BadgeDefinitions.flexibleInterpreter);
-    }
-
-    // Question 4 & 5: Daily Rhythm Badges (with custom time support)
-    final q5 = answers[5];
+    // Question 3 & 4: Daily Rhythm Badges (with custom time support)
     final q4 = answers[4];
+    final q3 = answers[3];
 
-    // Handle Q4 custom time for twilight worker badge
-    if (q4?.startsWith('q4_custom_') == true) {
-      final hour = int.parse(q4!.split('_').last);
+    // Handle Q3 custom time for twilight worker badge
+    if (q3?.startsWith('q3_custom_') == true) {
+      final hour = int.parse(q3!.split('_').last);
       if (hour >= 23) {
         badges.add(BadgeDefinitions.twilightWorker);
       }
     }
 
-    // Handle Q5 custom time and preset answers
-    if (q5?.startsWith('q5_custom_') == true) {
-      final hour = int.parse(q5!.split('_').last);
+    // Handle Q4 custom time and preset answers
+    if (q4?.startsWith('q4_custom_') == true) {
+      final hour = int.parse(q4!.split('_').last);
       if (hour <= 8) {
         badges.add(BadgeDefinitions.dawnGreeter);
       } else if (hour >= 11) {
         badges.add(BadgeDefinitions.lateMorningLuxurist);
       } else if (hour >= 9 && hour <= 10) {
         // Mid-morning custom time - classic scheduler if evening also mid-range
-        final q4Hour = q4?.startsWith('q4_custom_') == true
-            ? int.parse(q4!.split('_').last)
-            : (q4 == 'q4_a' ? 18 : (q4 == 'q4_b' ? 20 : 22));
-        if (q4Hour >= 20 && q4Hour <= 22) {
+        final q3Hour = q3?.startsWith('q3_custom_') == true
+            ? int.parse(q3!.split('_').last)
+            : (q3 == 'q3_a' ? 18 : (q3 == 'q3_b' ? 20 : 22));
+        if (q3Hour >= 20 && q3Hour <= 22) {
           badges.add(BadgeDefinitions.classicScheduler);
         }
       }
     } else {
       // Preset answers
-      if (q5 == 'q5_a' && q4 == 'q4_a') {
+      if (q4 == 'q4_a' && q3 == 'q3_a') {
         badges.add(BadgeDefinitions.dawnGreeter);
-      } else if (q5 == 'q5_b' && q4 == 'q4_b') {
+      } else if (q4 == 'q4_b' && q3 == 'q3_b') {
         badges.add(BadgeDefinitions.classicScheduler);
-      } else if (q5 == 'q5_c') {
+      } else if (q4 == 'q4_c') {
         badges.add(BadgeDefinitions.lateMorningLuxurist);
       }
     }
 
-    // Question 6: Display Preference Badges
-    final q6 = answers[6];
-    if (q6 == 'q6_a') {
+    // Question 5: Display Preference Badges
+    final q5 = answers[5];
+    if (q5 == 'q5_a') {
       badges.add(BadgeDefinitions.amPmClassicist);
-    } else if (q6 == 'q6_b') {
+    } else if (q5 == 'q5_b') {
       badges.add(BadgeDefinitions.exactingEnthusiast); // Renamed from military
     }
 
-    // Question 8: Task Management Style Badges
-    final q8 = answers[8];
-    if (q8 == 'q8_a') {
+    // Question 7: Task Management Style Badges
+    final q7 = answers[7];
+    if (q7 == 'q7_a') {
       badges.add(BadgeDefinitions.thoughtfulCurator);
-    } else if (q8 == 'q8_b') {
+    } else if (q7 == 'q7_b') {
       badges.add(BadgeDefinitions.decisiveCompleter);
-    } else if (q8 == 'q8_c') {
+    } else if (q7 == 'q7_c') {
       badges.add(BadgeDefinitions.granularManager);
     }
 
-    // Question 9: Sleep-based badges
-    final q9 = answers[9];
-    if (q9 == 'q9_a') {
+    // Question 8: Sleep-based badges
+    final q8 = answers[8];
+    if (q8 == 'q8_a') {
       badges.add(BadgeDefinitions.earlyBird);
-    } else if (q9 == 'q9_c' || q9 == 'q9_d') {
+    } else if (q8 == 'q8_c' || q8 == 'q8_d') {
       badges.add(BadgeDefinitions.nocturnalScholar);
     }
 
@@ -832,10 +794,6 @@ class QuizInferenceService {
 
     if (badgeIds.contains('early_bird') && badgeIds.contains('dawn_greeter') && badgeIds.contains('monday_starter')) {
       badges.add(BadgeDefinitions.sunriseAchiever);
-    }
-
-    if (badgeIds.contains('calendar_rebel') && badgeIds.contains('flexible_interpreter')) {
-      badges.add(BadgeDefinitions.timeAnarchist);
     }
 
     if (badgeIds.contains('exacting_enthusiast') && badgeIds.contains('nocturnal_scholar')) {
@@ -862,66 +820,57 @@ class QuizInferenceService {
       answers[1] = 'q1_a'; // Night owl
     }
 
-    // Q2: Weekday reference logic
-    if (settings.weekdayReferenceLogic == 'forward') {
-      answers[2] = 'q2_a';
-    } else if (settings.weekdayReferenceLogic == 'calendar_week') {
-      answers[2] = 'q2_b';
-    } else {
-      answers[2] = 'q2_c'; // flexible
-    }
-
-    // Q3: Week start
+    // Q2: Week start
     if (clampedWeekStart == 0) {
-      answers[3] = 'q3_a'; // Sunday
+      answers[2] = 'q2_a'; // Sunday
     } else if (clampedWeekStart == 1) {
-      answers[3] = 'q3_b'; // Monday
+      answers[2] = 'q2_b'; // Monday
     } else {
-      answers[3] = 'q3_c_$clampedWeekStart'; // Custom (now clamped 0-6)
+      answers[2] = 'q2_c_$clampedWeekStart'; // Custom (now clamped 0-6)
     }
 
-    // Q4: Tonight
+    // Q3: Tonight
     if (clampedTonightHour <= 18) {
-      answers[4] = 'q4_a';
+      answers[3] = 'q3_a';
     } else if (clampedTonightHour <= 20) {
+      answers[3] = 'q3_b';
+    } else {
+      answers[3] = 'q3_c';
+    }
+
+    // Q4: Morning
+    if (clampedMorningHour <= 7) {
+      answers[4] = 'q4_a';
+    } else if (clampedMorningHour <= 9) {
       answers[4] = 'q4_b';
     } else {
       answers[4] = 'q4_c';
     }
 
-    // Q5: Morning
-    if (clampedMorningHour <= 7) {
-      answers[5] = 'q5_a';
-    } else if (clampedMorningHour <= 9) {
-      answers[5] = 'q5_b';
-    } else {
-      answers[5] = 'q5_c';
-    }
+    // Q5: Time format
+    answers[5] = settings.use24HourTime ? 'q5_b' : 'q5_a';
 
-    // Q6: Time format
-    answers[6] = settings.use24HourTime ? 'q6_b' : 'q6_a';
+    // Q6: Quick add parsing
+    answers[6] = settings.enableQuickAddDateParsing ? 'q6_a' : 'q6_b';
 
-    // Q7: Quick add parsing
-    answers[7] = settings.enableQuickAddDateParsing ? 'q7_a' : 'q7_b';
-
-    // Q8: Auto-complete children
+    // Q7: Auto-complete children
     if (settings.autoCompleteChildren == 'prompt') {
-      answers[8] = 'q8_a';
+      answers[7] = 'q7_a';
     } else if (settings.autoCompleteChildren == 'always') {
-      answers[8] = 'q8_b';
+      answers[7] = 'q7_b';
     } else {
-      answers[8] = 'q8_c';
+      answers[7] = 'q7_c';
     }
 
-    // Q9: Sleep schedule (infer from cutoff hour)
+    // Q8: Sleep schedule (infer from cutoff hour)
     if (settings.todayCutoffHour <= 3) {
-      answers[9] = 'q9_a';
+      answers[8] = 'q8_a';
     } else if (settings.todayCutoffHour == 4) {
-      answers[9] = 'q9_b';
+      answers[8] = 'q8_b';
     } else if (settings.todayCutoffHour == 5) {
-      answers[9] = 'q9_c';
+      answers[8] = 'q8_c';
     } else {
-      answers[9] = 'q9_d';
+      answers[8] = 'q8_d';
     }
 
     return answers;
@@ -940,31 +889,31 @@ class QuizInferenceService {
 
 class QuizQuestions {
   static final List<QuizQuestion> all = [
-    // ... Q1-Q3 remain unchanged ...
+    // ... Q1-Q2 remain unchanged ...
 
-    // Question 4: "Tonight" / "Evening" Time (UPDATED with custom picker)
+    // Question 3: "Tonight" / "Evening" Time (UPDATED with custom picker)
     QuizQuestion(
-      id: 4,
+      id: 3,
       question: 'You tell someone to meet you "tonight." What time range do you typically mean?',
       description: 'This helps us understand your "tonight" / "evening" keyword',
       answers: [
         QuizAnswer(
-          id: 'q4_a',
+          id: 'q3_a',
           label: 'Early evening (6-8pm)',
           description: 'Dinner time, early plans',
         ),
         QuizAnswer(
-          id: 'q4_b',
+          id: 'q3_b',
           label: 'Classic evening (8-10pm)',
           description: 'Standard evening hours',
         ),
         QuizAnswer(
-          id: 'q4_c',
+          id: 'q3_c',
           label: 'Late night (10pm or later)',
           description: 'Night owl hours',
         ),
         QuizAnswer(
-          id: 'q4_custom', // Base ID, hour appended when selected
+          id: 'q3_custom', // Base ID, hour appended when selected
           label: 'Let me pick the exact time',
           description: 'Choose your preferred "tonight" time',
           showTimePicker: true, // Triggers time picker on selection
@@ -972,29 +921,29 @@ class QuizQuestions {
       ],
     ),
 
-    // Question 5: "Morning" Time Preference (UPDATED with custom picker)
+    // Question 4: "Morning" Time Preference (UPDATED with custom picker)
     QuizQuestion(
-      id: 5,
+      id: 4,
       question: 'You\'re planning your day and schedule a task for "morning." What time do YOU typically mean?',
       description: 'This sets your personal "morning" time',
       answers: [
         QuizAnswer(
-          id: 'q5_a',
+          id: 'q4_a',
           label: 'Early morning (7-8am)',
           description: 'Early riser, dawn hours',
         ),
         QuizAnswer(
-          id: 'q5_b',
+          id: 'q4_b',
           label: 'Mid-morning (9-10am)',
           description: 'Standard morning routine',
         ),
         QuizAnswer(
-          id: 'q5_c',
+          id: 'q4_c',
           label: 'Late morning (11am-noon)',
           description: 'Leisurely morning start',
         ),
         QuizAnswer(
-          id: 'q5_custom', // Base ID, hour appended when selected
+          id: 'q4_custom', // Base ID, hour appended when selected
           label: 'Let me pick the exact time',
           description: 'Choose your preferred "morning" time',
           showTimePicker: true, // Triggers time picker on selection
@@ -1002,7 +951,7 @@ class QuizQuestions {
       ],
     ),
 
-    // ... Q6-Q9 remain unchanged ...
+    // ... Q5-Q8 remain unchanged ...
   ];
 }
 ```
@@ -1013,7 +962,7 @@ When `showTimePicker = true`:
 1. User taps the answer option
 2. `showTimePicker()` dialog appears with `initialTime: TimeOfDay.now()`
 3. User selects a time (only hour is used)
-4. Answer ID is generated: `q4_custom_20` (for 20:00/8pm)
+4. Answer ID is generated: `q3_custom_20` (for 20:00/8pm)
 5. Custom time is stored in `QuizProvider._customTimes` map
 6. UI shows selected time in highlighted box below the option
 7. Badge awarded based on hour range, not exact preset
@@ -1077,7 +1026,7 @@ class QuizProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Select an answer with optional custom time (for Q4, Q5 custom time picker)
+  /// Select an answer with optional custom time (for Q3, Q4 custom time picker)
   void selectAnswerWithTime(int questionId, String answerId, {TimeOfDay? customTime}) {
     _answers[questionId] = answerId;
     if (customTime != null) {
@@ -1425,7 +1374,7 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _submitQuiz() async {
     final quizProvider = context.read<QuizProvider>();
 
-    // Validate all 9 questions are answered
+    // Validate all 8 questions are answered
     final allAnswered = quizProvider.questions.every(
       (q) => quizProvider.answers.containsKey(q.id),
     );
@@ -1874,34 +1823,6 @@ class BadgeDefinitions {
     category: BadgeCategory.weekStructure,
   );
 
-  // Time Perception Badges
-  static const forwardThinker = Badge(
-    id: 'forward_thinker',
-    emoji: '⏰',
-    title: 'Forward Thinker',
-    description: '"This Friday" always means the next occurrence for you.',
-    imagePath: 'assets/images/badges/1x/forward_thinker.png',
-    category: BadgeCategory.timePerception,
-  );
-
-  static const calendarContextual = Badge(
-    id: 'calendar_contextual',
-    emoji: '📆',
-    title: 'Calendar Contextual',
-    description: 'Week boundaries matter in how you reference days.',
-    imagePath: 'assets/images/badges/1x/calendar_contextual.png',
-    category: BadgeCategory.timePerception,
-  );
-
-  static const flexibleInterpreter = Badge(
-    id: 'flexible_interpreter',
-    emoji: '🤷',
-    title: 'Flexible Interpreter',
-    description: 'Context-dependent time understanding. You see the nuance.',
-    imagePath: 'assets/images/badges/1x/flexible_interpreter.png',
-    category: BadgeCategory.timePerception,
-  );
-
   // Daily Rhythm Badges
   static const dawnGreeter = Badge(
     id: 'dawn_greeter',
@@ -1998,16 +1919,6 @@ class BadgeDefinitions {
     isRare: true,
   );
 
-  static const timeAnarchist = Badge(
-    id: 'time_anarchist',
-    emoji: '🎭',
-    title: 'Time Anarchist',
-    description: 'Calendar Rebel + Flexible Interpreter. Non-traditional everything.',
-    imagePath: 'assets/images/badges/1x/time_anarchist.png',
-    category: BadgeCategory.combo,
-    isRare: true,
-  );
-
   static const nightOps = Badge(
     id: 'night_ops',
     emoji: '🌃',
@@ -2040,7 +1951,6 @@ class BadgeDefinitions {
     granularManager,
     vampireScholar,
     sunriseAchiever,
-    timeAnarchist,
     nightOps,
   ];
 
@@ -2730,7 +2640,7 @@ void main() {
     // Should show QuizScreen on first launch
     expect(find.text('Welcome to Pin and Paper!'), findsOneWidget);
 
-    // Answer all 9 questions
+    // Answer all 8 questions
     for (int i = 0; i < 9; i++) {
       // Tap first answer option
       await tester.tap(find.byType(QuizAnswerOption).first);
@@ -2800,12 +2710,12 @@ void main() {
 
 **Day 3:**
 1. ✅ Create QuizInferenceService with answer → settings mapping
-2. ✅ Implement all 9 question mappings
+2. ✅ Implement all 8 question mappings
 3. ✅ Write unit tests for inference logic
 4. ✅ Test edge cases (conflicting answers, missing answers)
 
 **Day 4:**
-1. ✅ Create BadgeDefinitions with all 23+ badges
+1. ✅ Create BadgeDefinitions with all 20+ badges
 2. ✅ Implement badge calculation logic in QuizInferenceService
 3. ✅ Create BadgeCard widget
 4. ✅ Test badge awarding (individual + combos)
@@ -2859,7 +2769,7 @@ void main() {
 ### 1. Partial Quiz Completion
 **Scenario:** User closes app mid-quiz
 **Handling:** Quiz state is NOT persisted. On next app open, quiz starts fresh from Q1.
-**Rationale:** Short quiz (9 questions), not worth complex state persistence.
+**Rationale:** Short quiz (8 questions), not worth complex state persistence.
 
 ### 2. Network Issues During Quiz
 **Scenario:** No network during quiz submission

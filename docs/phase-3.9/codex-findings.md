@@ -5,7 +5,7 @@
 **Review Date:** 2026-01-23
 **Reviewer:** Codex
 **Review Type:** Pre-Implementation Review
-**Status:** ⏳ Pending Review
+**Status:** ✅ Complete
 
 ---
 
@@ -170,9 +170,191 @@ _Start with the most critical issues (CRITICAL/HIGH severity) first._
 
 ---
 
-### [Your findings go here]
+### Issue #1: No persistence for quiz answers/badges (breaks badges + explanations)
 
-_Example:_
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (QuizService + QuizProvider, ~line 170 / ~line 818)
+**Type:** Architecture
+**Severity:** HIGH
+**Related Manual Test Issue:** New finding
+
+**Description:**
+The plan recommends SharedPreferences for only `quiz_completed`/timestamp. `QuizProvider` keeps `_earnedBadges` in memory only, and there is no persistence of answers or badge IDs. This makes the “Your Time Personality” section and “Explain My Settings” impossible to render after app restart, and any Q2-only badges are lost because Q2 is not mapped to settings.
+
+**Current Code:**
+```dart
+// QuizService stores only completion flags
+await prefs.setBool(_quizCompletedKey, true);
+await prefs.setString(_quizCompletedAtKey, DateTime.now().toIso8601String());
+
+// QuizProvider keeps badges in memory only
+_earnedBadges = _inferenceService.calculateBadges(_answers, inferredSettings);
+```
+
+**Suggested Fix:**
+Persist answers and/or badge IDs. Options:
+- Use the `quiz_responses` DB table (Option 2) and store `answers` + `badges_earned`, or
+- Extend SharedPreferences to store JSON for answers/badges, and add a retrieval path for Settings/Explain.
+
+**Impact:**
+Badges/explanations disappear on restart; “Your Time Personality” can’t be implemented as described.
+
+---
+
+### Issue #2: submitQuiz() missing double-submit guard
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (QuizProvider.submitQuiz, ~line 818)
+**Type:** Bug
+**Severity:** HIGH
+**Related Manual Test Issue:** New finding
+
+**Description:**
+`submitQuiz()` sets `_isSubmitting = true` but does not guard against multiple submissions. A double-tap or duplicated UI call can run two concurrent updates, leading to duplicated writes and inconsistent badge state.
+
+**Current Code:**
+```dart
+Future<bool> submitQuiz() async {
+  _isSubmitting = true;
+  _errorMessage = null;
+  notifyListeners();
+  ...
+}
+```
+
+**Suggested Fix:**
+Add an early return guard:
+```dart
+if (_isSubmitting) return false;
+```
+
+**Impact:**
+Concurrent settings updates and inconsistent badge state.
+
+---
+
+### Issue #3: Quiz allows skipping unanswered questions
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (QuizScreen, ~line 1045)
+**Type:** Bug
+**Severity:** MEDIUM
+**Related Manual Test Issue:** New finding
+
+**Description:**
+The “Next” button is always enabled for non-last questions and progress dots allow jumping. Users can reach the last question without answering earlier ones, then submit with missing answers. Inference and badge logic then operate on partial data.
+
+**Current Code:**
+```dart
+ElevatedButton(
+  onPressed: _goToNextQuestion,
+  child: const Text('Next'),
+)
+```
+
+**Suggested Fix:**
+Disable Next until the current question is answered, and add a submit-time validation that all 9 questions have answers.
+
+**Impact:**
+Partial answers lead to inconsistent inference/badge results.
+
+---
+
+### Issue #4: prefillFromSettings() lacks validation despite plan promises
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (prefillFromSettings, ~line 671)
+**Type:** Data Integrity
+**Severity:** MEDIUM
+**Related Manual Test Issue:** New finding
+
+**Description:**
+The plan claims fallback logic for invalid settings, but `prefillFromSettings()` directly uses `settings.weekStartDay`, `todayCutoffHour`, etc. without validation. If those values are out of range (corrupted DB, manual edits), it generates invalid answer IDs (e.g., `q3_c_9`) and can re-save invalid values on retake.
+
+**Current Code:**
+```dart
+answers[3] = 'q3_c_${settings.weekStartDay}'; // Custom
+```
+
+**Suggested Fix:**
+Clamp and validate settings before mapping (e.g., weekStartDay 0-6, hours 0-23). Implement the fallback logic described in Edge Cases.
+
+**Impact:**
+Retake flow can propagate invalid settings and break inference consistency.
+
+---
+
+### Issue #5: enableQuickAddDateParsing defaults to false on null
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (UserSettings.fromMap, ~line 250)
+**Type:** Data Integrity
+**Severity:** MEDIUM
+**Related Manual Test Issue:** New finding
+
+**Description:**
+The proposed mapping uses `== 1`, which treats `null` as `false`. The intended default is `true`. If the column is missing or null (migration issues or legacy data), quick-add parsing is silently disabled.
+
+**Current Code:**
+```dart
+enableQuickAddDateParsing: (map['enable_quick_add_date_parsing'] as int?) == 1,
+```
+
+**Suggested Fix:**
+Default to true on null:
+```dart
+(map['enable_quick_add_date_parsing'] as int?) != 0
+```
+or use `?? 1`.
+
+**Impact:**
+Users can unexpectedly lose quick-add parsing after migration.
+
+---
+
+### Issue #6: Q2 is described as behavior-influencing but has no effect
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (QuizInferenceService, ~line 458)
+**Type:** Architecture
+**Severity:** MEDIUM
+**Related Manual Test Issue:** New finding
+
+**Description:**
+Question 2 is documented as affecting DateParsingService behavior, but there is no field to store it and no integration point. The answer only affects badges at runtime and is lost after restart.
+
+**Current Code:**
+```dart
+// Question 2: Weekday Reference Logic
+// (Not directly mapped to a setting - affects DateParsingService behavior)
+// Store in a future field if needed
+```
+
+**Suggested Fix:**
+Either add a concrete setting and apply it, or remove/repurpose Q2 so every question impacts a stored preference.
+
+**Impact:**
+User answer has no lasting effect; explanation/badge consistency breaks.
+
+---
+
+### Issue #7: Migration version collision risk between options
+
+**File:** `docs/phase-3.9/phase-3.9-implementation-plan.md` (Database Schema Design, ~line 180)
+**Type:** Architecture
+**Severity:** LOW
+**Related Manual Test Issue:** New finding
+
+**Description:**
+Both the quiz_responses table (Option 2) and `enable_quick_add_date_parsing` column are shown as version 11 migrations. If Option 1 ships now and Option 2 is later adopted, the table creation needs its own version bump to avoid missing migrations.
+
+**Current Code:**
+```dart
+if (oldVersion < 11) { CREATE TABLE quiz_responses ... }
+if (oldVersion < 11) { ALTER TABLE user_settings ADD COLUMN enable_quick_add_date_parsing ... }
+```
+
+**Suggested Fix:**
+Either combine both in a single v11 migration (if Option 2 is chosen now) or reserve a future version (e.g., v12) for quiz_responses.
+
+**Impact:**
+Future schema changes can be blocked or skipped if versioning isn’t planned.
+
+---
 
 ```markdown
 ### Issue #1: Potential Race Condition in QuizProvider.submitQuiz()
@@ -225,63 +407,73 @@ _Continue with Issue #2, Issue #3, etc._
 
 ## Issue Summary (to be filled by Codex after review)
 
-**Total Issues Found:** [X]
+**Total Issues Found:** 7
 
 **By Severity:**
-- CRITICAL: [count] - [List issue numbers]
-- HIGH: [count] - [List issue numbers]
-- MEDIUM: [count] - [List issue numbers]
-- LOW: [count] - [List issue numbers]
+- CRITICAL: 0
+- HIGH: 2 - #1, #2
+- MEDIUM: 4 - #3, #4, #5, #6
+- LOW: 1 - #7
 
 **By Type:**
-- Bug: [count]
-- Security: [count]
-- Data Integrity: [count]
-- Architecture: [count]
-- Error Handling: [count]
-- Code Quality: [count]
+- Bug: 2
+- Security: 0
+- Data Integrity: 2
+- Architecture: 3
+- Error Handling: 0
+- Code Quality: 0
 
-**Quick Wins (easy to fix):** [count]
-- [List issue numbers and brief description]
+**Quick Wins (easy to fix):** 3
+- #2 guard against double-submit
+- #3 disable Next until answered + submit validation
+- #5 default enableQuickAddDateParsing to true on null
 
-**Complex Issues (need discussion):** [count]
-- [List issue numbers and brief description]
+**Complex Issues (need discussion):** 2
+- #1 persistence of answers/badges (decide storage approach)
+- #6 clarify Q2’s real behavioral impact
 
 ---
 
 ## Recommendations
 
 **Must Fix Before Implementation:**
-- [List CRITICAL and HIGH issues that must be addressed in the plan]
+- #1 Decide how answers/badges are persisted (DB vs SharedPreferences) to support badges/explanations.
+- #2 Add submit guard to prevent double-submit.
 
 **Should Address During Implementation:**
-- [List issues that can be fixed as code is written]
+- #3 Require answers before navigating forward and before submit.
+- #4 Add validation/clamping in prefillFromSettings to match the plan’s fallback promise.
+- #5 Default `enableQuickAddDateParsing` to true on null.
+- #6 Either map Q2 to a stored preference or remove it as a functional input.
 
 **Consider for Future:**
-- [List issues that are minor or could be deferred]
+- #7 Clarify migration versioning if Option 2 is deferred.
 
 ---
 
 **Review completed by:** Codex
-**Date:** [YYYY-MM-DD]
-**Time spent:** [X hours/minutes]
-**Confidence level:** [High / Medium / Low - in completeness of review]
+**Date:** 2026-01-23
+**Time spent:** 2.0 hours
+**Confidence level:** Medium
 
 ---
 
 ## Notes for Claude
 
 **Context for fixes:**
-[Any additional context Codex wants to provide to help Claude understand the issues and improve the implementation plan]
+- If you stick with SharedPreferences for quiz completion, you still need a persistence story for answers/badges to drive Settings UI and explanations. Option 2 is the cleanest path for that.
 
 **Testing recommendations:**
-[Specific test cases Codex recommends adding to the test strategy]
+- Submit quiz with a skipped question (should block or surface error).
+- Double-tap submit to ensure only one write and one navigation.
+- Retake quiz with invalid UserSettings (weekStartDay 7, cutoff 25) → prefill clamps to valid answers.
+- Restart app after quiz and confirm badges/explanations are still available.
 
 **Architecture suggestions:**
-[Any broader architectural improvements to consider before implementation begins]
+- Treat quiz answers/badges as a first-class persisted record (DB table or prefs JSON) to avoid recomputing from settings.
 
 **Security considerations:**
-[Any security-related observations that should inform implementation]
+- No new direct security risks identified in the plan.
 
 **Data integrity safeguards:**
-[Any additional data validation or constraint recommendations]
+- Clamp weekStartDay (0-6) and hours (0-23) before prefill/inference.
