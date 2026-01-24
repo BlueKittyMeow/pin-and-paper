@@ -54,6 +54,9 @@ class UserSettings {
   final String quietHoursDays; // Comma-separated day indices: "0,1,2,3,4,5,6" (0=Mon)
   final String defaultReminderTypes; // Comma-separated: "at_time,before_1h"
 
+  // Phase 3.9: Quick add preferences
+  final bool enableQuickAddDateParsing; // Whether quick-add field parses dates
+
   // Voice input preferences
   final bool voiceSmartPunctuation;
 
@@ -84,6 +87,7 @@ class UserSettings {
     this.quietHoursEnd,
     this.quietHoursDays = '0,1,2,3,4,5,6',
     this.defaultReminderTypes = 'at_time',
+    this.enableQuickAddDateParsing = true,
     this.voiceSmartPunctuation = true,
     required this.createdAt,
     required this.updatedAt,
@@ -113,6 +117,7 @@ class UserSettings {
       'quiet_hours_end': quietHoursEnd,
       'quiet_hours_days': quietHoursDays,
       'default_reminder_types': defaultReminderTypes,
+      'enable_quick_add_date_parsing': enableQuickAddDateParsing ? 1 : 0,
       'voice_smart_punctuation': voiceSmartPunctuation ? 1 : 0,
       'created_at': createdAt.millisecondsSinceEpoch,
       'updated_at': updatedAt.millisecondsSinceEpoch,
@@ -143,6 +148,7 @@ class UserSettings {
       quietHoursEnd: map['quiet_hours_end'] as int?,
       quietHoursDays: (map['quiet_hours_days'] as String?) ?? '0,1,2,3,4,5,6',
       defaultReminderTypes: (map['default_reminder_types'] as String?) ?? 'at_time',
+      enableQuickAddDateParsing: (map['enable_quick_add_date_parsing'] as int?) != 0, // default true on null
       voiceSmartPunctuation: map['voice_smart_punctuation'] == 1,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int),
@@ -180,6 +186,7 @@ class UserSettings {
     Value<int?>? quietHoursEnd,
     String? quietHoursDays,
     String? defaultReminderTypes,
+    bool? enableQuickAddDateParsing,
     bool? voiceSmartPunctuation,
     DateTime? updatedAt,
   }) {
@@ -212,6 +219,8 @@ class UserSettings {
           : this.quietHoursEnd,
       quietHoursDays: quietHoursDays ?? this.quietHoursDays,
       defaultReminderTypes: defaultReminderTypes ?? this.defaultReminderTypes,
+      enableQuickAddDateParsing:
+          enableQuickAddDateParsing ?? this.enableQuickAddDateParsing,
       voiceSmartPunctuation:
           voiceSmartPunctuation ?? this.voiceSmartPunctuation,
       createdAt: createdAt,

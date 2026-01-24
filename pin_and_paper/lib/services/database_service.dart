@@ -128,6 +128,21 @@ class DatabaseService {
         quiet_hours_days TEXT DEFAULT '0,1,2,3,4,5,6',
         default_reminder_types TEXT DEFAULT 'at_time',
         notifications_enabled INTEGER DEFAULT 1,
+        enable_quick_add_date_parsing INTEGER DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    // Phase 3.9: Quiz responses table
+    await db.execute('''
+      CREATE TABLE ${AppConstants.quizResponsesTable} (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        quiz_version INTEGER DEFAULT 1,
+        completed INTEGER DEFAULT 0,
+        completed_at INTEGER,
+        answers TEXT NOT NULL,
+        badges_earned TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -442,6 +457,11 @@ class DatabaseService {
     // Migrate from version 9 to 10: Phase 3.8 - Master notifications toggle
     if (oldVersion < 10) {
       await _migrateToV10(db);
+    }
+
+    // Migrate from version 10 to 11: Phase 3.9 - Quiz responses + quick-add date parsing
+    if (oldVersion < 11) {
+      await _migrateToV11(db);
     }
   }
 
@@ -1103,6 +1123,39 @@ class DatabaseService {
       ADD COLUMN notifications_enabled INTEGER DEFAULT 1
     ''');
     debugPrint('✅ Database migrated to v10 successfully');
+  }
+
+  /// Phase 3.9 Migration: v10 → v11
+  ///
+  /// Adds:
+  /// - enable_quick_add_date_parsing column to user_settings
+  /// - quiz_responses table for persistent quiz answers and badges
+  Future<void> _migrateToV11(Database db) async {
+    debugPrint('Migrating database from v10 to v11: Quiz responses + quick-add date parsing');
+
+    await db.transaction((txn) async {
+      // 1. Add enable_quick_add_date_parsing to user_settings
+      await txn.execute('''
+        ALTER TABLE ${AppConstants.userSettingsTable}
+        ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1
+      ''');
+
+      // 2. Create quiz_responses table
+      await txn.execute('''
+        CREATE TABLE ${AppConstants.quizResponsesTable} (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          quiz_version INTEGER DEFAULT 1,
+          completed INTEGER DEFAULT 0,
+          completed_at INTEGER,
+          answers TEXT NOT NULL,
+          badges_earned TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+    });
+
+    debugPrint('✅ Database migrated to v11 successfully');
   }
 
   Future<void> close() async {

@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 10; // Phase 3.8: notifications_enabled master toggle
+  static const int databaseVersion = 11; // Phase 3.9: quiz responses + enable_quick_add_date_parsing
 
   // Table names
   static const String tasksTable = 'tasks';
@@ -16,6 +16,7 @@ class AppConstants {
   static const String taskEntitiesTable = 'task_entities';
   static const String taskTagsTable = 'task_tags';
   static const String taskRemindersTable = 'task_reminders'; // Phase 3.8
+  static const String quizResponsesTable = 'quiz_responses'; // Phase 3.9
 
   // Phase 3.8: Notification constants
   static const String notificationChannelId = 'pin_paper_task_reminders';
@@ -25,7 +26,7 @@ class AppConstants {
 
   // App metadata
   static const String appName = 'Pin and Paper';
-  static const String appVersion = '3.8.0'; // Phase 3.8: Due Date Notifications
+  static const String appVersion = '3.9.0'; // Phase 3.9: Onboarding Quiz & User Preferences
 
   // Performance targets
   static const int maxTasksInMemory = 500;
