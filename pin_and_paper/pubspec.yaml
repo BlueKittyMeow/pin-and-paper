@@ -60,5 +60,11 @@ flutter:
   uses-material-design: true
 
   # Phase 3.7: Natural Language Date Parsing assets
+  # Phase 3.9: Onboarding Quiz & Badge System assets
   assets:
     - assets/js/chrono.min.js
+    - assets/images/quiz/
+    - assets/images/badges/1x/
+    - assets/images/badges/2x/
+    - assets/images/badges/3x/
+    - assets/images/onboarding/
