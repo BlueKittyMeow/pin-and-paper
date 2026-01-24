@@ -1,5 +1,21 @@
 import 'package:flutter/material.dart';
 
+/// Central theme definition for Pin and Paper
+///
+/// **IMPORTANT - Color Usage Policy:**
+/// - DO NOT use hardcoded Colors.green, Colors.red, Colors.blue, etc. in widgets
+/// - DO NOT use Color(0x...) literals in screens/widgets
+/// - ALWAYS use AppTheme semantic colors: success, danger, warning, info, muted
+/// - ALWAYS use AppTheme palette colors: warmWood, kraftPaper, creamPaper, etc.
+///
+/// **Why:** Enables easy re-theming by changing colors in ONE place instead of
+/// hunting through 100+ files. See Phase 3.9.0 for migration details.
+///
+/// **To check for violations, run:**
+/// ```bash
+/// grep -r "Colors\." lib/screens/ lib/widgets/
+/// grep -r "Color(0x" lib/screens/ lib/widgets/
+/// ```
 class AppTheme {
   // Witchy Flatlay Color Palette
   static const Color warmWood = Color(0xFF8B7355);
@@ -10,6 +26,14 @@ class AppTheme {
   static const Color mutedLavender = Color(0xFF9B8FA5);
   static const Color softSage = Color(0xFF8FA596);
   static const Color warmBeige = Color(0xFFE8DDD3);
+
+  // Semantic UI State Colors (Witchy Flatlay versions)
+  // These replace hardcoded Colors.green, Colors.red, etc. throughout the app
+  static const Color success = Color(0xFF7A9B7A); // Muted sage green (affirming, natural)
+  static const Color danger = Color(0xFFC17A7A);  // Dusty rose red (warm, not harsh)
+  static const Color warning = Color(0xFFD4A574); // Warm amber (earthy orange tone)
+  static const Color info = Color(0xFF7A8FA5);    // Muted slate blue (calm, informative)
+  static const Color muted = Color(0xFF9B8F85);   // Warm gray-brown (subtle, disabled states)
 
   static ThemeData get lightTheme {
     return ThemeData(

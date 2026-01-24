@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:flutter_fancy_tree_view2/flutter_fancy_tree_view2.dart';
 import '../models/task.dart';
 import '../providers/task_provider.dart';
+import '../providers/task_sort_provider.dart'; // Phase 3.9 Refactor
+import '../providers/task_filter_provider.dart'; // Phase 3.9 Refactor
 import '../providers/tag_provider.dart'; // Phase 3.6A
 import '../services/tag_service.dart'; // Phase 3.6A
 import '../services/notification_service.dart'; // Phase 3.8.4
@@ -172,9 +174,10 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           // Phase 3.7.5: Sort button
-          Consumer<TaskProvider>(
-            builder: (context, taskProvider, _) {
-              final isActive = taskProvider.sortMode != TaskSortMode.manual;
+          // Phase 3.9 Refactor: Now uses TaskSortProvider instead of TaskProvider
+          Consumer<TaskSortProvider>(
+            builder: (context, sortProvider, _) {
+              final isActive = sortProvider.sortMode != TaskSortMode.manual;
               return PopupMenuButton<TaskSortMode>(
                 icon: Icon(
                   Icons.sort,
@@ -184,14 +187,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 tooltip: 'Sort Tasks',
                 onSelected: (mode) {
-                  if (mode == taskProvider.sortMode) {
-                    taskProvider.toggleSortReversed();
+                  if (mode == sortProvider.sortMode) {
+                    sortProvider.toggleSortReversed();
                   } else {
-                    taskProvider.setSortMode(mode);
+                    sortProvider.setSortMode(mode);
                   }
                 },
                 itemBuilder: (context) => TaskSortMode.values.map((mode) {
-                  final isSelected = mode == taskProvider.sortMode;
+                  final isSelected = mode == sortProvider.sortMode;
                   return PopupMenuItem<TaskSortMode>(
                     value: mode,
                     child: Row(
@@ -216,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         if (isSelected)
                           Icon(
-                            taskProvider.sortReversed
+                            sortProvider.sortReversed
                                 ? Icons.arrow_upward
                                 : Icons.arrow_downward,
                             size: 16,
@@ -269,14 +272,14 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Column(
         children: [
           const TaskInput(),
-          // Phase 3.6A: Active filter bar
-          Consumer2<TaskProvider, TagProvider>(
-            builder: (context, taskProvider, tagProvider, _) {
+          // Phase 3.6A / Phase 3.9 Refactor: Active filter bar now uses TaskFilterProvider
+          Consumer2<TaskFilterProvider, TagProvider>(
+            builder: (context, filterProvider, tagProvider, _) {
               return ActiveFilterBar(
-                filterState: taskProvider.filterState,
+                filterState: filterProvider.filterState,
                 allTags: tagProvider.tags,
-                onClearAll: () => taskProvider.clearFilters(),
-                onRemoveTag: (tagId) => taskProvider.removeTagFilter(tagId),
+                onClearAll: () => filterProvider.clearFilters(),
+                onRemoveTag: (tagId) => filterProvider.removeTagFilter(tagId),
               );
             },
           ),
@@ -409,9 +412,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Phase 3.6A: Show tag filter dialog
+  /// Phase 3.6A / Phase 3.9 Refactor: Show tag filter dialog
   Future<void> _showFilterDialog(BuildContext context) async {
-    final taskProvider = context.read<TaskProvider>();
+    final filterProvider = context.read<TaskFilterProvider>();
     final tagProvider = context.read<TagProvider>();
 
     // Load tags if not already loaded
@@ -423,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final result = await showDialog(
       context: context,
       builder: (context) => TagFilterDialog(
-        initialFilter: taskProvider.filterState,
+        initialFilter: filterProvider.filterState,
         allTags: tagProvider.tags,
         showCompletedCounts: false, // M3: Show active task counts
         tagService: TagService(), // L5: Inject service
@@ -432,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Apply filter if user clicked "Apply" or "Clear All"
     if (result != null && context.mounted) {
-      await taskProvider.setFilter(result);
+      filterProvider.setFilter(result);
     }
   }
 }

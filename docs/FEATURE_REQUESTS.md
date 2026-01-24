@@ -180,6 +180,29 @@
 - **Description:** Swipe gestures on task items for quick actions (complete, delete, snooze, edit). Configurable swipe-left/swipe-right actions.
 - **Source:** PROJECT_SPEC.md Phase 6+ deferral
 
+#### Right-Click Context Menus (Desktop)
+- **Priority:** MEDIUM | **Complexity:** LOW
+- **Description:** Add right-click context menus for desktop platforms (Linux, Windows, macOS) to complement swipe gestures. Currently, swipe-to-delete works on drafts, but desktop users need mouse-friendly alternatives. Context menu should include: Delete, Edit, Complete (for tasks), and other common actions.
+- **Source:** Phase 3.9.0 user feedback (regression testing)
+
+### Onboarding & Personalization
+
+#### Weekday Reference Logic Quiz Question
+- **Priority:** LOW | **Complexity:** MEDIUM
+- **Description:** Add a quiz question to capture how users mentally interpret weekday references like "Monday" in their task planning. Originally designed for Phase 3.9 but removed due to scenario complexity. The question would help configure a `weekdayReferenceLogic` setting ('forward', 'calendar_week', or 'flexible') that could influence DateParsingService behavior when parsing natural language dates like "text tuesday" or "meet monday". Three approaches: (1) Always forward-looking (Monday = next Monday to come), (2) Calendar week boundaries (strict rules), (3) Context-dependent (flexible interpretation based on sentence context).
+- **Challenge:** Creating a scenario that clearly distinguishes the three options without confusing users. The Friday scenario ("It's Friday, let's meet Monday") made the "context-dependent" option illogical since you can't meet in the past.
+- **Potential Solutions:** Use a Wednesday scenario allowing both past/future references, or use abstract question wording without specific scenarios, or split into two questions (forward vs backward, then strict vs flexible).
+- **Integration Point:** Store result in `user_settings.weekday_reference_logic`, apply in DateParsingService when parsing weekday-based date strings.
+- **Source:** Phase 3.9 quiz design (2026-01-24) - removed before implementation
+
+#### AI-Generated Time Personality Summary
+- **Priority:** LOW | **Complexity:** MEDIUM
+- **Description:** After quiz completion, use an LLM (Claude API or similar) to generate a personalized narrative summary of the user's "Time Personality" based on their quiz answers. The summary would be more engaging and human than the template-based badge descriptions, highlighting the user's unique time preferences and workflow style. Example: "You're a nocturnal thinker who values precision and control. Your day stretches into the early morning hours (ending at 5:59 AM), and you approach time with calendar-week structure while maintaining granular control over your tasks..." The AI could analyze answer combinations and create insights that aren't captured by individual badges.
+- **Technical Approach:** Pass quiz answers JSON to Claude API with a structured prompt, cache the result in `quiz_responses` table as `personality_summary TEXT`, display in "Your Time Personality" section and Settings.
+- **Privacy Consideration:** Make this opt-in; allow users to regenerate or disable the AI summary. Clearly communicate that quiz data would be sent to an external API (Claude/Anthropic).
+- **Cost Consideration:** API calls cost money; consider rate limiting (1 generation per quiz completion + manual regeneration with cooldown).
+- **Source:** Phase 3.9 quiz walkthrough discussion (2026-01-24)
+
 ---
 
 **Document Version:** 2.0

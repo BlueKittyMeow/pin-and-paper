@@ -9,6 +9,8 @@ import '../models/task_sort_mode.dart'; // Phase 3.7.5
 import '../models/tag.dart'; // Phase 3.5
 import '../models/task_suggestion.dart'; // Phase 2
 import '../providers/tag_provider.dart'; // Phase 3.6A
+import '../providers/task_sort_provider.dart'; // Phase 3.9 Refactor
+import '../providers/task_filter_provider.dart'; // Phase 3.9 Refactor
 import '../services/task_service.dart';
 import '../services/tag_service.dart'; // Phase 3.5
 import '../services/database_service.dart'; // Phase 3.6A: For database access
@@ -19,6 +21,7 @@ import '../models/task_reminder.dart'; // Phase 3.8: For custom reminder types
 import '../utils/constants.dart'; // Phase 3.6A: For AppConstants table names
 import '../utils/task_tree_controller.dart'; // Phase 3.6.5: Custom TreeController fix
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
+import '../providers/task_hierarchy_provider.dart'; // Phase 3.9: Hierarchy management
 
 /// Phase 3.6.5: Cached incomplete descendant info for completed parents
 ///
@@ -59,6 +62,9 @@ class TaskProvider extends ChangeNotifier {
   final PreferencesService _preferencesService;
   final TagService _tagService; // Phase 3.5
   final TagProvider _tagProvider; // Phase 3.6A
+  final TaskSortProvider _sortProvider; // Phase 3.9 Refactor
+  final TaskFilterProvider _filterProvider; // Phase 3.9 Refactor
+  final TaskHierarchyProvider _hierarchyProvider; // Phase 3.9: Hierarchy management
   final ReminderService _reminderService = ReminderService(); // Phase 3.8
 
   TaskProvider({
@@ -66,25 +72,105 @@ class TaskProvider extends ChangeNotifier {
     PreferencesService? preferencesService,
     TagService? tagService, // Phase 3.5
     TagProvider? tagProvider, // Phase 3.6A
+    required TaskSortProvider sortProvider, // Phase 3.9 Refactor: Required dependency
+    required TaskFilterProvider filterProvider, // Phase 3.9 Refactor: Required dependency
+    required TaskHierarchyProvider hierarchyProvider, // Phase 3.9: Required dependency
   })  : _taskService = taskService ?? TaskService(),
         _preferencesService = preferencesService ?? PreferencesService(),
         _tagService = tagService ?? TagService(), // Phase 3.5
-        _tagProvider = tagProvider ?? TagProvider() { // Phase 3.6A
-    // Phase 3.2: Initialize TreeController for hierarchical view
-    // Phase 3.6.5: Use TaskTreeController for ID-based expansion state (fixes corruption bug)
-    _treeController = TaskTreeController(
-      roots: [],  // Start empty, populated in loadTasks
-      childrenProvider: (Task task) {
-        return _tasks.where((t) => t.parentId == task.id).toList()
-          ..sort((a, b) => a.position.compareTo(b.position));
-      },
-      parentProvider: (Task task) => _findParent(task.parentId),
-    );
+        _tagProvider = tagProvider ?? TagProvider(), // Phase 3.6A
+        _sortProvider = sortProvider, // Phase 3.9 Refactor: No fallback needed
+        _filterProvider = filterProvider, // Phase 3.9 Refactor: No fallback needed
+        _hierarchyProvider = hierarchyProvider { // Phase 3.9: No fallback needed
+
+    // Phase 3.9 Refactor: Listen to sort provider changes and refresh tree
+    _sortProvider.addListener(_onSortChanged);
+
+    // Phase 3.9 Refactor: Listen to filter provider changes and apply filters
+    _filterProvider.addListener(_onFilterChanged);
+  }
+
+  /// Phase 3.9 Refactor: Callback when sort provider changes
+  void _onSortChanged() {
+    _refreshTreeController();
+    notifyListeners();
+  }
+
+  /// Phase 3.9 Refactor: Callback when filter provider changes
+  Future<void> _onFilterChanged() async {
+    final filter = _filterProvider.filterState;
+    final operationId = _filterProvider.filterOperationId;
+    // Capture previous filter for true rollback on error (Codex MEDIUM finding #2)
+    final previousFilter = _previousFilterState;
+
+    try {
+      if (filter.isActive) {
+        // Fetch filtered results (flat list, no hierarchy)
+        final activeFuture = _taskService.getFilteredTasks(
+          filter,
+          completed: false,
+        );
+        final completedFuture = _taskService.getFilteredTasks(
+          filter,
+          completed: true,
+        );
+
+        // Await both queries in parallel
+        final results = await Future.wait([activeFuture, completedFuture]);
+
+        // Only apply results if no newer operation started
+        if (operationId == _filterProvider.filterOperationId) {
+          _tasks = results[0];
+
+          // Load tags for filtered tasks
+          final taskIds = _tasks.map((t) => t.id).toList();
+          _taskTags = await _tagService.getTagsForAllTasks(taskIds);
+
+          // Re-categorize tasks with new filtered list
+          _categorizeTasks();
+
+          // Rebuild incomplete descendant cache
+          _rebuildIncompleteDescendantCache();
+
+          // Refresh tree controller (filtered view is flat, not hierarchical)
+          _refreshTreeController();
+
+          // Success! Update previous filter for next rollback
+          _previousFilterState = filter;
+
+          notifyListeners();
+        }
+        // Else discard stale results (newer filter already applied)
+      } else {
+        // No filter active - reload all tasks with hierarchy
+        // Phase 3.9: Check operation ID to prevent race condition
+        // (Codex MEDIUM finding #1: clear-filter can flash unfiltered results)
+        if (operationId == _filterProvider.filterOperationId) {
+          await loadTasks();
+          // Success! Update previous filter
+          _previousFilterState = filter;
+        }
+        // Else: newer operation already started, this clear is stale, skip
+      }
+    } catch (e) {
+      debugPrint('Error applying filter: $e');
+      // True rollback: restore previous filter state (Codex MEDIUM finding #2)
+      _filterProvider.rollbackFilter(previousFilter, operationId);
+      // Try to reload all tasks (if DB is available)
+      try {
+        await loadTasks();
+      } catch (loadError) {
+        debugPrint('Failed to load tasks: $loadError');
+      }
+    }
   }
 
   List<Task> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Phase 3.9 Refactor: Track previous filter for true rollback on error (Codex MEDIUM finding)
+  FilterState _previousFilterState = FilterState.empty;
 
   // Phase 3.5: Tag storage (loaded with tasks)
   Map<String, List<Tag>> _taskTags = {};
@@ -98,24 +184,6 @@ class TaskProvider extends ChangeNotifier {
 
   // Phase 3.6.5: Guard against concurrent toggleTaskCompletion calls (race condition fix)
   bool _isTogglingCompletion = false;
-
-  // Phase 3.6A: Filter state
-  FilterState _filterState = FilterState.empty;
-  int _filterOperationId = 0; // Race condition prevention
-
-  // Phase 3.2: Hierarchy state
-  bool _isReorderMode = false;
-  late TaskTreeController _treeController; // Phase 3.6.5: Use custom controller for ID-based state
-
-  // Phase 3.7.5: Sort state
-  TaskSortMode _sortMode = TaskSortMode.manual;
-  bool _sortReversed = false;
-
-  // Phase 3.6.5: Tree version counter to force AnimatedTreeView rebuild
-  // Incremented when tree structure changes (completion, etc.)
-  // Used as ValueKey to force Flutter to recreate the AnimatedTreeView widget
-  int _treeVersion = 0;
-  int get treeVersion => _treeVersion;
 
   // Phase 2 Stretch: Hide completed tasks settings
   bool _hideOldCompleted = true;
@@ -135,13 +203,15 @@ class TaskProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  // Phase 3.2: Hierarchy getters
-  bool get isReorderMode => _isReorderMode;
-  TreeController<Task> get treeController => _treeController;
+  // Phase 3.9: Hierarchy getters delegate to TaskHierarchyProvider
+  bool get isReorderMode => _hierarchyProvider.isReorderMode;
+  TreeController<Task> get treeController => _hierarchyProvider.treeController;
+  int get treeVersion => _hierarchyProvider.treeVersion;
+  bool get areAllExpanded => _hierarchyProvider.areAllExpanded;
 
-  // Phase 3.7.5: Sort getters
-  TaskSortMode get sortMode => _sortMode;
-  bool get sortReversed => _sortReversed;
+  // Phase 3.7.5 / Phase 3.9 Refactor: Sort getters now delegate to TaskSortProvider
+  TaskSortMode get sortMode => _sortProvider.sortMode;
+  bool get sortReversed => _sortProvider.sortReversed;
 
   List<Task> get incompleteTasks =>
       _tasks.where((task) => !task.completed).toList();
@@ -173,9 +243,9 @@ class TaskProvider extends ChangeNotifier {
     return _taskTags[taskId] ?? [];
   }
 
-  // Phase 3.6A: Filter state getters
-  FilterState get filterState => _filterState;
-  bool get hasActiveFilters => _filterState.isActive;
+  // Phase 3.6A / Phase 3.9 Refactor: Filter state getters now delegate to TaskFilterProvider
+  FilterState get filterState => _filterProvider.filterState;
+  bool get hasActiveFilters => _filterProvider.hasActiveFilters;
 
   // Phase 3.6.5: Get incomplete descendant info for a completed task
   /// Returns cached info for O(1) lookup, or null if task has no incomplete descendants
@@ -270,32 +340,31 @@ class TaskProvider extends ChangeNotifier {
 
   // Phase 3.2: Refresh TreeController with active tasks
   // Active = incomplete OR (completed but has incomplete descendants)
-  // Phase 3.6.5: Simplified - TaskTreeController tracks by ID, no capture/restore needed
+  // Phase 3.9 Refactor: Delegates to TaskHierarchyProvider
   void _refreshTreeController() {
-    // Phase 3.6A: Build task ID set for efficient lookup
+    // Phase 3.6A: Build task ID set for efficient lookup (from ALL tasks)
     final taskIds = _tasks.map((t) => t.id).toSet();
 
-    // Phase 3.6.5: Prune orphaned IDs (Codex/Gemini recommendation for memory hygiene)
-    _treeController.pruneOrphanedIds(taskIds);
-
+    // Build active task roots: tasks to show as root-level in tree view
+    // Phase 3.6A: In filtered views, treat as root if parent not in filtered results
     var activeRoots = _tasks.where((t) {
-      // Phase 3.6A: In filtered views, treat as root if parent not in filtered results
+      // If task has a parent
       if (t.parentId != null) {
-        // If parent exists in current task list, this is not a root
+        // If parent exists in current task list, this is NOT a root
         if (taskIds.contains(t.parentId)) {
           return false;
         }
-        // Parent not in filtered results - treat as root
+        // Parent not in filtered results - treat as orphaned root
       }
-      // Original logic: true root (parentId == null) or orphaned in filtered view
+      // True root (parentId == null) or orphaned in filtered view
       if (!t.completed) return true; // Incomplete tasks always active
       return _hasIncompleteDescendants(t); // Completed with incomplete children
     }).toList();
 
     // Phase 3.7.5: Apply date filter
-    if (_filterState.dateFilter != DateFilter.any) {
+    if (_filterProvider.filterState.dateFilter != DateFilter.any) {
       activeRoots = activeRoots.where((t) {
-        switch (_filterState.dateFilter) {
+        switch (_filterProvider.filterState.dateFilter) {
           case DateFilter.overdue:
             if (t.dueDate == null) return false;
             if (t.isAllDay) {
@@ -316,11 +385,10 @@ class TaskProvider extends ChangeNotifier {
     // Phase 3.7.5: Apply sort to root-level tasks
     _sortTasks(activeRoots);
 
-    _treeController.roots = activeRoots;
-    _treeController.rebuild();
-    // Phase 3.6.5: Increment tree version to force AnimatedTreeView widget recreation
-    _treeVersion++;
-    // Expansion state preserved automatically by TaskTreeController (ID-based)
+    // Phase 3.9 Refactor: Delegate tree refresh to TaskHierarchyProvider
+    // Pass all tasks (for childrenProvider), roots, and all task IDs for pruning
+    // Bug Fix (Codex): Pass ALL tasks and task IDs to preserve expansion state on filter changes
+    _hierarchyProvider.refreshTreeController(_tasks, activeRoots, taskIds);
   }
 
   // Phase 3.2: Get ALL visible completed tasks (with breadcrumbs for nested tasks)
@@ -561,17 +629,11 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Phase 2 Stretch: Load preferences (call during initialization)
+  // Phase 3.9 Refactor: Sort preferences now loaded by TaskSortProvider
   Future<void> loadPreferences() async {
     _hideOldCompleted = await _preferencesService.getHideOldCompleted();
     _hideThresholdHours = await _preferencesService.getHideThresholdHours();
-    // Phase 3.7.5: Load sort preferences
-    final sortModeStr = await _preferencesService.getSortMode();
-    _sortMode = TaskSortMode.values.firstWhere(
-      (m) => m.name == sortModeStr,
-      orElse: () => TaskSortMode.manual,
-    );
-    _sortReversed = await _preferencesService.getSortReversed();
-    _refreshTreeController(); // Phase 3.7: Apply sort immediately on load
+    _refreshTreeController(); // Apply current sort from sortProvider
     notifyListeners();
   }
 
@@ -718,7 +780,7 @@ class TaskProvider extends ChangeNotifier {
           // Task was uncompleted - expand it if it has children
           final hasChildren = _tasks.any((t) => t.parentId == updatedTask.id);
           if (hasChildren) {
-            _treeController.setExpansionState(updatedTask, true);
+            _hierarchyProvider.expandTask(updatedTask);
           }
         }
 
@@ -726,7 +788,7 @@ class TaskProvider extends ChangeNotifier {
           // Task was completed - expand its parent so child stays visible
           try {
             final parent = _tasks.firstWhere((t) => t.id == updatedTask.parentId);
-            _treeController.setExpansionState(parent, true);
+            _hierarchyProvider.expandTask(parent);
           } catch (_) {
             // Parent not found, skip
           }
@@ -897,40 +959,23 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  // ========== Phase 3.7.5: Sort Methods ==========
-
-  /// Change sort mode for root-level tasks
-  void setSortMode(TaskSortMode mode) {
-    if (_sortMode == mode) return;
-    _sortMode = mode;
-    _sortReversed = false;
-    _preferencesService.setSortMode(mode.name);
-    _preferencesService.setSortReversed(false);
-    _refreshTreeController();
-    notifyListeners();
-  }
-
-  /// Toggle sort direction
-  void toggleSortReversed() {
-    _sortReversed = !_sortReversed;
-    _preferencesService.setSortReversed(_sortReversed);
-    _refreshTreeController();
-    notifyListeners();
-  }
+  // ========== Phase 3.7.5 / Phase 3.9 Refactor: Sort Methods ==========
+  // setSortMode and toggleSortReversed removed - now handled by TaskSortProvider
 
   /// Sort a list of tasks in-place based on current sort mode
+  /// Phase 3.9 Refactor: Now uses TaskSortProvider's state instead of local fields
   void _sortTasks(List<Task> tasks) {
-    switch (_sortMode) {
+    switch (_sortProvider.sortMode) {
       case TaskSortMode.manual:
         tasks.sort((a, b) {
           final cmp = a.position.compareTo(b.position);
-          return _sortReversed ? -cmp : cmp;
+          return _sortProvider.sortReversed ? -cmp : cmp;
         });
 
       case TaskSortMode.recentlyCreated:
         tasks.sort((a, b) {
           final cmp = b.createdAt.compareTo(a.createdAt);
-          return _sortReversed ? -cmp : cmp;
+          return _sortProvider.sortReversed ? -cmp : cmp;
         });
 
       case TaskSortMode.dueSoonest:
@@ -941,7 +986,7 @@ class TaskProvider extends ChangeNotifier {
           if (a.dueDate == null) return 1;
           if (b.dueDate == null) return -1;
           final cmp = a.dueDate!.compareTo(b.dueDate!);
-          return _sortReversed ? -cmp : cmp;
+          return _sortProvider.sortReversed ? -cmp : cmp;
         });
     }
   }
@@ -949,72 +994,39 @@ class TaskProvider extends ChangeNotifier {
   // ========== Phase 3.2: Hierarchy Methods ==========
 
   /// Enter/exit reorder mode
+  /// Phase 3.9 Refactor: Now uses TaskSortProvider to change sort mode
   void setReorderMode(bool enabled) {
-    _isReorderMode = enabled;
-    if (enabled && _sortMode != TaskSortMode.manual) {
-      _sortMode = TaskSortMode.manual;
-      _sortReversed = false;
-      _refreshTreeController();
+    _hierarchyProvider.setReorderMode(enabled);
+    if (enabled && _sortProvider.sortMode != TaskSortMode.manual) {
+      _sortProvider.setSortMode(TaskSortMode.manual);
+      // Note: sortProvider will notify listeners which triggers _onSortChanged
+      // which calls _refreshTreeController and notifyListeners
+    } else {
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// Toggle collapse/expand for a task node
+  /// Phase 3.9 Refactor: Delegate to TaskHierarchyProvider
+  /// Bug Fix (Codex): Must call notifyListeners() so UI listening to TaskProvider gets updated
   void toggleCollapse(Task task) {
-    _treeController.toggleExpansion(task);
+    _hierarchyProvider.toggleCollapse(task);
+    notifyListeners();
   }
 
   /// Phase 3.6B: Expand all tasks in the tree
   /// Phase 3.6.5 Fix: Expand ALL tasks with children (not just incomplete)
   /// This ensures completed children become visible when parent is expanded
+  /// Phase 3.9 Refactor: Delegate to TaskHierarchyProvider
   void expandAll() {
-    for (final task in _tasks) {
-      final hasChildren = _tasks.any((t) => t.parentId == task.id);
-      if (hasChildren) {
-        _treeController.setExpansionState(task, true);
-      }
-    }
-    _treeController.rebuild(); // Notify AnimatedTreeView to update
+    _hierarchyProvider.expandAll();
     notifyListeners();
   }
 
-  /// Phase 3.6B: Collapse all tasks in the tree
-  /// Phase 3.6.5 Fix: Collapse ALL tasks with children (not just incomplete)
+  /// Phase 3.9 Refactor: Delegate to TaskHierarchyProvider
   void collapseAll() {
-    for (final task in _tasks) {
-      final hasChildren = _tasks.any((t) => t.parentId == task.id);
-      if (hasChildren) {
-        _treeController.setExpansionState(task, false);
-      }
-    }
-    _treeController.rebuild(); // Notify AnimatedTreeView to update
+    _hierarchyProvider.collapseAll();
     notifyListeners();
-  }
-
-  /// Phase 3.6B: Check if all tasks are expanded
-  /// Phase 3.6.5 Fix: Check ALL tasks with children (not just incomplete)
-  bool get areAllExpanded {
-    // Get all tasks that have children and are in the active tree
-    final tasksWithChildren = _tasks.where((task) {
-      // Check if this task has any children
-      final hasChildren = _tasks.any((child) => child.parentId == task.id);
-      if (!hasChildren) return false;
-      // Only consider tasks that are active roots or descendants of roots
-      // (incomplete OR completed with incomplete descendants)
-      if (!task.completed) return true;
-      return _hasIncompleteDescendants(task);
-    }).toList();
-
-    if (tasksWithChildren.isEmpty) return false;
-
-    // Check if all are expanded
-    return tasksWithChildren.every((task) {
-      try {
-        return _treeController.getExpansionState(task);
-      } catch (_) {
-        return false;
-      }
-    });
   }
 
   /// Move task to new parent (nest/unnest)
@@ -1039,9 +1051,9 @@ class TaskProvider extends ChangeNotifier {
       }
 
       // Reload tasks to reflect changes
-      // Phase 3.6A: Preserve filter state after drag/drop
-      if (_filterState.isActive) {
-        await _reapplyCurrentFilter();
+      // Phase 3.6A / Phase 3.9 Refactor: Preserve filter state after drag/drop
+      if (_filterProvider.hasActiveFilters) {
+        await _onFilterChanged();
       } else {
         await loadTasks();
       }
@@ -1077,7 +1089,7 @@ class TaskProvider extends ChangeNotifier {
         needsDbQuery = true; // Need to get actual child count
 
         // Auto-expand target to show new child
-        _treeController.setExpansionState(details.targetNode, true);
+        _hierarchyProvider.expandTask(details.targetNode);
       },
       whenBelow: () {
         // Insert as next sibling of target (position after target)
@@ -1087,8 +1099,8 @@ class TaskProvider extends ChangeNotifier {
       },
     );
 
-    // Phase 3.6A: If dropping "inside" and filters active, query actual sibling count
-    if (needsDbQuery && _filterState.isActive) {
+    // Phase 3.6A / Phase 3.9 Refactor: If dropping "inside" and filters active, query actual sibling count
+    if (needsDbQuery && _filterProvider.hasActiveFilters) {
       final db = await DatabaseService.instance.database;
       final result = await db.rawQuery('''
         SELECT COUNT(*) as count
@@ -1295,179 +1307,10 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // ============================================
-  // PHASE 3.6A: TAG FILTERING METHODS
+  // PHASE 3.6A / Phase 3.9 Refactor: TAG FILTERING METHODS
   // ============================================
-
-  /// Reapply the current filter to refresh task list after drag/drop operations.
-  ///
-  /// This is like setFilter() but without the early return check, ensuring
-  /// the filter is always reapplied even if the FilterState object is the same.
-  Future<void> _reapplyCurrentFilter() async {
-    if (!_filterState.isActive) {
-      await loadTasks();
-      return;
-    }
-
-    try {
-      // Fetch filtered results
-      final activeFuture = _taskService.getFilteredTasks(
-        _filterState,
-        completed: false,
-      );
-      final completedFuture = _taskService.getFilteredTasks(
-        _filterState,
-        completed: true,
-      );
-
-      final results = await Future.wait([activeFuture, completedFuture]);
-
-      _tasks = results[0];
-
-      // Load tags for filtered tasks
-      final taskIds = _tasks.map((t) => t.id).toList();
-      _taskTags = await _tagService.getTagsForAllTasks(taskIds);
-
-      // Re-categorize tasks with new filtered list
-      _categorizeTasks();
-
-      // Refresh tree controller
-      _refreshTreeController();
-
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error reapplying filter: $e');
-      // On error, try to reload all tasks
-      await loadTasks();
-    }
-  }
-
-  /// Apply a new filter to the task lists.
-  ///
-  /// Uses an operation ID pattern to prevent race conditions when the user
-  /// changes filters rapidly. Only the most recent operation's results are applied.
-  ///
-  /// When filter is active: Loads filtered tasks from database
-  /// When filter is cleared: Reloads all tasks with hierarchy
-  ///
-  /// H2 (v3.1): Rollback filter state on error to keep UI consistent
-  Future<void> setFilter(FilterState filter) async {
-    // Early return if filter unchanged (optimization)
-    if (_filterState == filter) return;
-
-    // H2: Capture previous state for rollback on error
-    final previousFilter = _filterState;
-
-    _filterState = filter;
-    _filterOperationId++; // Increment before async work
-    final currentOperation = _filterOperationId;
-
-    notifyListeners(); // Show filter bar immediately (optimistic update)
-
-    try {
-      if (filter.isActive) {
-        // Fetch filtered results (flat list, no hierarchy)
-        final activeFuture = _taskService.getFilteredTasks(
-          filter,
-          completed: false,
-        );
-        final completedFuture = _taskService.getFilteredTasks(
-          filter,
-          completed: true,
-        );
-
-        // Await both queries in parallel
-        final results = await Future.wait([activeFuture, completedFuture]);
-
-        // Only apply results if no newer operation started
-        if (currentOperation == _filterOperationId) {
-          _tasks = results[0];
-
-          // Load tags for filtered tasks
-          final taskIds = _tasks.map((t) => t.id).toList();
-          _taskTags = await _tagService.getTagsForAllTasks(taskIds);
-
-          // Re-categorize tasks with new filtered list
-          _categorizeTasks();
-
-          // Refresh tree controller (filtered view is flat, not hierarchical)
-          _refreshTreeController();
-
-          notifyListeners();
-        }
-        // Else discard stale results (newer filter already applied)
-      } else {
-        // No filter active - reload all tasks with hierarchy
-        await loadTasks();
-      }
-    } catch (e) {
-      // H2: Rollback to previous filter state on error
-      // Only rollback if no newer operation has started (fixes race condition)
-      if (currentOperation == _filterOperationId) {
-        _filterState = previousFilter;
-        notifyListeners();
-        debugPrint('Error applying filter: $e');
-      } else {
-        // Newer operation already running, don't touch state
-        debugPrint('Error applying filter (operation $currentOperation), but newer operation ($_filterOperationId) is active: $e');
-      }
-    }
-  }
-
-  /// Add a tag to the current filter.
-  ///
-  /// Validates the tag ID and prevents duplicates.
-  /// Used when user clicks a tag chip for quick filtering.
-  ///
-  /// M2 (v3.1): Validate tag existence using TagProvider (in-memory, faster than DB query)
-  Future<void> addTagFilter(String tagId) async {
-    // Validate input
-    if (tagId.isEmpty) {
-      debugPrint('addTagFilter: empty tagId');
-      return;
-    }
-
-    if (_filterState.selectedTagIds.contains(tagId)) {
-      debugPrint('addTagFilter: tag $tagId already in filter');
-      return; // Already filtered by this tag
-    }
-
-    // M2: Validate tag exists (use TagProvider - faster, in-memory)
-    final tagExists = _tagProvider.tags.any((tag) => tag.id == tagId);
-    if (!tagExists) {
-      debugPrint('addTagFilter: tag $tagId does not exist');
-      return; // Reject invalid tag IDs (prevents SQL errors)
-    }
-
-    // Create new filter with added tag
-    final newTags = List<String>.from(_filterState.selectedTagIds)..add(tagId);
-    final newFilter = _filterState.copyWith(selectedTagIds: newTags);
-
-    await setFilter(newFilter);
-  }
-
-  /// Remove a tag from the current filter.
-  ///
-  /// If no filters remain after removal, clears the filter entirely.
-  Future<void> removeTagFilter(String tagId) async {
-    final newTags = _filterState.selectedTagIds
-        .where((id) => id != tagId)
-        .toList();
-
-    // If no filters left, clear entirely
-    if (newTags.isEmpty && _filterState.presenceFilter == TagPresenceFilter.any) {
-      await clearFilters();
-    } else {
-      final newFilter = _filterState.copyWith(selectedTagIds: newTags);
-      await setFilter(newFilter);
-    }
-  }
-
-  /// Clear all filters and show all tasks.
-  ///
-  /// Reloads tasks with full hierarchy.
-  Future<void> clearFilters() async {
-    await setFilter(FilterState.empty);
-  }
+  // Filter methods moved to TaskFilterProvider
+  // TaskProvider listens to filterProvider changes via _onFilterChanged()
 
   // ==========================================================================
   // Phase 3.6B: Search functionality
@@ -1511,7 +1354,7 @@ class TaskProvider extends ChangeNotifier {
     } catch (e) {
       // Task not in current filtered list - clear filters and try again
       if (hasActiveFilters) {
-        await clearFilters();
+        _filterProvider.clearFilters();
         try {
           task = _tasks.firstWhere((t) => t.id == taskId);
         } catch (e) {
@@ -1564,8 +1407,8 @@ class TaskProvider extends ChangeNotifier {
       final parent = _findParent(current.parentId);
       if (parent == null) break;
 
-      // Expand parent node using TreeController
-      _treeController.expand(parent);
+      // Expand parent node
+      _hierarchyProvider.expandTask(parent);
 
       current = parent;
     }
@@ -1593,6 +1436,8 @@ class TaskProvider extends ChangeNotifier {
   @override
   void dispose() {
     _highlightTimer?.cancel();
+    _sortProvider.removeListener(_onSortChanged); // Phase 3.9 Refactor
+    _filterProvider.removeListener(_onFilterChanged); // Phase 3.9 Refactor
     super.dispose();
   }
 }

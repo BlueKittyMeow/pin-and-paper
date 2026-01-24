@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/task_provider.dart';
 import '../services/task_matching_service.dart';
+import '../utils/theme.dart';
 
 class QuickCompleteScreen extends StatefulWidget {
   const QuickCompleteScreen({super.key});
@@ -60,7 +61,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
     messenger.showSnackBar(
       SnackBar(
         content: Text('✓ Completed: ${match.task.title}'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.success,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -84,7 +85,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
     messenger.showSnackBar(
       SnackBar(
         content: Text('✓ Completed ${_selectedTaskIds.length} task(s)'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.success,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -107,7 +108,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
     messenger.showSnackBar(
       SnackBar(
         content: Text('✓ Completed ${_matches.length} task(s)'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.success,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -151,7 +152,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
 
                 return Text(
                   'Searching ${incompleteCount} incomplete tasks${cleaned.isNotEmpty ? " • Cleaned: \"$cleaned\"" : ""}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: const TextStyle(fontSize: 12, color: AppTheme.muted),
                 );
               },
             ),
@@ -167,7 +168,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
                             : 'Type to search your tasks...',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          color: Colors.grey,
+                          color: AppTheme.muted,
                           fontSize: 16,
                         ),
                       ),
@@ -188,7 +189,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
                                 return ListTile(
                                   leading: Icon(
                                     Icons.task_alt,
-                                    color: isHighConfidence ? Colors.green : Colors.orange,
+                                    color: isHighConfidence ? AppTheme.success : AppTheme.warning,
                                   ),
                                   title: Text(match.task.title),
                                   subtitle: Text(
@@ -203,14 +204,14 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
                               return CheckboxListTile(
                                 secondary: Icon(
                                   Icons.task_alt,
-                                  color: isHighConfidence ? Colors.green : Colors.orange,
+                                  color: isHighConfidence ? AppTheme.success : AppTheme.warning,
                                 ),
                                 title: Text(match.task.title),
                                 subtitle: Text(
                                   '${(match.similarity * 100).toStringAsFixed(1)}% - ${_getConfidenceLabel(match.similarity)}',
                                 ),
                                 value: isSelected,
-                                activeColor: Colors.green,
+                                activeColor: AppTheme.success,
                                 onChanged: (value) {
                                   setState(() {
                                     if (value == true) {
@@ -233,7 +234,7 @@ class _QuickCompleteScreenState extends State<QuickCompleteScreen> {
                               color: Theme.of(context).scaffoldBackgroundColor,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
+                                  color: AppTheme.richBlack.withValues(alpha: 0.1),
                                   blurRadius: 4,
                                   offset: const Offset(0, -2),
                                 ),

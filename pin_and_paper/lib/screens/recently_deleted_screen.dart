@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../services/task_service.dart';
 import '../providers/task_provider.dart';
+import '../utils/theme.dart';
 
 /// Screen showing soft-deleted tasks that can be restored or permanently deleted
 /// Phase 3.3: Soft delete feature
@@ -150,7 +151,7 @@ class _RecentlyDeletedScreenState extends State<RecentlyDeletedScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Restored "${task.title}"'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
           ),
         );
         // Reload to update the deleted tasks list

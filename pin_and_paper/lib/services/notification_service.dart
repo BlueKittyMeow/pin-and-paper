@@ -340,9 +340,18 @@ class NotificationService {
   /// Get notification that launched the app (cold start)
   /// Returns the notification response if the app was launched by tapping a notification
   Future<NotificationResponse?> getLaunchNotification() async {
-    final details = await _plugin.getNotificationAppLaunchDetails();
-    if (details?.didNotificationLaunchApp ?? false) {
-      return details!.notificationResponse;
+    // getNotificationAppLaunchDetails() only supported on Android/iOS
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return null;
+    }
+
+    try {
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      if (details?.didNotificationLaunchApp ?? false) {
+        return details!.notificationResponse;
+      }
+    } catch (e) {
+      debugPrint('[NotificationService] getLaunchNotification failed: $e');
     }
     return null;
   }

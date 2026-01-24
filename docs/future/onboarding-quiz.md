@@ -246,12 +246,14 @@ Instead of confronting users with abstract settings like "today cutoff hour" or 
 
 **Daily Rhythm Badges:**
 - ☀️ **"Dawn Greeter"** - Early morning person (Q5-A + Q4-A)
-- 🌆 **"Twilight Worker"** - Evening/night productivity (Q4-C + late sleep)
+- 🌆 **"Twilight Worker"** - Evening/night productivity (Q4-C + late sleep) 
+^IMAGE NOT MADE YET!!!
+
 - 🕐 **"Classic Scheduler"** - Standard 9-5 aligned rhythm (Q5-B + Q4-B)
 - 🌙 **"Late Morning Luxurist"** - Slow morning starts, late preferences (Q5-C)
 
 **Display Preference Badges:**
-- 🎖️ **"Military Time Enthusiast"** - 24-hour clock preference (Q6-B)
+- **"Exacting Enthusiast"** - 24-hour clock preference (Q6-B)
 - 🕰️ **"AM/PM Classicist"** - 12-hour clock preference (Q6-A)
 
 **Task Management Style Badges:**

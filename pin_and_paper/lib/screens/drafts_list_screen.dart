@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/brain_dump_provider.dart';
+import '../utils/theme.dart';
 
 class DraftsListScreen extends StatefulWidget {
   const DraftsListScreen({super.key});
@@ -51,8 +52,8 @@ class _DraftsListScreenState extends State<DraftsListScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: provider.isOverLimit
-                      ? Colors.red.shade50
-                      : Colors.blue.shade50,
+                      ? AppTheme.warning.withValues(alpha: 0.2)
+                      : AppTheme.info.withValues(alpha: 0.2),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -62,14 +63,14 @@ class _DraftsListScreenState extends State<DraftsListScreen> {
                             : 'Selected: ${provider.selectedCount} drafts (${provider.selectedTotalChars} characters)',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: provider.isOverLimit ? Colors.red : Colors.blue,
+                          color: provider.isOverLimit ? AppTheme.warning : AppTheme.info,
                         ),
                       ),
                       if (provider.isOverLimit) ...[
                         const SizedBox(height: 4),
                         Text(
                           'Exceeds 10,000 character limit by ${provider.excessCharacters}',
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                          style: const TextStyle(color: AppTheme.warning, fontSize: 12),
                         ),
                       ],
                       const SizedBox(height: 8),
@@ -121,7 +122,7 @@ class _DraftsListScreenState extends State<DraftsListScreen> {
                       key: Key(draft.id),
                       direction: DismissDirection.endToStart,
                       background: Container(
-                        color: Colors.red,
+                        color: AppTheme.danger,
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 16),
                         child: const Icon(Icons.delete, color: Colors.white),

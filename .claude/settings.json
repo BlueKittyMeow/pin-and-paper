@@ -1,4 +1,14 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(./docs/archive/phase-01/**)",
+      "Read(./docs/archive/phase-02/**)",
+      "Read(./docs/archive/phase-03/**)",
+      "Read(./docs/archive/phase-3.6.5/**)",
+      "Read(./docs/archive/phase-3.6A/**)",
+      "Read(./docs/archive/phase-3.6B/**)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

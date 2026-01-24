@@ -301,6 +301,7 @@ class BrainDumpProvider extends ChangeNotifier {
     _dumpText = '';
     _originalDumpText = null;
     _suggestions = [];
+    _currentDraftId = null; // Bug fix: Reset draft ID so next save creates new draft
     notifyListeners();
   }
 

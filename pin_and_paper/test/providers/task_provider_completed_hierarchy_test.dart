@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
+import 'package:pin_and_paper/providers/task_sort_provider.dart';
+import 'package:pin_and_paper/providers/task_filter_provider.dart';
+import 'package:pin_and_paper/providers/task_hierarchy_provider.dart';
+import 'package:pin_and_paper/providers/tag_provider.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/database_service.dart';
@@ -21,6 +25,7 @@ void main() {
   late TaskProvider taskProvider;
   late TaskService taskService;
   late TagService tagService;
+  late TagProvider tagProvider;
   late Database testDb;
 
   setUp(() async {
@@ -36,11 +41,16 @@ void main() {
     // Create services
     taskService = TaskService();
     tagService = TagService();
+    tagProvider = TagProvider(tagService: tagService);
 
     // Create TaskProvider with test services
     taskProvider = TaskProvider(
       taskService: taskService,
       tagService: tagService,
+      tagProvider: tagProvider,
+      sortProvider: TaskSortProvider(),
+      filterProvider: TaskFilterProvider(tagProvider: tagProvider),
+      hierarchyProvider: TaskHierarchyProvider(),
     );
 
     // Load initial (empty) tasks
