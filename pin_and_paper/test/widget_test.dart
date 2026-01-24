@@ -12,6 +12,7 @@ import 'package:pin_and_paper/models/task.dart';
 import 'package:pin_and_paper/providers/tag_provider.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/providers/task_sort_provider.dart';
+import 'package:pin_and_paper/providers/task_filter_provider.dart';
 import 'package:pin_and_paper/screens/home_screen.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
@@ -84,15 +85,29 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(
-            create: (_) => TaskProvider(
+            create: (_) => TagProvider(tagService: fakeTagService),
+          ),
+          ChangeNotifierProxyProvider<TagProvider, TaskFilterProvider>(
+            create: (context) => TaskFilterProvider(
+              tagProvider: Provider.of<TagProvider>(context, listen: false),
+            ),
+            update: (context, tagProvider, previous) =>
+                previous ?? TaskFilterProvider(tagProvider: tagProvider),
+          ),
+          ChangeNotifierProxyProvider2<TagProvider, TaskFilterProvider, TaskProvider>(
+            create: (context) => TaskProvider(
               taskService: fakeTaskService,
               tagService: fakeTagService,
               sortProvider: TaskSortProvider(),
+              filterProvider: Provider.of<TaskFilterProvider>(context, listen: false),
             ),
-          ),
-          // Phase 3.6.5: TagProvider now required by TaskItem
-          ChangeNotifierProvider(
-            create: (_) => TagProvider(tagService: fakeTagService),
+            update: (context, tagProvider, filterProvider, previous) =>
+                previous ?? TaskProvider(
+                  taskService: fakeTaskService,
+                  tagService: fakeTagService,
+                  sortProvider: TaskSortProvider(),
+                  filterProvider: filterProvider,
+                ),
           ),
         ],
         child: const MaterialApp(

@@ -4,6 +4,7 @@ import 'package:pin_and_paper/models/task.dart';
 import 'package:pin_and_paper/models/tag.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/providers/task_sort_provider.dart';
+import 'package:pin_and_paper/providers/task_filter_provider.dart';
 import 'package:pin_and_paper/providers/tag_provider.dart';
 import 'package:pin_and_paper/services/database_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
@@ -24,6 +25,7 @@ void main() {
 
     late TaskProvider taskProvider;
     late TagProvider tagProvider;
+    late TaskFilterProvider filterProvider;
     late TaskService taskService;
     late TagService tagService;
     late PreferencesService preferencesService;
@@ -41,14 +43,21 @@ void main() {
       tagService = TagService();
       preferencesService = PreferencesService();
       tagProvider = TagProvider(tagService: tagService);
+      filterProvider = TaskFilterProvider(tagProvider: tagProvider);
       taskProvider = TaskProvider(
         taskService: taskService,
         tagService: tagService,
         preferencesService: preferencesService,
         tagProvider: tagProvider,
         sortProvider: TaskSortProvider(),
+        filterProvider: filterProvider,
       );
     });
+
+    /// Helper: Wait for async listener callbacks to complete
+    Future<void> waitForFilterUpdate() async {
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
 
     group('Filter State Management', () {
       test('starts with empty filter', () {
@@ -62,7 +71,8 @@ void main() {
           logic: FilterLogic.or,
         );
 
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         expect(taskProvider.filterState, equals(filter));
         expect(taskProvider.hasActiveFilters, isTrue);
@@ -71,11 +81,13 @@ void main() {
       test('setFilter early returns if filter unchanged', () async {
         final filter = FilterState(selectedTagIds: ['tag1']);
 
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
         final firstState = taskProvider.filterState;
 
         // Set same filter again
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         // Should be exactly the same instance (early return optimization)
         expect(identical(taskProvider.filterState, firstState), isTrue);
@@ -83,11 +95,13 @@ void main() {
 
       test('clearFilters resets to empty', () async {
         final filter = FilterState(selectedTagIds: ['tag1']);
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         expect(taskProvider.hasActiveFilters, isTrue);
 
-        await taskProvider.clearFilters();
+        filterProvider.clearFilters();
+        await waitForFilterUpdate();
 
         expect(taskProvider.filterState, equals(FilterState.empty));
         expect(taskProvider.hasActiveFilters, isFalse);
@@ -129,7 +143,8 @@ void main() {
           logic: FilterLogic.or,
         );
 
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         expect(taskProvider.tasks.length, 1);
         expect(taskProvider.tasks.first.id, task1.id);
@@ -145,7 +160,8 @@ void main() {
           logic: FilterLogic.and,
         );
 
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         expect(taskProvider.tasks.length, 1);
         expect(taskProvider.tasks.first.id, task1.id); // Only task with both tags
@@ -156,7 +172,8 @@ void main() {
           presenceFilter: TagPresenceFilter.onlyTagged,
         );
 
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         expect(taskProvider.tasks.length, 2); // task1 and task2 have tags
         expect(taskProvider.tasks.map((t) => t.id), containsAll([task1.id, task2.id]));
@@ -167,7 +184,8 @@ void main() {
           presenceFilter: TagPresenceFilter.onlyUntagged,
         );
 
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         expect(taskProvider.tasks.length, 1);
         expect(taskProvider.tasks.first.id, task3.id); // Only task without tags
@@ -176,11 +194,13 @@ void main() {
       test('clearFilters reloads all tasks', () async {
         // Apply filter
         final filter = FilterState(selectedTagIds: [tag1.id]);
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
         expect(taskProvider.tasks.length, 1);
 
         // Clear filter
-        await taskProvider.clearFilters();
+        filterProvider.clearFilters();
+        await waitForFilterUpdate();
 
         expect(taskProvider.tasks.length, 3); // All tasks restored
       });
@@ -200,38 +220,38 @@ void main() {
       test('adds tag to empty filter', () async {
         expect(taskProvider.filterState.selectedTagIds, isEmpty);
 
-        await taskProvider.addTagFilter(tag1.id);
+        filterProvider.addTagFilter(tag1.id);
 
         expect(taskProvider.filterState.selectedTagIds, contains(tag1.id));
         expect(taskProvider.hasActiveFilters, isTrue);
       });
 
       test('adds second tag to existing filter', () async {
-        await taskProvider.addTagFilter(tag1.id);
+        filterProvider.addTagFilter(tag1.id);
 
-        await taskProvider.addTagFilter(tag2.id);
+        filterProvider.addTagFilter(tag2.id);
 
         expect(taskProvider.filterState.selectedTagIds.length, 2);
         expect(taskProvider.filterState.selectedTagIds, containsAll([tag1.id, tag2.id]));
       });
 
       test('ignores duplicate tag IDs', () async {
-        await taskProvider.addTagFilter(tag1.id);
+        filterProvider.addTagFilter(tag1.id);
 
-        await taskProvider.addTagFilter(tag1.id); // Duplicate
+        filterProvider.addTagFilter(tag1.id); // Duplicate
 
         expect(taskProvider.filterState.selectedTagIds.length, 1);
         expect(taskProvider.filterState.selectedTagIds, [tag1.id]);
       });
 
       test('rejects empty tag ID', () async {
-        await taskProvider.addTagFilter('');
+        filterProvider.addTagFilter('');
 
         expect(taskProvider.filterState.selectedTagIds, isEmpty);
       });
 
       test('rejects non-existent tag ID (M2: validation)', () async {
-        await taskProvider.addTagFilter('invalid-tag-id');
+        filterProvider.addTagFilter('invalid-tag-id');
 
         expect(taskProvider.filterState.selectedTagIds, isEmpty);
       });
@@ -251,21 +271,22 @@ void main() {
         final filter = FilterState(
           selectedTagIds: [tag1.id, tag2.id],
         );
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
       });
 
       test('removes tag from filter', () async {
         expect(taskProvider.filterState.selectedTagIds.length, 2);
 
-        await taskProvider.removeTagFilter(tag1.id);
+        filterProvider.removeTagFilter(tag1.id);
 
         expect(taskProvider.filterState.selectedTagIds.length, 1);
         expect(taskProvider.filterState.selectedTagIds, [tag2.id]);
       });
 
       test('clears filter when removing last tag', () async {
-        await taskProvider.removeTagFilter(tag1.id);
-        await taskProvider.removeTagFilter(tag2.id);
+        filterProvider.removeTagFilter(tag1.id);
+        filterProvider.removeTagFilter(tag2.id);
 
         expect(taskProvider.filterState, equals(FilterState.empty));
         expect(taskProvider.hasActiveFilters, isFalse);
@@ -276,9 +297,10 @@ void main() {
           selectedTagIds: [tag1.id],
           presenceFilter: TagPresenceFilter.onlyTagged,
         );
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
-        await taskProvider.removeTagFilter(tag1.id);
+        filterProvider.removeTagFilter(tag1.id);
 
         // Should still have presence filter active
         expect(taskProvider.filterState.presenceFilter, TagPresenceFilter.onlyTagged);
@@ -301,15 +323,15 @@ void main() {
 
         await taskProvider.loadTasks();
 
-        // Start two filter operations rapidly (without await on first)
+        // Start two filter operations rapidly
         final filter1 = FilterState(selectedTagIds: [tag1.id]);
         final filter2 = FilterState(selectedTagIds: [tag2.id]);
 
-        final future1 = taskProvider.setFilter(filter1);
-        final future2 = taskProvider.setFilter(filter2); // Immediately start second
+        filterProvider.setFilter(filter1);
+        filterProvider.setFilter(filter2); // Immediately set second
 
-        // Wait for both to complete
-        await Future.wait([future1, future2]);
+        // Wait for async listener to complete
+        await waitForFilterUpdate();
 
         // Should have filter2 results (latest operation wins)
         expect(taskProvider.filterState, equals(filter2));
@@ -330,7 +352,8 @@ void main() {
         await testDb.close();
 
         final filter = FilterState(selectedTagIds: [tag.id]);
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
 
         // Should have rolled back to previous filter (empty)
         expect(taskProvider.filterState, equals(previousFilter));
@@ -352,7 +375,8 @@ void main() {
 
         // Apply filter
         final filter = FilterState(selectedTagIds: [tag.id]);
-        await taskProvider.setFilter(filter);
+        filterProvider.setFilter(filter);
+        await waitForFilterUpdate();
       });
 
       test('filtered view updates when task completed', () async {

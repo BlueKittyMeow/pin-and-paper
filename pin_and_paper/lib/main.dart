@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'providers/task_provider.dart';
 import 'providers/tag_provider.dart'; // Phase 3.5
 import 'providers/task_sort_provider.dart'; // Phase 3.9 Refactor
+import 'providers/task_filter_provider.dart'; // Phase 3.9 Refactor
 import 'providers/settings_provider.dart'; // Phase 2
 import 'providers/brain_dump_provider.dart'; // Phase 2
 import 'screens/home_screen.dart';
@@ -72,21 +73,30 @@ class PinAndPaperApp extends StatelessWidget {
     // Phase 2: MultiProvider for multiple state management
     // Phase 3.5: Added TagProvider for tag management
     // Phase 3.6A: TaskProvider now depends on TagProvider (for filter validation)
-    // Phase 3.9 Refactor: Added TaskSortProvider, TaskProvider depends on both
-    // Order matters: TagProvider and TaskSortProvider must be created before TaskProvider
+    // Phase 3.9 Refactor: Added TaskSortProvider and TaskFilterProvider
+    // Order matters: TagProvider must be created first, then dependent providers
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => TagProvider()), // Phase 3.5
         ChangeNotifierProvider(create: (_) => TaskSortProvider()..loadPreferences()), // Phase 3.9 Refactor
-        ChangeNotifierProxyProvider2<TagProvider, TaskSortProvider, TaskProvider>(
+        ChangeNotifierProxyProvider<TagProvider, TaskFilterProvider>( // Phase 3.9 Refactor
+          create: (context) => TaskFilterProvider(
+            tagProvider: Provider.of<TagProvider>(context, listen: false),
+          ),
+          update: (context, tagProvider, previous) =>
+              previous ?? TaskFilterProvider(tagProvider: tagProvider),
+        ),
+        ChangeNotifierProxyProvider3<TagProvider, TaskSortProvider, TaskFilterProvider, TaskProvider>(
           create: (context) => TaskProvider(
             tagProvider: Provider.of<TagProvider>(context, listen: false),
             sortProvider: Provider.of<TaskSortProvider>(context, listen: false),
+            filterProvider: Provider.of<TaskFilterProvider>(context, listen: false),
           )..loadPreferences(),
-          update: (context, tagProvider, sortProvider, previous) =>
+          update: (context, tagProvider, sortProvider, filterProvider, previous) =>
               previous ?? TaskProvider(
                 tagProvider: tagProvider,
                 sortProvider: sortProvider,
+                filterProvider: filterProvider,
               )..loadPreferences(),
         ),
         ChangeNotifierProvider(create: (_) => SettingsProvider()..initialize()),
