@@ -84,24 +84,21 @@ class TaskHierarchyProvider extends ChangeNotifier {
   /// Rebuilds the tree structure while preserving expansion state.
   ///
   /// Parameters:
-  /// - `activeTasks`: List of active (non-completed) tasks to display in tree
-  void refreshTreeController(List<Task> activeTasks) {
-    // Update task list reference for closures
-    _tasks = activeTasks;
+  /// - `allTasks`: ALL tasks for childrenProvider to query (not just roots)
+  /// - `activeRoots`: List of root-level tasks to display in tree (includes orphaned tasks)
+  /// - `allTaskIds`: Set of ALL task IDs for pruning (not just active tasks)
+  ///
+  /// Bug Fix (Codex): Accept roots pre-computed by TaskProvider (handles orphaned tasks)
+  /// and allTaskIds from ALL tasks (not just filtered) to preserve expansion state
+  void refreshTreeController(List<Task> allTasks, List<Task> activeRoots, Set<String> allTaskIds) {
+    // Update task list reference for closures (childrenProvider needs access to all tasks)
+    _tasks = allTasks;
 
-    // Build active task roots (top-level tasks with no parent)
-    final activeRoots = activeTasks
-        .where((t) => t.parentId == null || t.parentId!.isEmpty)
-        .toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+    // Prune orphaned IDs from expansion state (only deleted tasks, not filtered ones)
+    // Bug Fix (Codex): Use allTaskIds (not just active) to preserve state on filter changes
+    _treeController.pruneOrphanedIds(allTaskIds);
 
-    // Get set of all task IDs for pruning orphaned expansion states
-    final taskIds = activeTasks.map((t) => t.id).toSet();
-
-    // Prune orphaned IDs from expansion state (deleted tasks)
-    _treeController.pruneOrphanedIds(taskIds);
-
-    // Update TreeController with new roots
+    // Update TreeController with new roots (already sorted by TaskProvider)
     _treeController.roots = activeRoots;
     _treeController.rebuild();
 

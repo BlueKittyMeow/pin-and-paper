@@ -342,19 +342,28 @@ class TaskProvider extends ChangeNotifier {
   // Active = incomplete OR (completed but has incomplete descendants)
   // Phase 3.9 Refactor: Delegates to TaskHierarchyProvider
   void _refreshTreeController() {
-    // Phase 3.6A: Build task ID set for efficient lookup
+    // Phase 3.6A: Build task ID set for efficient lookup (from ALL tasks)
     final taskIds = _tasks.map((t) => t.id).toSet();
 
-    // Build active task list: tasks to show in tree view
-    var activeTasks = _tasks.where((t) {
-      // Phase 3.6A: In filtered views, include task if it should be shown
+    // Build active task roots: tasks to show as root-level in tree view
+    // Phase 3.6A: In filtered views, treat as root if parent not in filtered results
+    var activeRoots = _tasks.where((t) {
+      // If task has a parent
+      if (t.parentId != null) {
+        // If parent exists in current task list, this is NOT a root
+        if (taskIds.contains(t.parentId)) {
+          return false;
+        }
+        // Parent not in filtered results - treat as orphaned root
+      }
+      // True root (parentId == null) or orphaned in filtered view
       if (!t.completed) return true; // Incomplete tasks always active
       return _hasIncompleteDescendants(t); // Completed with incomplete children
     }).toList();
 
     // Phase 3.7.5: Apply date filter
     if (_filterProvider.filterState.dateFilter != DateFilter.any) {
-      activeTasks = activeTasks.where((t) {
+      activeRoots = activeRoots.where((t) {
         switch (_filterProvider.filterState.dateFilter) {
           case DateFilter.overdue:
             if (t.dueDate == null) return false;
@@ -373,12 +382,13 @@ class TaskProvider extends ChangeNotifier {
       }).toList();
     }
 
-    // Phase 3.7.5: Apply sort to tasks
-    _sortTasks(activeTasks);
+    // Phase 3.7.5: Apply sort to root-level tasks
+    _sortTasks(activeRoots);
 
     // Phase 3.9 Refactor: Delegate tree refresh to TaskHierarchyProvider
-    // HierarchyProvider will build roots and manage expansion state
-    _hierarchyProvider.refreshTreeController(activeTasks);
+    // Pass all tasks (for childrenProvider), roots, and all task IDs for pruning
+    // Bug Fix (Codex): Pass ALL tasks and task IDs to preserve expansion state on filter changes
+    _hierarchyProvider.refreshTreeController(_tasks, activeRoots, taskIds);
   }
 
   // Phase 3.2: Get ALL visible completed tasks (with breadcrumbs for nested tasks)
@@ -997,8 +1007,11 @@ class TaskProvider extends ChangeNotifier {
   }
 
   /// Toggle collapse/expand for a task node
+  /// Phase 3.9 Refactor: Delegate to TaskHierarchyProvider
+  /// Bug Fix (Codex): Must call notifyListeners() so UI listening to TaskProvider gets updated
   void toggleCollapse(Task task) {
     _hierarchyProvider.toggleCollapse(task);
+    notifyListeners();
   }
 
   /// Phase 3.6B: Expand all tasks in the tree
