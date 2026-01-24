@@ -9,7 +9,10 @@ import 'providers/task_filter_provider.dart'; // Phase 3.9 Refactor
 import 'providers/task_hierarchy_provider.dart'; // Phase 3.9 Refactor
 import 'providers/settings_provider.dart'; // Phase 2
 import 'providers/brain_dump_provider.dart'; // Phase 2
+import 'providers/quiz_provider.dart'; // Phase 3.9
 import 'screens/home_screen.dart';
+import 'screens/quiz_screen.dart'; // Phase 3.9
+import 'services/quiz_service.dart'; // Phase 3.9
 import 'services/task_service.dart'; // Phase 3.3
 import 'services/date_parsing_service.dart'; // Phase 3.7
 import 'services/notification_service.dart'; // Phase 3.8
@@ -103,6 +106,7 @@ class PinAndPaperApp extends StatelessWidget {
                 hierarchyProvider: hierarchyProvider,
               )..loadPreferences(),
         ),
+        ChangeNotifierProvider(create: (_) => QuizProvider()), // Phase 3.9
         ChangeNotifierProvider(create: (_) => SettingsProvider()..initialize()),
         ChangeNotifierProxyProvider<SettingsProvider, BrainDumpProvider>(
           create: (context) => BrainDumpProvider(
@@ -115,9 +119,69 @@ class PinAndPaperApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Pin and Paper',
         theme: AppTheme.lightTheme,
-        home: const HomeScreen(),
+        home: const _LaunchRouter(),
         debugShowCheckedModeBanner: false,
       ),
     );
+  }
+}
+
+/// Routes to QuizScreen on first launch, HomeScreen otherwise.
+class _LaunchRouter extends StatefulWidget {
+  const _LaunchRouter();
+
+  @override
+  State<_LaunchRouter> createState() => _LaunchRouterState();
+}
+
+class _LaunchRouterState extends State<_LaunchRouter> {
+  bool _isLoading = true;
+  bool _quizCompleted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkQuizStatus();
+  }
+
+  Future<void> _checkQuizStatus() async {
+    try {
+      final quizService = QuizService();
+      final completed = await quizService.hasCompletedOnboardingQuiz();
+      if (mounted) {
+        setState(() {
+          _quizCompleted = completed;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // On error, skip quiz and go to home
+      if (mounted) {
+        setState(() {
+          _quizCompleted = true;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppTheme.warmBeige,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.deepShadow,
+          ),
+        ),
+      );
+    }
+
+    if (_quizCompleted) {
+      return const HomeScreen();
+    }
+
+    return const QuizScreen();
   }
 }
