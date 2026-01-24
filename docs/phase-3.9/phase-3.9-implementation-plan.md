@@ -142,7 +142,24 @@ QuizScreen
 
 ## Database Schema Design
 
-### Option 1: SharedPreferences (Recommended)
+**CRITICAL: Database Version Update Required**
+
+Current version: 10 (from Phase 3.8)
+New version: 11
+
+**Changes required in database_service.dart:**
+1. Update `AppConstants.databaseVersion` from `10` to `11`
+2. Create new method `_migrateToV11(Database db)`
+3. Add `if (oldVersion < 11) { await _migrateToV11(db); }` to `_onUpgrade()`
+
+This migration adds:
+- New field `enable_quick_add_date_parsing` to `user_settings` table
+- New field `weekday_reference_logic` to `user_settings` table
+- New table `quiz_responses` for persistent quiz answers and badges
+
+---
+
+### Option 1: SharedPreferences (NOT Recommended for this phase)
 
 **Rationale:**
 - No schema migration needed
@@ -187,9 +204,14 @@ class QuizService {
 }
 ```
 
-### Option 2: Database Table (Alternative)
+### Option 2: Database Table (RECOMMENDED)
 
-**Use if:** You want quiz metadata queryable alongside user_settings or plan to store individual answers for analytics.
+**Rationale:**
+- Supports "Your Time Personality" and "Explain My Settings" features
+- Easier to query for badge display after app restart
+- More robust than JSON in SharedPreferences
+- Required for Q2 answer persistence (weekday logic)
+- Enables future analytics on quiz responses
 
 **Schema:**
 ```sql
@@ -198,25 +220,40 @@ CREATE TABLE quiz_responses (
   quiz_version INTEGER DEFAULT 1,
   completed INTEGER DEFAULT 0,
   completed_at INTEGER,
-  answers TEXT, -- JSON: {"q1": "A", "q2": "B", ...}
-  badges_earned TEXT, -- JSON: ["night_owl", "monday_starter", ...]
+  answers TEXT NOT NULL, -- JSON: {"1": "q1_a", "2": "q2_b", ...}
+  badges_earned TEXT NOT NULL, -- JSON: ["night_owl", "monday_starter", ...]
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 )
 ```
 
-**Migration (database_service.dart):**
+**Migration (database_service.dart, version 11):**
 ```dart
-// In _onUpgrade, add version 11:
 if (oldVersion < 11) {
+  await _migrateToV11(db);
+}
+
+Future<void> _migrateToV11(Database db) async {
+  // Add new fields to user_settings
+  await db.execute('''
+    ALTER TABLE user_settings
+    ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1
+  ''');
+
+  await db.execute('''
+    ALTER TABLE user_settings
+    ADD COLUMN weekday_reference_logic TEXT DEFAULT 'forward'
+  ''');
+
+  // Create quiz_responses table
   await db.execute('''
     CREATE TABLE quiz_responses (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       quiz_version INTEGER DEFAULT 1,
       completed INTEGER DEFAULT 0,
       completed_at INTEGER,
-      answers TEXT,
-      badges_earned TEXT,
+      answers TEXT NOT NULL,
+      badges_earned TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
@@ -224,23 +261,23 @@ if (oldVersion < 11) {
 }
 ```
 
-### New UserSettings Field
-
-**Required for Question 7 (Quick Add Date Parsing):**
-
-Add to `user_settings` table:
-```sql
-ALTER TABLE user_settings ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1;
+**Update AppConstants.databaseVersion:**
+```dart
+static const int databaseVersion = 11; // Phase 3.9: quiz responses + enable_quick_add_date_parsing + weekday_reference_logic
 ```
 
-**Migration (database_service.dart, version 11):**
-```dart
-if (oldVersion < 11) {
-  await db.execute('''
-    ALTER TABLE user_settings
-    ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1
-  ''');
-}
+### New UserSettings Fields
+
+**Required for Phase 3.9:**
+
+Add to `user_settings` table (see migration above in Option 2):
+```sql
+-- Question 7: Quick Add Date Parsing
+ALTER TABLE user_settings ADD COLUMN enable_quick_add_date_parsing INTEGER DEFAULT 1;
+
+-- Question 2: Weekday Reference Logic (for future NL parsing)
+ALTER TABLE user_settings ADD COLUMN weekday_reference_logic TEXT DEFAULT 'forward';
+-- Options: 'forward', 'calendar_week', 'flexible'
 ```
 
 **Update UserSettings Model:**
@@ -250,17 +287,21 @@ if (oldVersion < 11) {
 class UserSettings {
   // ... existing fields ...
 
-  final bool enableQuickAddDateParsing; // NEW FIELD
+  final bool enableQuickAddDateParsing; // NEW: Q7 - Quick Add date parsing
+  final String weekdayReferenceLogic; // NEW: Q2 - "this Friday" logic
 
   const UserSettings({
     // ... existing params ...
     this.enableQuickAddDateParsing = true, // Default: ON
+    this.weekdayReferenceLogic = 'forward', // Default: forward-looking
   });
 
   factory UserSettings.fromMap(Map<String, dynamic> map) {
     return UserSettings(
       // ... existing mappings ...
-      enableQuickAddDateParsing: (map['enable_quick_add_date_parsing'] as int?) == 1,
+      // CRITICAL: Use != 0 (not == 1) to default true on null
+      enableQuickAddDateParsing: (map['enable_quick_add_date_parsing'] as int?) != 0,
+      weekdayReferenceLogic: (map['weekday_reference_logic'] as String?) ?? 'forward',
     );
   }
 
@@ -268,18 +309,38 @@ class UserSettings {
     return {
       // ... existing mappings ...
       'enable_quick_add_date_parsing': enableQuickAddDateParsing ? 1 : 0,
+      'weekday_reference_logic': weekdayReferenceLogic,
     };
   }
 
   UserSettings copyWith({
     // ... existing params ...
     bool? enableQuickAddDateParsing,
+    String? weekdayReferenceLogic,
   }) {
     return UserSettings(
       // ... existing assignments ...
       enableQuickAddDateParsing: enableQuickAddDateParsing ?? this.enableQuickAddDateParsing,
+      weekdayReferenceLogic: weekdayReferenceLogic ?? this.weekdayReferenceLogic,
     );
   }
+}
+```
+
+---
+
+## Required Constants
+
+**Add to `lib/utils/constants.dart`:**
+
+```dart
+class AppConstants {
+  // ... existing constants ...
+
+  // Database tables (Phase 3.9)
+  static const String quizResponsesTable = 'quiz_responses';
+
+  // ... existing constants ...
 }
 ```
 
@@ -315,17 +376,24 @@ class QuizQuestion {
 // lib/models/quiz_answer.dart
 
 class QuizAnswer {
-  final String id; // e.g., "q1_a", "q1_b"
+  final String id; // e.g., "q1_a", "q1_b", "q4_custom"
   final String label; // User-facing text
   final String? description; // Additional explanation
+  final bool showTimePicker; // NEW: If true, show time picker when selected
 
   const QuizAnswer({
     required this.id,
     required this.label,
     this.description,
+    this.showTimePicker = false, // Default: false (most answers don't need picker)
   });
 }
 ```
+
+**Notes:**
+- `showTimePicker = true` is used for Q4 and Q5 custom time options
+- When user selects a custom answer, `showTimePicker()` is triggered
+- Selected hour is appended to answer ID: `q4_custom_20` (20:00 selected)
 
 ### Badge Model
 
@@ -378,50 +446,113 @@ class Badge {
 ```dart
 // lib/services/quiz_service.dart
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'database_service.dart';
+import '../utils/constants.dart';
 
 class QuizService {
-  static const String _quizCompletedKey = 'quiz_completed';
-  static const String _quizCompletedAtKey = 'quiz_completed_at';
-  static const String _quizVersionKey = 'quiz_version';
+  final DatabaseService _dbService = DatabaseService();
 
   /// Check if user has completed the onboarding quiz
   Future<bool> hasCompletedOnboardingQuiz() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_quizCompletedKey) ?? false;
-  }
-
-  /// Get the timestamp when quiz was completed
-  Future<DateTime?> getQuizCompletedAt() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isoString = prefs.getString(_quizCompletedAtKey);
-    return isoString != null ? DateTime.parse(isoString) : null;
-  }
-
-  /// Mark quiz as completed (called after settings applied)
-  Future<void> markQuizCompleted() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_quizCompletedKey, true);
-    await prefs.setString(
-      _quizCompletedAtKey,
-      DateTime.now().toIso8601String(),
+    final db = await _dbService.database;
+    final result = await db.query(
+      AppConstants.quizResponsesTable,
+      where: 'id = ?',
+      whereArgs: [1],
     );
-    await prefs.setInt(_quizVersionKey, 1);
+
+    if (result.isEmpty) return false;
+    return (result.first['completed'] as int?) == 1;
   }
 
-  /// Reset quiz state (for testing or "Retake Quiz")
-  /// Note: Does NOT reset UserSettings - only quiz completion status
+  /// Get quiz completion timestamp
+  Future<DateTime?> getQuizCompletedAt() async {
+    final db = await _dbService.database;
+    final result = await db.query(
+      AppConstants.quizResponsesTable,
+      where: 'id = ?',
+      whereArgs: [1],
+    );
+
+    if (result.isEmpty) return null;
+    final timestamp = result.first['completed_at'] as int?;
+    return timestamp != null
+      ? DateTime.fromMillisecondsSinceEpoch(timestamp)
+      : null;
+  }
+
+  /// Save quiz completion with answers and badges
+  Future<void> saveQuizCompletion({
+    required Map<int, String> answers,
+    required List<String> badgeIds,
+  }) async {
+    final db = await _dbService.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    final answersJson = jsonEncode(answers.map((k, v) => MapEntry(k.toString(), v)));
+    final badgesJson = jsonEncode(badgeIds);
+
+    await db.insert(
+      AppConstants.quizResponsesTable,
+      {
+        'id': 1,
+        'quiz_version': 1,
+        'completed': 1,
+        'completed_at': now,
+        'answers': answersJson,
+        'badges_earned': badgesJson,
+        'created_at': now,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get saved quiz answers (for "Explain My Settings")
+  Future<Map<int, String>?> getSavedAnswers() async {
+    final db = await _dbService.database;
+    final result = await db.query(
+      AppConstants.quizResponsesTable,
+      where: 'id = ?',
+      whereArgs: [1],
+    );
+
+    if (result.isEmpty) return null;
+
+    final answersJson = result.first['answers'] as String?;
+    if (answersJson == null) return null;
+
+    final decoded = jsonDecode(answersJson) as Map<String, dynamic>;
+    return decoded.map((k, v) => MapEntry(int.parse(k), v as String));
+  }
+
+  /// Get earned badges (for "Your Time Personality")
+  Future<List<String>?> getEarnedBadgeIds() async {
+    final db = await _dbService.database;
+    final result = await db.query(
+      AppConstants.quizResponsesTable,
+      where: 'id = ?',
+      whereArgs: [1],
+    );
+
+    if (result.isEmpty) return null;
+
+    final badgesJson = result.first['badges_earned'] as String?;
+    if (badgesJson == null) return null;
+
+    final decoded = jsonDecode(badgesJson) as List<dynamic>;
+    return decoded.cast<String>();
+  }
+
+  /// Reset quiz (for "Retake Quiz")
   Future<void> resetQuiz() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_quizCompletedKey);
-    await prefs.remove(_quizCompletedAtKey);
-    // Keep version to track if user has retaken
-  }
-
-  /// Get current quiz version (for future quiz updates)
-  Future<int> getQuizVersion() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_quizVersionKey) ?? 0;
+    final db = await _dbService.database;
+    await db.delete(
+      AppConstants.quizResponsesTable,
+      where: 'id = ?',
+      whereArgs: [1],
+    );
   }
 }
 ```
@@ -463,8 +594,16 @@ class QuizInferenceService {
     }
 
     // Question 2: Weekday Reference Logic
-    // (Not directly mapped to a setting - affects DateParsingService behavior)
-    // Store in a future field if needed, or document as design choice
+    final q2Answer = answers[2];
+    if (q2Answer == 'q2_a') {
+      inferred = inferred.copyWith(weekdayReferenceLogic: 'forward');
+    } else if (q2Answer == 'q2_b') {
+      inferred = inferred.copyWith(weekdayReferenceLogic: 'calendar_week');
+    } else if (q2Answer == 'q2_c') {
+      inferred = inferred.copyWith(weekdayReferenceLogic: 'flexible');
+    }
+    // Note: This setting is not actively used yet, but will be available for
+    // "text tuesday" style NL date parsing when DateParsingService needs it.
 
     // Question 3: Week Start Preference
     final q3Answer = answers[3];
@@ -478,7 +617,7 @@ class QuizInferenceService {
       inferred = inferred.copyWith(weekStartDay: day);
     }
 
-    // Question 4: "Tonight" Keyword
+    // Question 4: "Tonight" / "Evening" Keyword (with custom time support)
     final q4Answer = answers[4];
     if (q4Answer == 'q4_a') {
       inferred = inferred.copyWith(tonightHour: 18); // 6-8pm
@@ -486,9 +625,13 @@ class QuizInferenceService {
       inferred = inferred.copyWith(tonightHour: 20); // 8-10pm
     } else if (q4Answer == 'q4_c') {
       inferred = inferred.copyWith(tonightHour: 22); // 10pm+
+    } else if (q4Answer?.startsWith('q4_custom_') == true) {
+      // Custom time: q4_custom_[hour]
+      final hour = int.parse(q4Answer!.split('_').last);
+      inferred = inferred.copyWith(tonightHour: hour);
     }
 
-    // Question 5: "Morning" Keyword (User-Driven)
+    // Question 5: "Morning" Keyword (with custom time support)
     final q5Answer = answers[5];
     if (q5Answer == 'q5_a') {
       // Early morning preference
@@ -508,6 +651,14 @@ class QuizInferenceService {
         morningHour: 11,
         earlyMorningHour: 7,
         noonHour: 13, // Shift noon later too
+      );
+    } else if (q5Answer?.startsWith('q5_custom_') == true) {
+      // Custom time: q5_custom_[hour]
+      final hour = int.parse(q5Answer!.split('_').last);
+      final earlyMorningHour = hour <= 8 ? hour - 2 : (hour >= 11 ? hour - 4 : 5);
+      inferred = inferred.copyWith(
+        morningHour: hour,
+        earlyMorningHour: earlyMorningHour,
       );
     }
 
@@ -607,16 +758,43 @@ class QuizInferenceService {
       badges.add(BadgeDefinitions.flexibleInterpreter);
     }
 
-    // Question 5: Daily Rhythm Badges
+    // Question 4 & 5: Daily Rhythm Badges (with custom time support)
     final q5 = answers[5];
     final q4 = answers[4];
 
-    if (q5 == 'q5_a' && q4 == 'q4_a') {
-      badges.add(BadgeDefinitions.dawnGreeter);
-    } else if (q5 == 'q5_b' && q4 == 'q4_b') {
-      badges.add(BadgeDefinitions.classicScheduler);
-    } else if (q5 == 'q5_c') {
-      badges.add(BadgeDefinitions.lateMorningLuxurist);
+    // Handle Q4 custom time for twilight worker badge
+    if (q4?.startsWith('q4_custom_') == true) {
+      final hour = int.parse(q4!.split('_').last);
+      if (hour >= 23) {
+        badges.add(BadgeDefinitions.twilightWorker);
+      }
+    }
+
+    // Handle Q5 custom time and preset answers
+    if (q5?.startsWith('q5_custom_') == true) {
+      final hour = int.parse(q5!.split('_').last);
+      if (hour <= 8) {
+        badges.add(BadgeDefinitions.dawnGreeter);
+      } else if (hour >= 11) {
+        badges.add(BadgeDefinitions.lateMorningLuxurist);
+      } else if (hour >= 9 && hour <= 10) {
+        // Mid-morning custom time - classic scheduler if evening also mid-range
+        final q4Hour = q4?.startsWith('q4_custom_') == true
+            ? int.parse(q4!.split('_').last)
+            : (q4 == 'q4_a' ? 18 : (q4 == 'q4_b' ? 20 : 22));
+        if (q4Hour >= 20 && q4Hour <= 22) {
+          badges.add(BadgeDefinitions.classicScheduler);
+        }
+      }
+    } else {
+      // Preset answers
+      if (q5 == 'q5_a' && q4 == 'q4_a') {
+        badges.add(BadgeDefinitions.dawnGreeter);
+      } else if (q5 == 'q5_b' && q4 == 'q4_b') {
+        badges.add(BadgeDefinitions.classicScheduler);
+      } else if (q5 == 'q5_c') {
+        badges.add(BadgeDefinitions.lateMorningLuxurist);
+      }
     }
 
     // Question 6: Display Preference Badges
@@ -671,35 +849,50 @@ class QuizInferenceService {
   Map<int, String> prefillFromSettings(UserSettings settings) {
     final answers = <int, String>{};
 
+    // Clamp values to prevent invalid answer IDs
+    final clampedWeekStart = settings.weekStartDay.clamp(0, 6);
+    final clampedCutoffHour = settings.todayCutoffHour.clamp(0, 23);
+    final clampedTonightHour = settings.tonightHour.clamp(0, 23);
+    final clampedMorningHour = settings.morningHour.clamp(0, 23);
+
     // Q1: Circadian rhythm
-    if (settings.todayCutoffHour == 0) {
+    if (clampedCutoffHour == 0) {
       answers[1] = 'q1_b'; // Midnight purist
     } else {
       answers[1] = 'q1_a'; // Night owl
     }
 
+    // Q2: Weekday reference logic
+    if (settings.weekdayReferenceLogic == 'forward') {
+      answers[2] = 'q2_a';
+    } else if (settings.weekdayReferenceLogic == 'calendar_week') {
+      answers[2] = 'q2_b';
+    } else {
+      answers[2] = 'q2_c'; // flexible
+    }
+
     // Q3: Week start
-    if (settings.weekStartDay == 0) {
+    if (clampedWeekStart == 0) {
       answers[3] = 'q3_a'; // Sunday
-    } else if (settings.weekStartDay == 1) {
+    } else if (clampedWeekStart == 1) {
       answers[3] = 'q3_b'; // Monday
     } else {
-      answers[3] = 'q3_c_${settings.weekStartDay}'; // Custom
+      answers[3] = 'q3_c_$clampedWeekStart'; // Custom (now clamped 0-6)
     }
 
     // Q4: Tonight
-    if (settings.tonightHour <= 18) {
+    if (clampedTonightHour <= 18) {
       answers[4] = 'q4_a';
-    } else if (settings.tonightHour <= 20) {
+    } else if (clampedTonightHour <= 20) {
       answers[4] = 'q4_b';
     } else {
       answers[4] = 'q4_c';
     }
 
     // Q5: Morning
-    if (settings.morningHour <= 7) {
+    if (clampedMorningHour <= 7) {
       answers[5] = 'q5_a';
-    } else if (settings.morningHour <= 9) {
+    } else if (clampedMorningHour <= 9) {
       answers[5] = 'q5_b';
     } else {
       answers[5] = 'q5_c';
@@ -738,6 +931,95 @@ class QuizInferenceService {
 
 ---
 
+## Quiz Question Definitions
+
+### Complete Question List with Custom Time Picker Support
+
+```dart
+// lib/utils/quiz_questions.dart
+
+class QuizQuestions {
+  static final List<QuizQuestion> all = [
+    // ... Q1-Q3 remain unchanged ...
+
+    // Question 4: "Tonight" / "Evening" Time (UPDATED with custom picker)
+    QuizQuestion(
+      id: 4,
+      question: 'You tell someone to meet you "tonight." What time range do you typically mean?',
+      description: 'This helps us understand your "tonight" / "evening" keyword',
+      answers: [
+        QuizAnswer(
+          id: 'q4_a',
+          label: 'Early evening (6-8pm)',
+          description: 'Dinner time, early plans',
+        ),
+        QuizAnswer(
+          id: 'q4_b',
+          label: 'Classic evening (8-10pm)',
+          description: 'Standard evening hours',
+        ),
+        QuizAnswer(
+          id: 'q4_c',
+          label: 'Late night (10pm or later)',
+          description: 'Night owl hours',
+        ),
+        QuizAnswer(
+          id: 'q4_custom', // Base ID, hour appended when selected
+          label: 'Let me pick the exact time',
+          description: 'Choose your preferred "tonight" time',
+          showTimePicker: true, // Triggers time picker on selection
+        ),
+      ],
+    ),
+
+    // Question 5: "Morning" Time Preference (UPDATED with custom picker)
+    QuizQuestion(
+      id: 5,
+      question: 'You\'re planning your day and schedule a task for "morning." What time do YOU typically mean?',
+      description: 'This sets your personal "morning" time',
+      answers: [
+        QuizAnswer(
+          id: 'q5_a',
+          label: 'Early morning (7-8am)',
+          description: 'Early riser, dawn hours',
+        ),
+        QuizAnswer(
+          id: 'q5_b',
+          label: 'Mid-morning (9-10am)',
+          description: 'Standard morning routine',
+        ),
+        QuizAnswer(
+          id: 'q5_c',
+          label: 'Late morning (11am-noon)',
+          description: 'Leisurely morning start',
+        ),
+        QuizAnswer(
+          id: 'q5_custom', // Base ID, hour appended when selected
+          label: 'Let me pick the exact time',
+          description: 'Choose your preferred "morning" time',
+          showTimePicker: true, // Triggers time picker on selection
+        ),
+      ],
+    ),
+
+    // ... Q6-Q9 remain unchanged ...
+  ];
+}
+```
+
+**Time Picker Implementation Notes:**
+
+When `showTimePicker = true`:
+1. User taps the answer option
+2. `showTimePicker()` dialog appears with `initialTime: TimeOfDay.now()`
+3. User selects a time (only hour is used)
+4. Answer ID is generated: `q4_custom_20` (for 20:00/8pm)
+5. Custom time is stored in `QuizProvider._customTimes` map
+6. UI shows selected time in highlighted box below the option
+7. Badge awarded based on hour range, not exact preset
+
+---
+
 ## State Management
 
 ### QuizProvider
@@ -746,20 +1028,24 @@ class QuizInferenceService {
 // lib/providers/quiz_provider.dart
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../models/quiz_question.dart';
 import '../models/badge.dart';
 import '../models/user_settings.dart';
 import '../services/quiz_inference_service.dart';
 import '../services/user_settings_service.dart';
+import '../services/quiz_service.dart';
 import '../utils/quiz_questions.dart';
 
 class QuizProvider extends ChangeNotifier {
   final QuizInferenceService _inferenceService = QuizInferenceService();
   final UserSettingsService _settingsService = UserSettingsService();
+  final QuizService _quizService = QuizService();
 
   // Quiz state
   int _currentQuestionIndex = 0;
   Map<int, String> _answers = {}; // Question ID → Answer ID
+  Map<int, TimeOfDay> _customTimes = {}; // Question ID → Selected custom time
   bool _isSubmitting = false;
   String? _errorMessage;
   List<Badge>? _earnedBadges;
@@ -767,6 +1053,7 @@ class QuizProvider extends ChangeNotifier {
   // Getters
   int get currentQuestionIndex => _currentQuestionIndex;
   Map<int, String> get answers => _answers;
+  Map<int, TimeOfDay> get customTimes => _customTimes;
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
   List<Badge>? get earnedBadges => _earnedBadges;
@@ -786,6 +1073,16 @@ class QuizProvider extends ChangeNotifier {
   /// Select an answer for the current question
   void selectAnswer(String answerId) {
     _answers[currentQuestion.id] = answerId;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Select an answer with optional custom time (for Q4, Q5 custom time picker)
+  void selectAnswerWithTime(int questionId, String answerId, {TimeOfDay? customTime}) {
+    _answers[questionId] = answerId;
+    if (customTime != null) {
+      _customTimes[questionId] = customTime;
+    }
     _errorMessage = null;
     notifyListeners();
   }
@@ -816,6 +1113,9 @@ class QuizProvider extends ChangeNotifier {
 
   /// Submit quiz and infer settings
   Future<bool> submitQuiz() async {
+    // Guard against double-submit
+    if (_isSubmitting) return false;
+
     _isSubmitting = true;
     _errorMessage = null;
     notifyListeners();
@@ -835,6 +1135,12 @@ class QuizProvider extends ChangeNotifier {
 
       // Save settings to database
       await _settingsService.updateUserSettings(inferredSettings);
+
+      // CRITICAL: Save quiz responses (answers + badges) to database
+      await _quizService.saveQuizCompletion(
+        answers: _answers,
+        badgeIds: _earnedBadges!.map((b) => b.id).toList(),
+      );
 
       _isSubmitting = false;
       notifyListeners();
@@ -1085,7 +1391,10 @@ class _QuizScreenState extends State<QuizScreen> {
               )
             else
               ElevatedButton(
-                onPressed: _goToNextQuestion,
+                // NEW: Disable Next until current question is answered
+                onPressed: quizProvider.currentQuestionAnswered
+                    ? _goToNextQuestion
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.deepShadow,
                   foregroundColor: Colors.white,
@@ -1116,13 +1425,23 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _submitQuiz() async {
     final quizProvider = context.read<QuizProvider>();
 
-    final success = await quizProvider.submitQuiz();
-    if (!success || !mounted) return;
+    // Validate all 9 questions are answered
+    final allAnswered = quizProvider.questions.every(
+      (q) => quizProvider.answers.containsKey(q.id),
+    );
 
-    // Mark quiz as completed in SharedPreferences
-    if (!widget.isRetake) {
-      await QuizService().markQuizCompleted();
+    if (!allAnswered) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please answer all questions before submitting'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+      return;
     }
+
+    final success = await quizProvider.submitQuiz();
+    if (!success || !mounted) return
 
     // Navigate to badge reveal screen
     Navigator.of(context).pushReplacement(
