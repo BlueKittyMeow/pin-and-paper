@@ -9,6 +9,7 @@ import '../models/task_sort_mode.dart'; // Phase 3.7.5
 import '../models/tag.dart'; // Phase 3.5
 import '../models/task_suggestion.dart'; // Phase 2
 import '../providers/tag_provider.dart'; // Phase 3.6A
+import '../providers/task_sort_provider.dart'; // Phase 3.9 Refactor
 import '../services/task_service.dart';
 import '../services/tag_service.dart'; // Phase 3.5
 import '../services/database_service.dart'; // Phase 3.6A: For database access
@@ -59,6 +60,7 @@ class TaskProvider extends ChangeNotifier {
   final PreferencesService _preferencesService;
   final TagService _tagService; // Phase 3.5
   final TagProvider _tagProvider; // Phase 3.6A
+  final TaskSortProvider _sortProvider; // Phase 3.9 Refactor
   final ReminderService _reminderService = ReminderService(); // Phase 3.8
 
   TaskProvider({
@@ -66,10 +68,12 @@ class TaskProvider extends ChangeNotifier {
     PreferencesService? preferencesService,
     TagService? tagService, // Phase 3.5
     TagProvider? tagProvider, // Phase 3.6A
+    TaskSortProvider? sortProvider, // Phase 3.9 Refactor
   })  : _taskService = taskService ?? TaskService(),
         _preferencesService = preferencesService ?? PreferencesService(),
         _tagService = tagService ?? TagService(), // Phase 3.5
-        _tagProvider = tagProvider ?? TagProvider() { // Phase 3.6A
+        _tagProvider = tagProvider ?? TagProvider(), // Phase 3.6A
+        _sortProvider = sortProvider ?? TaskSortProvider() { // Phase 3.9 Refactor
     // Phase 3.2: Initialize TreeController for hierarchical view
     // Phase 3.6.5: Use TaskTreeController for ID-based expansion state (fixes corruption bug)
     _treeController = TaskTreeController(
@@ -80,6 +84,15 @@ class TaskProvider extends ChangeNotifier {
       },
       parentProvider: (Task task) => _findParent(task.parentId),
     );
+
+    // Phase 3.9 Refactor: Listen to sort provider changes and refresh tree
+    _sortProvider.addListener(_onSortChanged);
+  }
+
+  /// Phase 3.9 Refactor: Callback when sort provider changes
+  void _onSortChanged() {
+    _refreshTreeController();
+    notifyListeners();
   }
 
   List<Task> _tasks = [];
@@ -106,10 +119,6 @@ class TaskProvider extends ChangeNotifier {
   // Phase 3.2: Hierarchy state
   bool _isReorderMode = false;
   late TaskTreeController _treeController; // Phase 3.6.5: Use custom controller for ID-based state
-
-  // Phase 3.7.5: Sort state
-  TaskSortMode _sortMode = TaskSortMode.manual;
-  bool _sortReversed = false;
 
   // Phase 3.6.5: Tree version counter to force AnimatedTreeView rebuild
   // Incremented when tree structure changes (completion, etc.)
@@ -139,9 +148,9 @@ class TaskProvider extends ChangeNotifier {
   bool get isReorderMode => _isReorderMode;
   TreeController<Task> get treeController => _treeController;
 
-  // Phase 3.7.5: Sort getters
-  TaskSortMode get sortMode => _sortMode;
-  bool get sortReversed => _sortReversed;
+  // Phase 3.7.5 / Phase 3.9 Refactor: Sort getters now delegate to TaskSortProvider
+  TaskSortMode get sortMode => _sortProvider.sortMode;
+  bool get sortReversed => _sortProvider.sortReversed;
 
   List<Task> get incompleteTasks =>
       _tasks.where((task) => !task.completed).toList();
@@ -561,17 +570,11 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Phase 2 Stretch: Load preferences (call during initialization)
+  // Phase 3.9 Refactor: Sort preferences now loaded by TaskSortProvider
   Future<void> loadPreferences() async {
     _hideOldCompleted = await _preferencesService.getHideOldCompleted();
     _hideThresholdHours = await _preferencesService.getHideThresholdHours();
-    // Phase 3.7.5: Load sort preferences
-    final sortModeStr = await _preferencesService.getSortMode();
-    _sortMode = TaskSortMode.values.firstWhere(
-      (m) => m.name == sortModeStr,
-      orElse: () => TaskSortMode.manual,
-    );
-    _sortReversed = await _preferencesService.getSortReversed();
-    _refreshTreeController(); // Phase 3.7: Apply sort immediately on load
+    _refreshTreeController(); // Apply current sort from sortProvider
     notifyListeners();
   }
 
@@ -897,40 +900,23 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  // ========== Phase 3.7.5: Sort Methods ==========
-
-  /// Change sort mode for root-level tasks
-  void setSortMode(TaskSortMode mode) {
-    if (_sortMode == mode) return;
-    _sortMode = mode;
-    _sortReversed = false;
-    _preferencesService.setSortMode(mode.name);
-    _preferencesService.setSortReversed(false);
-    _refreshTreeController();
-    notifyListeners();
-  }
-
-  /// Toggle sort direction
-  void toggleSortReversed() {
-    _sortReversed = !_sortReversed;
-    _preferencesService.setSortReversed(_sortReversed);
-    _refreshTreeController();
-    notifyListeners();
-  }
+  // ========== Phase 3.7.5 / Phase 3.9 Refactor: Sort Methods ==========
+  // setSortMode and toggleSortReversed removed - now handled by TaskSortProvider
 
   /// Sort a list of tasks in-place based on current sort mode
+  /// Phase 3.9 Refactor: Now uses TaskSortProvider's state instead of local fields
   void _sortTasks(List<Task> tasks) {
-    switch (_sortMode) {
+    switch (_sortProvider.sortMode) {
       case TaskSortMode.manual:
         tasks.sort((a, b) {
           final cmp = a.position.compareTo(b.position);
-          return _sortReversed ? -cmp : cmp;
+          return _sortProvider.sortReversed ? -cmp : cmp;
         });
 
       case TaskSortMode.recentlyCreated:
         tasks.sort((a, b) {
           final cmp = b.createdAt.compareTo(a.createdAt);
-          return _sortReversed ? -cmp : cmp;
+          return _sortProvider.sortReversed ? -cmp : cmp;
         });
 
       case TaskSortMode.dueSoonest:
@@ -941,7 +927,7 @@ class TaskProvider extends ChangeNotifier {
           if (a.dueDate == null) return 1;
           if (b.dueDate == null) return -1;
           final cmp = a.dueDate!.compareTo(b.dueDate!);
-          return _sortReversed ? -cmp : cmp;
+          return _sortProvider.sortReversed ? -cmp : cmp;
         });
     }
   }
@@ -949,14 +935,16 @@ class TaskProvider extends ChangeNotifier {
   // ========== Phase 3.2: Hierarchy Methods ==========
 
   /// Enter/exit reorder mode
+  /// Phase 3.9 Refactor: Now uses TaskSortProvider to change sort mode
   void setReorderMode(bool enabled) {
     _isReorderMode = enabled;
-    if (enabled && _sortMode != TaskSortMode.manual) {
-      _sortMode = TaskSortMode.manual;
-      _sortReversed = false;
-      _refreshTreeController();
+    if (enabled && _sortProvider.sortMode != TaskSortMode.manual) {
+      _sortProvider.setSortMode(TaskSortMode.manual);
+      // Note: sortProvider will notify listeners which triggers _onSortChanged
+      // which calls _refreshTreeController and notifyListeners
+    } else {
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// Toggle collapse/expand for a task node
@@ -1593,6 +1581,7 @@ class TaskProvider extends ChangeNotifier {
   @override
   void dispose() {
     _highlightTimer?.cancel();
+    _sortProvider.removeListener(_onSortChanged); // Phase 3.9 Refactor
     super.dispose();
   }
 }
