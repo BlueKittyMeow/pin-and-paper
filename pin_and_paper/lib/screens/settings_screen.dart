@@ -1,19 +1,24 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Badge;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../models/badge.dart'; // Phase 3.9
+import '../models/user_settings.dart'; // Phase 3.8: For Value<T> in copyWith
 import '../providers/settings_provider.dart';
 import '../providers/task_provider.dart';
 import '../services/settings_service.dart';
 import '../services/api_usage_service.dart';
 import '../services/database_service.dart';
-import '../models/user_settings.dart'; // Phase 3.8: For Value<T> in copyWith
 import '../services/notification_service.dart'; // Phase 3.8
+import '../services/quiz_service.dart'; // Phase 3.9
 import '../services/user_settings_service.dart'; // Phase 3.8
-import '../utils/theme.dart';
 import '../services/reminder_service.dart'; // Phase 3.8
+import '../utils/badge_definitions.dart'; // Phase 3.9
+import '../utils/theme.dart';
 import '../utils/constants.dart';
 import '../widgets/permission_explanation_dialog.dart'; // Phase 3.8
+import '../widgets/settings/time_keyword_picker.dart'; // Phase 3.9
+import 'quiz_screen.dart'; // Phase 3.9
 import 'recently_deleted_screen.dart'; // Phase 3.3
 
 class SettingsScreen extends StatefulWidget {
@@ -46,12 +51,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Set<int> _quietHoursDays = {0, 1, 2, 3, 4, 5, 6}; // All days
   Set<String> _defaultReminderTypes = {'at_time'};
 
+  // Phase 3.9: Time & Schedule settings state
+  int _todayCutoffHour = 4;
+  int _todayCutoffMinute = 59;
+  int _weekStartDay = 1; // 0=Sunday, 1=Monday
+  bool _use24HourTime = false;
+
+  // Phase 3.9: Date Parsing settings state
+  bool _enableQuickAddDateParsing = true;
+  int _earlyMorningHour = 5;
+  int _morningHour = 9;
+  int _noonHour = 12;
+  int _afternoonHour = 15;
+  int _tonightHour = 19;
+  int _lateNightHour = 22;
+
+  // Phase 3.9: Task Behavior state
+  String _autoCompleteChildren = 'prompt';
+
+  // Phase 3.9: Quiz personality state
+  List<Badge> _earnedBadges = [];
+  bool _quizCompleted = false;
+
   @override
   void initState() {
     super.initState();
     _loadApiKey();
     _usageStatsFuture = _apiUsageService.getStats();
     _loadNotificationSettings(); // Phase 3.8
+    _loadTimeAndPreferenceSettings(); // Phase 3.9
+    _loadQuizStatus(); // Phase 3.9
   }
 
   @override
@@ -242,6 +271,316 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 32),
 
+            // Phase 3.9: Your Time Personality Section
+            Text(
+              'Your Time Personality',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_earnedBadges.isEmpty && !_quizCompleted)
+                      ListTile(
+                        leading: const Icon(Icons.psychology_outlined,
+                            color: AppTheme.mutedLavender),
+                        title: const Text('Take the Onboarding Quiz'),
+                        subtitle: const Text(
+                            'Discover your time personality and configure preferences'),
+                        trailing: const Icon(Icons.chevron_right),
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => _navigateToQuiz(isRetake: false),
+                      )
+                    else ...[
+                      if (_earnedBadges.isNotEmpty) ...[
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _earnedBadges.map((badge) {
+                            return Chip(
+                              avatar: Icon(
+                                _badgeCategoryIcon(badge.category),
+                                size: 18,
+                                color: _badgeCategoryColor(badge.category),
+                              ),
+                              label: Text(
+                                badge.name,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              backgroundColor:
+                                  AppTheme.kraftPaper.withValues(alpha: 0.4),
+                              side: BorderSide.none,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      ListTile(
+                        leading: const Icon(Icons.refresh_rounded,
+                            color: AppTheme.muted),
+                        title: const Text('Retake Quiz'),
+                        subtitle: const Text(
+                            'Update your settings with new answers'),
+                        trailing: const Icon(Icons.chevron_right),
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => _navigateToQuiz(isRetake: true),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Phase 3.9: Time & Schedule Section
+            Text(
+              'Time & Schedule',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Day cutoff time
+                    ListTile(
+                      title: const Text('My day ends at'),
+                      subtitle: Text(
+                        _formatCutoffTime(),
+                        style: const TextStyle(
+                          color: AppTheme.deepShadow,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.access_time_rounded),
+                      contentPadding: EdgeInsets.zero,
+                      onTap: _pickCutoffTime,
+                    ),
+                    const Text(
+                      'Tasks created after this time count as "tomorrow"',
+                      style: TextStyle(fontSize: 12, color: AppTheme.muted),
+                    ),
+                    const Divider(height: 24),
+
+                    // Week start day
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Week starts on',
+                            style: TextStyle(fontSize: 15),
+                          ),
+                        ),
+                        DropdownButton<int>(
+                          value: _weekStartDay,
+                          underline: const SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(value: 0, child: Text('Sunday')),
+                            DropdownMenuItem(value: 1, child: Text('Monday')),
+                            DropdownMenuItem(value: 6, child: Text('Saturday')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _weekStartDay = value);
+                              _updateTimeSettings();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+
+                    // 24-hour time toggle
+                    SwitchListTile(
+                      title: const Text('24-hour time'),
+                      subtitle: Text(
+                        _use24HourTime ? '14:00' : '2:00 PM',
+                        style: const TextStyle(color: AppTheme.muted),
+                      ),
+                      value: _use24HourTime,
+                      onChanged: (value) {
+                        setState(() => _use24HourTime = value);
+                        _updateTimeSettings();
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Phase 3.9: Date Parsing Section
+            Text(
+              'Date Parsing',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SwitchListTile(
+                      title: const Text('Quick Add date parsing'),
+                      subtitle: const Text(
+                          'Parse dates from task titles (e.g., "tomorrow", "Friday")'),
+                      value: _enableQuickAddDateParsing,
+                      onChanged: (value) {
+                        setState(() => _enableQuickAddDateParsing = value);
+                        _updateTimeSettings();
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    const Divider(height: 24),
+
+                    // Time keyword header
+                    const Text(
+                      'Time Keywords',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'What time do these words mean to you?',
+                      style: TextStyle(fontSize: 12, color: AppTheme.muted),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TimeKeywordPicker(
+                      label: 'Early Morning',
+                      description: '"early morning" / "dawn"',
+                      currentHour: _earlyMorningHour,
+                      onHourChanged: (hour) {
+                        setState(() => _earlyMorningHour = hour);
+                        _updateTimeSettings();
+                      },
+                    ),
+                    TimeKeywordPicker(
+                      label: 'Morning',
+                      description: '"morning" / "this morning"',
+                      currentHour: _morningHour,
+                      onHourChanged: (hour) {
+                        setState(() => _morningHour = hour);
+                        _updateTimeSettings();
+                      },
+                    ),
+                    TimeKeywordPicker(
+                      label: 'Noon',
+                      description: '"noon" / "midday" / "lunch"',
+                      currentHour: _noonHour,
+                      onHourChanged: (hour) {
+                        setState(() => _noonHour = hour);
+                        _updateTimeSettings();
+                      },
+                    ),
+                    TimeKeywordPicker(
+                      label: 'Afternoon',
+                      description: '"afternoon" / "this afternoon"',
+                      currentHour: _afternoonHour,
+                      onHourChanged: (hour) {
+                        setState(() => _afternoonHour = hour);
+                        _updateTimeSettings();
+                      },
+                    ),
+                    TimeKeywordPicker(
+                      label: 'Tonight',
+                      description: '"tonight" / "evening"',
+                      currentHour: _tonightHour,
+                      onHourChanged: (hour) {
+                        setState(() => _tonightHour = hour);
+                        _updateTimeSettings();
+                      },
+                    ),
+                    TimeKeywordPicker(
+                      label: 'Late Night',
+                      description: '"late night" / "late"',
+                      currentHour: _lateNightHour,
+                      onHourChanged: (hour) {
+                        setState(() => _lateNightHour = hour);
+                        _updateTimeSettings();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Phase 3.9: Task Behavior Section
+            Text(
+              'Task Behavior',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'When completing a parent task:',
+                      style: TextStyle(fontSize: 15),
+                    ),
+                    const SizedBox(height: 8),
+                    RadioListTile<String>(
+                      title: const Text('Ask me each time'),
+                      subtitle: const Text(
+                          'Prompt before completing subtasks'),
+                      value: 'prompt',
+                      groupValue: _autoCompleteChildren,
+                      onChanged: (value) {
+                        setState(() => _autoCompleteChildren = value!);
+                        _updateTimeSettings();
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('Always complete subtasks'),
+                      subtitle: const Text(
+                          'Automatically mark all children as done'),
+                      value: 'always',
+                      groupValue: _autoCompleteChildren,
+                      onChanged: (value) {
+                        setState(() => _autoCompleteChildren = value!);
+                        _updateTimeSettings();
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('Never complete subtasks'),
+                      subtitle: const Text(
+                          'Leave children unchanged'),
+                      value: 'never',
+                      groupValue: _autoCompleteChildren,
+                      onChanged: (value) {
+                        setState(() => _autoCompleteChildren = value!);
+                        _updateTimeSettings();
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
             // Phase 3.8: Notifications Section
             Text(
               'Notifications',
@@ -407,10 +746,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       future: context.read<TaskProvider>().getRecentlyDeletedCount(),
                       builder: (context, snapshot) {
                         final count = snapshot.data ?? 0;
-                        return Badge(
-                          isLabelVisible: count > 0,
-                          label: Text('$count'),
-                          child: const Icon(Icons.chevron_right),
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (count > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.danger,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: const TextStyle(
+                                    color: AppTheme.creamPaper,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right),
+                          ],
                         );
                       },
                     ),
@@ -884,5 +1242,197 @@ Package Name: ${info.packageName}
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       labelPadding: const EdgeInsets.symmetric(horizontal: 2),
     );
+  }
+
+  // ========== Phase 3.9: Time & Preference Settings ==========
+
+  Future<void> _loadTimeAndPreferenceSettings() async {
+    try {
+      final settings = await _userSettingsService.getUserSettings();
+      if (!mounted) return;
+      setState(() {
+        _todayCutoffHour = settings.todayCutoffHour;
+        _todayCutoffMinute = settings.todayCutoffMinute;
+        _weekStartDay = settings.weekStartDay;
+        _use24HourTime = settings.use24HourTime;
+        _enableQuickAddDateParsing = settings.enableQuickAddDateParsing;
+        _earlyMorningHour = settings.earlyMorningHour;
+        _morningHour = settings.morningHour;
+        _noonHour = settings.noonHour;
+        _afternoonHour = settings.afternoonHour;
+        _tonightHour = settings.tonightHour;
+        _lateNightHour = settings.lateNightHour;
+        _autoCompleteChildren = settings.autoCompleteChildren;
+      });
+    } catch (e) {
+      debugPrint('[SettingsScreen] Failed to load time settings: $e');
+    }
+  }
+
+  Future<void> _loadQuizStatus() async {
+    try {
+      final quizService = QuizService();
+      final completed = await quizService.hasCompletedOnboardingQuiz();
+      if (!completed || !mounted) {
+        if (mounted) setState(() => _quizCompleted = completed);
+        return;
+      }
+
+      final badgeIds = await quizService.getEarnedBadgeIds();
+      if (!mounted) return;
+
+      final badges = <Badge>[];
+      if (badgeIds != null) {
+        for (final id in badgeIds) {
+          final badge = BadgeDefinitions.getBadgeById(id);
+          if (badge != null) badges.add(badge);
+        }
+      }
+
+      setState(() {
+        _quizCompleted = true;
+        _earnedBadges = badges;
+      });
+    } catch (e) {
+      debugPrint('[SettingsScreen] Failed to load quiz status: $e');
+    }
+  }
+
+  Future<void> _updateTimeSettings() async {
+    try {
+      final settings = await _userSettingsService.getUserSettings();
+      final updated = settings.copyWith(
+        todayCutoffHour: _todayCutoffHour,
+        todayCutoffMinute: _todayCutoffMinute,
+        weekStartDay: _weekStartDay,
+        use24HourTime: _use24HourTime,
+        enableQuickAddDateParsing: _enableQuickAddDateParsing,
+        earlyMorningHour: _earlyMorningHour,
+        morningHour: _morningHour,
+        noonHour: _noonHour,
+        afternoonHour: _afternoonHour,
+        tonightHour: _tonightHour,
+        lateNightHour: _lateNightHour,
+        autoCompleteChildren: _autoCompleteChildren,
+      );
+      await _userSettingsService.updateUserSettings(updated);
+    } catch (e) {
+      debugPrint('[SettingsScreen] Failed to update time settings: $e');
+    }
+  }
+
+  Future<void> _pickCutoffTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _todayCutoffHour, minute: _todayCutoffMinute),
+      helpText: 'When does your day end?',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            timePickerTheme: TimePickerThemeData(
+              backgroundColor: AppTheme.creamPaper,
+              dialHandColor: AppTheme.deepShadow,
+              hourMinuteColor: AppTheme.kraftPaper,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null) return;
+    setState(() {
+      _todayCutoffHour = picked.hour;
+      _todayCutoffMinute = picked.minute;
+    });
+    _updateTimeSettings();
+  }
+
+  String _formatCutoffTime() {
+    if (_use24HourTime) {
+      return '${_todayCutoffHour.toString().padLeft(2, '0')}:${_todayCutoffMinute.toString().padLeft(2, '0')}';
+    }
+    final period = _todayCutoffHour >= 12 ? 'PM' : 'AM';
+    final displayHour = _todayCutoffHour == 0
+        ? 12
+        : (_todayCutoffHour > 12 ? _todayCutoffHour - 12 : _todayCutoffHour);
+    return '$displayHour:${_todayCutoffMinute.toString().padLeft(2, '0')} $period';
+  }
+
+  Future<void> _navigateToQuiz({required bool isRetake}) async {
+    if (isRetake) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppTheme.creamPaper,
+          title: const Text('Retake Quiz?'),
+          content: const Text(
+            'This will update your settings based on your new answers. '
+            'Your current settings will be overwritten.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.deepShadow,
+                foregroundColor: AppTheme.creamPaper,
+              ),
+              child: const Text('Retake'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true || !mounted) return;
+    }
+
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const QuizScreen()),
+    );
+
+    // Reload settings and quiz status after returning
+    if (mounted) {
+      _loadTimeAndPreferenceSettings();
+      _loadQuizStatus();
+    }
+  }
+
+  Color _badgeCategoryColor(BadgeCategory category) {
+    switch (category) {
+      case BadgeCategory.circadianRhythm:
+        return AppTheme.info;
+      case BadgeCategory.weekStructure:
+        return AppTheme.softSage;
+      case BadgeCategory.dailyRhythm:
+        return AppTheme.warning;
+      case BadgeCategory.displayPreference:
+        return AppTheme.mutedLavender;
+      case BadgeCategory.taskManagement:
+        return AppTheme.success;
+      case BadgeCategory.combo:
+        return AppTheme.mutedLavender;
+    }
+  }
+
+  IconData _badgeCategoryIcon(BadgeCategory category) {
+    switch (category) {
+      case BadgeCategory.circadianRhythm:
+        return Icons.nightlight_round;
+      case BadgeCategory.weekStructure:
+        return Icons.calendar_today;
+      case BadgeCategory.dailyRhythm:
+        return Icons.wb_sunny;
+      case BadgeCategory.displayPreference:
+        return Icons.schedule;
+      case BadgeCategory.taskManagement:
+        return Icons.task_alt;
+      case BadgeCategory.combo:
+        return Icons.stars;
+    }
   }
 }
