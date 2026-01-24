@@ -1,0 +1,53 @@
+# Flutter build artifacts and caches
+pin_and_paper/build/**
+pin_and_paper/.dart_tool/**
+pin_and_paper/.flutter-plugins
+pin_and_paper/.flutter-plugins-dependencies
+pin_and_paper/.packages
+
+# Coverage reports
+pin_and_paper/coverage/**
+
+# Archived documentation (exclude old phases, but keep recent phase-3.9.0 for reference)
+docs/archive/phase-01/**
+docs/archive/phase-02/**
+docs/archive/phase-03/**
+docs/archive/phase-3.6.5/**
+docs/archive/phase-3.6A/**
+docs/archive/phase-3.6B/**
+docs/archive/phase-3.7/**
+docs/archive/phase-3.8/**
+docs/archive/phase-03-revised-plan.md
+docs/archive/plan-original.md
+docs/archive/project-plan-original.md
+docs/archive/README-updates-needed.md
+
+# Image backups (temporary - can be deleted once verified)
+docs/images_backup_*/**
+pin_and_paper/assets/images_backup_*/**
+pin_and_paper/assets/images/badges_backup_*/**
+
+# Large image assets (binary files don't need context)
+# Note: These should be optimized separately, but exclude from context
+pin_and_paper/assets/images/badges/**
+pin_and_paper/assets/images/quiz/**
+pin_and_paper/assets/images/onboarding/**
+docs/images/png badges/**
+docs/images/quiz/**
+docs/images/onboarding/**
+
+# Analysis output
+analysis/flutter_tree_view2/build/**
+analysis/flutter_tree_view2/.dart_tool/**
+
+# Git directory
+.git/**
+
+# IDE files
+.vscode/**
+.idea/**
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
