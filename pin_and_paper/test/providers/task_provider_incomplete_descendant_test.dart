@@ -13,6 +13,7 @@ import 'package:pin_and_paper/models/task.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/providers/task_sort_provider.dart';
 import 'package:pin_and_paper/providers/task_filter_provider.dart';
+import 'package:pin_and_paper/providers/task_hierarchy_provider.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/database_service.dart';
@@ -64,6 +65,7 @@ void main() {
         tagProvider: tagProvider,
         sortProvider: TaskSortProvider(),
         filterProvider: TaskFilterProvider(tagProvider: tagProvider),
+        hierarchyProvider: TaskHierarchyProvider(),
       );
     });
 

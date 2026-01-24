@@ -21,6 +21,7 @@ import '../models/task_reminder.dart'; // Phase 3.8: For custom reminder types
 import '../utils/constants.dart'; // Phase 3.6A: For AppConstants table names
 import '../utils/task_tree_controller.dart'; // Phase 3.6.5: Custom TreeController fix
 import '../widgets/drag_and_drop_task_tile.dart'; // Phase 3.2: For mapDropPosition extension
+import '../providers/task_hierarchy_provider.dart'; // Phase 3.9: Hierarchy management
 
 /// Phase 3.6.5: Cached incomplete descendant info for completed parents
 ///
@@ -63,6 +64,7 @@ class TaskProvider extends ChangeNotifier {
   final TagProvider _tagProvider; // Phase 3.6A
   final TaskSortProvider _sortProvider; // Phase 3.9 Refactor
   final TaskFilterProvider _filterProvider; // Phase 3.9 Refactor
+  final TaskHierarchyProvider _hierarchyProvider; // Phase 3.9: Hierarchy management
   final ReminderService _reminderService = ReminderService(); // Phase 3.8
 
   TaskProvider({
@@ -72,22 +74,14 @@ class TaskProvider extends ChangeNotifier {
     TagProvider? tagProvider, // Phase 3.6A
     required TaskSortProvider sortProvider, // Phase 3.9 Refactor: Required dependency
     required TaskFilterProvider filterProvider, // Phase 3.9 Refactor: Required dependency
+    required TaskHierarchyProvider hierarchyProvider, // Phase 3.9: Required dependency
   })  : _taskService = taskService ?? TaskService(),
         _preferencesService = preferencesService ?? PreferencesService(),
         _tagService = tagService ?? TagService(), // Phase 3.5
         _tagProvider = tagProvider ?? TagProvider(), // Phase 3.6A
         _sortProvider = sortProvider, // Phase 3.9 Refactor: No fallback needed
-        _filterProvider = filterProvider { // Phase 3.9 Refactor: No fallback needed
-    // Phase 3.2: Initialize TreeController for hierarchical view
-    // Phase 3.6.5: Use TaskTreeController for ID-based expansion state (fixes corruption bug)
-    _treeController = TaskTreeController(
-      roots: [],  // Start empty, populated in loadTasks
-      childrenProvider: (Task task) {
-        return _tasks.where((t) => t.parentId == task.id).toList()
-          ..sort((a, b) => a.position.compareTo(b.position));
-      },
-      parentProvider: (Task task) => _findParent(task.parentId),
-    );
+        _filterProvider = filterProvider, // Phase 3.9 Refactor: No fallback needed
+        _hierarchyProvider = hierarchyProvider { // Phase 3.9: No fallback needed
 
     // Phase 3.9 Refactor: Listen to sort provider changes and refresh tree
     _sortProvider.addListener(_onSortChanged);
@@ -191,16 +185,6 @@ class TaskProvider extends ChangeNotifier {
   // Phase 3.6.5: Guard against concurrent toggleTaskCompletion calls (race condition fix)
   bool _isTogglingCompletion = false;
 
-  // Phase 3.2: Hierarchy state
-  bool _isReorderMode = false;
-  late TaskTreeController _treeController; // Phase 3.6.5: Use custom controller for ID-based state
-
-  // Phase 3.6.5: Tree version counter to force AnimatedTreeView rebuild
-  // Incremented when tree structure changes (completion, etc.)
-  // Used as ValueKey to force Flutter to recreate the AnimatedTreeView widget
-  int _treeVersion = 0;
-  int get treeVersion => _treeVersion;
-
   // Phase 2 Stretch: Hide completed tasks settings
   bool _hideOldCompleted = true;
   int _hideThresholdHours = 24;
@@ -219,9 +203,11 @@ class TaskProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  // Phase 3.2: Hierarchy getters
-  bool get isReorderMode => _isReorderMode;
-  TreeController<Task> get treeController => _treeController;
+  // Phase 3.9: Hierarchy getters delegate to TaskHierarchyProvider
+  bool get isReorderMode => _hierarchyProvider.isReorderMode;
+  TreeController<Task> get treeController => _hierarchyProvider.treeController;
+  int get treeVersion => _hierarchyProvider.treeVersion;
+  bool get areAllExpanded => _hierarchyProvider.areAllExpanded;
 
   // Phase 3.7.5 / Phase 3.9 Refactor: Sort getters now delegate to TaskSortProvider
   TaskSortMode get sortMode => _sortProvider.sortMode;
@@ -354,31 +340,21 @@ class TaskProvider extends ChangeNotifier {
 
   // Phase 3.2: Refresh TreeController with active tasks
   // Active = incomplete OR (completed but has incomplete descendants)
-  // Phase 3.6.5: Simplified - TaskTreeController tracks by ID, no capture/restore needed
+  // Phase 3.9 Refactor: Delegates to TaskHierarchyProvider
   void _refreshTreeController() {
     // Phase 3.6A: Build task ID set for efficient lookup
     final taskIds = _tasks.map((t) => t.id).toSet();
 
-    // Phase 3.6.5: Prune orphaned IDs (Codex/Gemini recommendation for memory hygiene)
-    _treeController.pruneOrphanedIds(taskIds);
-
-    var activeRoots = _tasks.where((t) {
-      // Phase 3.6A: In filtered views, treat as root if parent not in filtered results
-      if (t.parentId != null) {
-        // If parent exists in current task list, this is not a root
-        if (taskIds.contains(t.parentId)) {
-          return false;
-        }
-        // Parent not in filtered results - treat as root
-      }
-      // Original logic: true root (parentId == null) or orphaned in filtered view
+    // Build active task list: tasks to show in tree view
+    var activeTasks = _tasks.where((t) {
+      // Phase 3.6A: In filtered views, include task if it should be shown
       if (!t.completed) return true; // Incomplete tasks always active
       return _hasIncompleteDescendants(t); // Completed with incomplete children
     }).toList();
 
     // Phase 3.7.5: Apply date filter
     if (_filterProvider.filterState.dateFilter != DateFilter.any) {
-      activeRoots = activeRoots.where((t) {
+      activeTasks = activeTasks.where((t) {
         switch (_filterProvider.filterState.dateFilter) {
           case DateFilter.overdue:
             if (t.dueDate == null) return false;
@@ -397,14 +373,12 @@ class TaskProvider extends ChangeNotifier {
       }).toList();
     }
 
-    // Phase 3.7.5: Apply sort to root-level tasks
-    _sortTasks(activeRoots);
+    // Phase 3.7.5: Apply sort to tasks
+    _sortTasks(activeTasks);
 
-    _treeController.roots = activeRoots;
-    _treeController.rebuild();
-    // Phase 3.6.5: Increment tree version to force AnimatedTreeView widget recreation
-    _treeVersion++;
-    // Expansion state preserved automatically by TaskTreeController (ID-based)
+    // Phase 3.9 Refactor: Delegate tree refresh to TaskHierarchyProvider
+    // HierarchyProvider will build roots and manage expansion state
+    _hierarchyProvider.refreshTreeController(activeTasks);
   }
 
   // Phase 3.2: Get ALL visible completed tasks (with breadcrumbs for nested tasks)
@@ -796,7 +770,7 @@ class TaskProvider extends ChangeNotifier {
           // Task was uncompleted - expand it if it has children
           final hasChildren = _tasks.any((t) => t.parentId == updatedTask.id);
           if (hasChildren) {
-            _treeController.setExpansionState(updatedTask, true);
+            _hierarchyProvider.expandTask(updatedTask);
           }
         }
 
@@ -804,7 +778,7 @@ class TaskProvider extends ChangeNotifier {
           // Task was completed - expand its parent so child stays visible
           try {
             final parent = _tasks.firstWhere((t) => t.id == updatedTask.parentId);
-            _treeController.setExpansionState(parent, true);
+            _hierarchyProvider.expandTask(parent);
           } catch (_) {
             // Parent not found, skip
           }
@@ -1012,7 +986,7 @@ class TaskProvider extends ChangeNotifier {
   /// Enter/exit reorder mode
   /// Phase 3.9 Refactor: Now uses TaskSortProvider to change sort mode
   void setReorderMode(bool enabled) {
-    _isReorderMode = enabled;
+    _hierarchyProvider.setReorderMode(enabled);
     if (enabled && _sortProvider.sortMode != TaskSortMode.manual) {
       _sortProvider.setSortMode(TaskSortMode.manual);
       // Note: sortProvider will notify listeners which triggers _onSortChanged
@@ -1024,60 +998,22 @@ class TaskProvider extends ChangeNotifier {
 
   /// Toggle collapse/expand for a task node
   void toggleCollapse(Task task) {
-    _treeController.toggleExpansion(task);
+    _hierarchyProvider.toggleCollapse(task);
   }
 
   /// Phase 3.6B: Expand all tasks in the tree
   /// Phase 3.6.5 Fix: Expand ALL tasks with children (not just incomplete)
   /// This ensures completed children become visible when parent is expanded
+  /// Phase 3.9 Refactor: Delegate to TaskHierarchyProvider
   void expandAll() {
-    for (final task in _tasks) {
-      final hasChildren = _tasks.any((t) => t.parentId == task.id);
-      if (hasChildren) {
-        _treeController.setExpansionState(task, true);
-      }
-    }
-    _treeController.rebuild(); // Notify AnimatedTreeView to update
+    _hierarchyProvider.expandAll();
     notifyListeners();
   }
 
-  /// Phase 3.6B: Collapse all tasks in the tree
-  /// Phase 3.6.5 Fix: Collapse ALL tasks with children (not just incomplete)
+  /// Phase 3.9 Refactor: Delegate to TaskHierarchyProvider
   void collapseAll() {
-    for (final task in _tasks) {
-      final hasChildren = _tasks.any((t) => t.parentId == task.id);
-      if (hasChildren) {
-        _treeController.setExpansionState(task, false);
-      }
-    }
-    _treeController.rebuild(); // Notify AnimatedTreeView to update
+    _hierarchyProvider.collapseAll();
     notifyListeners();
-  }
-
-  /// Phase 3.6B: Check if all tasks are expanded
-  /// Phase 3.6.5 Fix: Check ALL tasks with children (not just incomplete)
-  bool get areAllExpanded {
-    // Get all tasks that have children and are in the active tree
-    final tasksWithChildren = _tasks.where((task) {
-      // Check if this task has any children
-      final hasChildren = _tasks.any((child) => child.parentId == task.id);
-      if (!hasChildren) return false;
-      // Only consider tasks that are active roots or descendants of roots
-      // (incomplete OR completed with incomplete descendants)
-      if (!task.completed) return true;
-      return _hasIncompleteDescendants(task);
-    }).toList();
-
-    if (tasksWithChildren.isEmpty) return false;
-
-    // Check if all are expanded
-    return tasksWithChildren.every((task) {
-      try {
-        return _treeController.getExpansionState(task);
-      } catch (_) {
-        return false;
-      }
-    });
   }
 
   /// Move task to new parent (nest/unnest)
@@ -1140,7 +1076,7 @@ class TaskProvider extends ChangeNotifier {
         needsDbQuery = true; // Need to get actual child count
 
         // Auto-expand target to show new child
-        _treeController.setExpansionState(details.targetNode, true);
+        _hierarchyProvider.expandTask(details.targetNode);
       },
       whenBelow: () {
         // Insert as next sibling of target (position after target)
@@ -1458,8 +1394,8 @@ class TaskProvider extends ChangeNotifier {
       final parent = _findParent(current.parentId);
       if (parent == null) break;
 
-      // Expand parent node using TreeController
-      _treeController.expand(parent);
+      // Expand parent node
+      _hierarchyProvider.expandTask(parent);
 
       current = parent;
     }

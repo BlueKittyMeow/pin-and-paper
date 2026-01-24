@@ -13,6 +13,7 @@ import 'package:pin_and_paper/providers/tag_provider.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/providers/task_sort_provider.dart';
 import 'package:pin_and_paper/providers/task_filter_provider.dart';
+import 'package:pin_and_paper/providers/task_hierarchy_provider.dart';
 import 'package:pin_and_paper/screens/home_screen.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
@@ -100,6 +101,7 @@ void main() {
               tagService: fakeTagService,
               sortProvider: TaskSortProvider(),
               filterProvider: Provider.of<TaskFilterProvider>(context, listen: false),
+              hierarchyProvider: TaskHierarchyProvider(),
             ),
             update: (context, tagProvider, filterProvider, previous) =>
                 previous ?? TaskProvider(
@@ -107,6 +109,7 @@ void main() {
                   tagService: fakeTagService,
                   sortProvider: TaskSortProvider(),
                   filterProvider: filterProvider,
+                  hierarchyProvider: TaskHierarchyProvider(),
                 ),
           ),
         ],
