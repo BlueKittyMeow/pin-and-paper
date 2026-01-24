@@ -17,6 +17,7 @@ import '../utils/badge_definitions.dart'; // Phase 3.9
 import '../utils/theme.dart';
 import '../utils/constants.dart';
 import '../widgets/permission_explanation_dialog.dart'; // Phase 3.8
+import '../widgets/settings/settings_explanation_dialog.dart'; // Phase 3.9
 import '../widgets/settings/time_keyword_picker.dart'; // Phase 3.9
 import 'quiz_screen.dart'; // Phase 3.9
 import 'recently_deleted_screen.dart'; // Phase 3.3
@@ -321,6 +322,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 12),
                       ],
+                      if (_quizCompleted)
+                        ListTile(
+                          leading: const Icon(Icons.info_outline,
+                              color: AppTheme.info),
+                          title: const Text('Explain My Settings'),
+                          subtitle: const Text(
+                              'See how quiz answers shaped your preferences'),
+                          trailing: const Icon(Icons.chevron_right),
+                          contentPadding: EdgeInsets.zero,
+                          onTap: () => SettingsExplanationDialog.show(context),
+                        ),
                       ListTile(
                         leading: const Icon(Icons.refresh_rounded,
                             color: AppTheme.muted),
