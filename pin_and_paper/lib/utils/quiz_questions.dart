@@ -68,11 +68,6 @@ class QuizQuestions {
         text: 'Monday',
         description: 'International / work week style',
       ),
-      QuizAnswer(
-        id: 'q2_c',
-        text: 'Other',
-        description: 'Let me pick (show day picker)',
-      ),
     ],
   );
 

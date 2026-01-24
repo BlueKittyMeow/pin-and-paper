@@ -45,6 +45,7 @@ void main() async {
   try {
     final dateParser = DateParsingService();
     await dateParser.initialize();
+    await dateParser.loadSettings(); // Phase 3.9: Load user preferences
   } catch (e) {
     print('[Phase 3.7] Failed to initialize DateParsingService: $e');
     // Don't block app startup on date parsing initialization failure

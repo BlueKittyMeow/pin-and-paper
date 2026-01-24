@@ -9,6 +9,7 @@ import '../providers/task_provider.dart';
 import '../services/settings_service.dart';
 import '../services/api_usage_service.dart';
 import '../services/database_service.dart';
+import '../services/date_parsing_service.dart'; // Phase 3.9
 import '../services/notification_service.dart'; // Phase 3.8
 import '../services/quiz_service.dart'; // Phase 3.9
 import '../services/user_settings_service.dart'; // Phase 3.8
@@ -1328,6 +1329,8 @@ Package Name: ${info.packageName}
         autoCompleteChildren: _autoCompleteChildren,
       );
       await _userSettingsService.updateUserSettings(updated);
+      // Phase 3.9: Reload DateParsingService settings
+      await DateParsingService().loadSettings();
     } catch (e) {
       debugPrint('[SettingsScreen] Failed to update time settings: $e');
     }

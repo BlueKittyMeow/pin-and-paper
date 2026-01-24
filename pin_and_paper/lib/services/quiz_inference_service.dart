@@ -40,12 +40,6 @@ class QuizInferenceService {
       inferred = inferred.copyWith(weekStartDay: 0); // Sunday
     } else if (q2 == 'q2_b') {
       inferred = inferred.copyWith(weekStartDay: 1); // Monday
-    } else if (q2 != null && q2.startsWith('q2_c_')) {
-      // Custom: "q2_c_3" → weekStartDay = 3 (Wednesday)
-      final day = int.tryParse(q2.split('_').last);
-      if (day != null) {
-        inferred = inferred.copyWith(weekStartDay: day.clamp(0, 6));
-      }
     }
 
     // Q3: "Tonight" → tonightHour
@@ -161,8 +155,6 @@ class QuizInferenceService {
       badges.add(BadgeDefinitions.sunday_traditionalist);
     } else if (q2 == 'q2_b') {
       badges.add(BadgeDefinitions.monday_starter);
-    } else if (q2 != null && q2.startsWith('q2_c')) {
-      badges.add(BadgeDefinitions.calendar_rebel);
     }
 
     // Q3: "Tonight" contributes to daily rhythm (twilight_worker for late night)
@@ -274,10 +266,9 @@ class QuizInferenceService {
     final weekStart = settings.weekStartDay.clamp(0, 6);
     if (weekStart == 0) {
       answers[2] = 'q2_a'; // Sunday
-    } else if (weekStart == 1) {
-      answers[2] = 'q2_b'; // Monday
     } else {
-      answers[2] = 'q2_c_$weekStart'; // Custom
+      // Default to Monday for any other day (no "Other" option available)
+      answers[2] = 'q2_b'; // Monday
     }
 
     // Q3: "Tonight" (based on tonightHour)
