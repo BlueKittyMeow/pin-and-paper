@@ -1407,7 +1407,7 @@ Package Name: ${info.packageName}
     if (!mounted) return;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const QuizScreen()),
+      MaterialPageRoute(builder: (_) => QuizScreen(isRetake: isRetake)),
     );
 
     // Reload settings and quiz status after returning

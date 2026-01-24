@@ -59,6 +59,7 @@ class _SettingsExplanationDialogState extends State<SettingsExplanationDialog> {
 
       final answers = await quizService.getSavedAnswers();
       if (answers == null) {
+        if (!mounted) return;
         setState(() {
           _error = 'No quiz data found. Take the quiz first!';
           _isLoading = false;

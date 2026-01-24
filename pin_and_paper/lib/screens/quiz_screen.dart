@@ -15,7 +15,9 @@ import 'badge_reveal_screen.dart';
 /// Supports custom time picker for time-based questions.
 /// On completion, navigates to [BadgeRevealScreen].
 class QuizScreen extends StatefulWidget {
-  const QuizScreen({super.key});
+  final bool isRetake;
+
+  const QuizScreen({super.key, this.isRetake = false});
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -25,9 +27,14 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   void initState() {
     super.initState();
-    // Reset quiz state on fresh entry
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<QuizProvider>().reset();
+    // Load quiz state based on entry mode
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final quizProvider = context.read<QuizProvider>();
+      if (widget.isRetake) {
+        await quizProvider.loadPrefillFromSettings();
+      } else {
+        quizProvider.reset();
+      }
     });
   }
 
@@ -197,7 +204,8 @@ class _QuizScreenState extends State<QuizScreen> {
                           // Next / Complete button
                           if (quizProvider.isLastQuestion)
                             ElevatedButton(
-                              onPressed: quizProvider.currentQuestionAnswered
+                              onPressed: (quizProvider.currentQuestionAnswered &&
+                                      !quizProvider.isSubmitting)
                                   ? () => _submitQuiz(quizProvider)
                                   : null,
                               style: ElevatedButton.styleFrom(
