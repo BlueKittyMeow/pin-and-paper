@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:pin_and_paper/models/task.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
+import 'package:pin_and_paper/providers/task_sort_provider.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/database_service.dart';
@@ -60,6 +61,7 @@ void main() {
         preferencesService: preferencesService,
         tagService: tagService,
         tagProvider: tagProvider,
+        sortProvider: TaskSortProvider(),
       );
     });
 

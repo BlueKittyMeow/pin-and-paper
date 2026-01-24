@@ -11,6 +11,7 @@ import 'package:pin_and_paper/models/tag.dart';
 import 'package:pin_and_paper/models/task.dart';
 import 'package:pin_and_paper/providers/tag_provider.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
+import 'package:pin_and_paper/providers/task_sort_provider.dart';
 import 'package:pin_and_paper/screens/home_screen.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
@@ -86,6 +87,7 @@ void main() {
             create: (_) => TaskProvider(
               taskService: fakeTaskService,
               tagService: fakeTagService,
+              sortProvider: TaskSortProvider(),
             ),
           ),
           // Phase 3.6.5: TagProvider now required by TaskItem

@@ -68,12 +68,12 @@ class TaskProvider extends ChangeNotifier {
     PreferencesService? preferencesService,
     TagService? tagService, // Phase 3.5
     TagProvider? tagProvider, // Phase 3.6A
-    TaskSortProvider? sortProvider, // Phase 3.9 Refactor
+    required TaskSortProvider sortProvider, // Phase 3.9 Refactor: Required dependency
   })  : _taskService = taskService ?? TaskService(),
         _preferencesService = preferencesService ?? PreferencesService(),
         _tagService = tagService ?? TagService(), // Phase 3.5
         _tagProvider = tagProvider ?? TagProvider(), // Phase 3.6A
-        _sortProvider = sortProvider ?? TaskSortProvider() { // Phase 3.9 Refactor
+        _sortProvider = sortProvider { // Phase 3.9 Refactor: No fallback needed
     // Phase 3.2: Initialize TreeController for hierarchical view
     // Phase 3.6.5: Use TaskTreeController for ID-based expansion state (fixes corruption bug)
     _treeController = TaskTreeController(
