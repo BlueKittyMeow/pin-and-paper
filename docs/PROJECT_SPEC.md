@@ -1,9 +1,9 @@
 # Pin and Paper - Project Specification
 
-**Version:** 3.8 (Phase 3 In Progress)
-**Last Updated:** 2026-01-23
+**Version:** 3.9 (Phase 3 In Progress)
+**Last Updated:** 2026-01-29
 **Primary Device:** Samsung Galaxy S22 Ultra
-**Current Phase:** Phase 3.8 Complete - Due Date Notifications
+**Current Phase:** Phase 3.9 Complete - Onboarding Quiz & User Preferences
 
 ---
 
@@ -37,7 +37,7 @@ The "brain dump → Claude organizes → instant tasks" feature is the killer di
 ✅ **Phase 3.6.5:** Edit Task Modal Rework + TreeController Fix - Complete (Jan 20, 2026)
 ✅ **Phase 3.7:** Natural Language Date Parsing + Sort/Filter - Complete (Jan 22, 2026)
 ✅ **Phase 3.8:** Due Date Notifications - Complete (Jan 23, 2026)
-🔜 **Phase 3.9:** Onboarding Quiz & User Preferences - Planned (1 week)
+✅ **Phase 3.9:** Onboarding Quiz & User Preferences - Complete (Jan 29, 2026)
 
 ---
 
@@ -525,15 +525,14 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - **5 subphases**, 1,965 lines Dart, DB v8→v10
 - **Deferred:** Background isolate actions, custom sounds, location reminders
 
-**Phase 3.9: Onboarding Quiz & User Preferences** 🔜 (1 week)
-- Scenario-based quiz to infer user time perception preferences
-- Night owl mode cutoff configuration (from Phase 3.7)
-- Date parsing preferences (Quick Add toggle, time keywords)
-- Notification preferences (from Phase 3.8)
-- Week start day preference
-- Tag system preferences
-- "Retake quiz" and "Explain my settings" features
-- Skip option with sensible defaults
+**Phase 3.9: Onboarding Quiz & User Preferences** ✅ Complete (Jan 29, 2026)
+- 10-question scenario-based quiz inferring time perception preferences
+- 19 individual + 4 combo personality badges with animated reveal ceremony
+- Inference engine maps answers to 8+ app settings automatically
+- Day picker (any weekday), custom bedtime time picker
+- "Explain My Settings" dialog, quiz retake flow
+- Tappable badge chips + "View All Badges" bottom sheet in Settings
+- 3,727 lines Dart, DB v11, 23 high-res badge assets
 
 **Phase 3 Completion:**
 - ✅ Git tag: `v3.5.0` (Phase 3.5 complete - Jan 9, 2026)
@@ -551,7 +550,8 @@ CREATE INDEX idx_connections_to ON connections(to_task_id);
 - v3: Phase 2 Stretch (API usage tracking)
 - v4: Phase 3.1 (task nesting)
 - v5: Phase 3.3-3.4 (soft delete, task editing fields)
-- v6: Phase 3.5 (tags and task_tags tables) ← **Current**
+- v6: Phase 3.5 (tags and task_tags tables)
+- v11: Phase 3.9 (quiz_responses, enable_quick_add_date_parsing) ← **Current**
 
 **Key Achievements:**
 - 154 tests passing (95%+ pass rate)
@@ -1053,33 +1053,33 @@ This section documents major architectural and scope decisions made during plann
 
 ## Next Steps
 
-**Current Phase:** Phase 3.8 Complete - Due Date Notifications (Jan 23, 2026)
+**Current Phase:** Phase 3.9 Complete - Onboarding Quiz & User Preferences (Jan 29, 2026)
 
 **Completed Recently:**
-1. ✅ Phase 3.8 Due Date Notifications (Jan 22-23, 2026)
+1. ✅ Phase 3.9 Onboarding Quiz & User Preferences (Jan 23-29, 2026)
+   - 10-question scenario-based quiz with inference engine
+   - 23 personality badges (19 individual + 4 combo) with animated reveal
+   - Day picker, custom bedtime time picker, "Explain My Settings" dialog
+   - Tappable badge chips + "View All Badges" bottom sheet
+   - 3,727 lines Dart, DB v11, 23 high-res badge assets
+2. ✅ Phase 3.8 Due Date Notifications (Jan 22-23, 2026)
    - Full notification pipeline: scheduling, delivery, interaction
    - Stacked reminders, quiet hours, overdue detection
    - Quick actions (Complete/Snooze/Dismiss) from notification tray
-   - Master toggle, per-task overrides, platform-safe scheduling
-   - 1,965 lines Dart, DB v8→v10, 5 subphases
-2. ✅ Phase 3.7 Natural Language Date Parsing + Sort/Filter (Jan 20-22, 2026)
-   - chrono.js NL parsing via flutter_js (QuickJS FFI)
-   - Real-time inline highlighting in TextFields
-   - Live clock, Sort-by, Date filters (Phase 3.7.5)
+   - 1,965 lines Dart, DB v8→v10
 
 **Next Up:**
-1. 🔜 Implement Phase 3.9 (Onboarding Quiz & User Preferences)
-2. 🔜 Complete Phase 3 → Release v3.9.0
+1. 🔜 Complete Phase 3 → Release v3.9.0
+2. 🔜 Phase 4: Bounded Workspace View
 
 **Upcoming Phases:**
-- Phase 3.9: Onboarding Quiz & User Preferences (1 week)
 - Phase 4: Bounded Workspace View (4-5 weeks)
 
 ---
 
-**Document Status:** ✅ Up to Date (Phase 3.8 Complete)
-**Last Review:** January 23, 2026
-**Next Review:** After Phase 3.9 completion
+**Document Status:** ✅ Up to Date (Phase 3.9 Complete)
+**Last Review:** January 29, 2026
+**Next Review:** After Phase 4 start
 
 **See Also:**
 - `visual-design.md` - Complete aesthetic specification

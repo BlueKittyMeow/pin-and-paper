@@ -205,5 +205,24 @@
 
 ---
 
-**Document Version:** 2.0
-**Restructured:** 2026-01-22 (from single feature request to comprehensive backlog)
+### Customization & Theming (Phase 3.9 Deferred)
+
+#### Alternate App Icons
+- **Priority:** LOW | **Complexity:** MEDIUM
+- **Description:** Allow users to select an alternate app icon from within the app. iOS supports this natively via `setAlternateIconName()`. Android uses activity-alias manifest entries with runtime enable/disable. Requires platform-specific implementation on both sides.
+- **Source:** Phase 3.9 discussion (2026-01-29)
+
+#### Dark Mode
+- **Priority:** MEDIUM | **Complexity:** HIGH
+- **Description:** Implement a dark mode theme using the existing semantic color system (`AppTheme`). The centralized theme from Phase 3.9.0 makes this feasible — all semantic colors can be swapped for dark variants.
+- **Source:** Phase 3.9.0 theme cleanup (2026-01-23)
+
+#### Widget Theme Compliance Cleanup
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** ~60 hardcoded `Colors.*` instances remain in `lib/widgets/`. Phase 3.9.0 cleaned screens only. Migrate widgets to use `AppTheme` semantic colors for full theme compliance.
+- **Source:** Phase 3.9.0 summary — known limitation
+
+---
+
+**Document Version:** 2.1
+**Updated:** 2026-01-29 (added Phase 3.9 deferred items)

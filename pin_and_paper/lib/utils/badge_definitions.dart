@@ -4,14 +4,14 @@ import '../models/badge.dart';
 
 /// All badge definitions for the onboarding quiz.
 ///
-/// Badge images are stored at assets/images/badges/{1x,2x,3x}/
+/// Badge images are stored at assets/images/badges/1x/{1x,2x,3x}/
 /// Use [getBadgeById] to look up a badge by its ID.
 class BadgeDefinitions {
   BadgeDefinitions._();
 
   /// Get the asset path for a badge at a given density.
   static String badgeAssetPath(String badgeId, {int density = 1}) {
-    return 'assets/images/badges/${density}x/$badgeId.png';
+    return 'assets/images/badges/1x/${density}x/$badgeId.png';
   }
 
   // ==========================================

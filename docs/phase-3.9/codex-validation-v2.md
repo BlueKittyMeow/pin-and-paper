@@ -1,0 +1,142 @@
+# Codex Validation v2 - Phase 3.9
+
+**Phase:** 3.9 - Onboarding Quiz & User Preferences (Post-Fix Round)
+**Previous Validation:** `codex-validation.md` (v1, completed 2026-01-24)
+**Implementation Commits:**
+- `5014d11` - Add day/time pickers, fix badge logic, enlarge badge cards
+- `d01ad2c` - Add tappable badge chips and View All Badges bottom sheet
+- `b52dac6` - Enlarge badges, crop assets, add bottom padding to modal
+
+**Review Date:** 2026-01-29
+**Reviewer:** Codex
+**Status:** Pending Review
+
+---
+
+## Purpose
+
+This is **validation round 2** for Phase 3.9. The first validation found issues that have since been fixed, and significant new features were added. This review covers all changes since the first validation was completed.
+
+**NEVER SIMULATE OTHER AGENTS' RESPONSES.**
+Only document YOUR OWN findings here.
+
+**📝 RECORD ONLY - DO NOT MODIFY CODE 📝**
+- Your job is to **record findings to THIS file only**
+- Do NOT make any changes to the codebase (no editing source files, tests, configs, etc.)
+- Do NOT create, modify, or delete any files outside of this document
+- Claude will review your findings and implement fixes separately
+
+---
+
+## What Changed Since v1 Validation
+
+### New Features
+1. **Q2 Day Picker** — "Other" option with full day-of-week picker (Sunday/Monday greyed out)
+2. **Q8 Custom Bedtime** — Time picker for exact bedtime + "No consistent schedule" option
+3. **Tappable Badge Chips** — Tap any badge chip in Settings to see full badge card in dialog
+4. **View All Badges Bottom Sheet** — "View All Badges" button opens scrollable grid of all earned badges
+5. **High-res Badge Assets** — 436x436 center-cropped images (replaced 218x218 / 400x218 originals)
+
+### Bug Fixes
+1. **Critical badge logic fix** — Custom bedtime `hour <= 22` caught 5am as "early bird"; now hours 0-6 → nocturnal_scholar, 20-23 → early_bird
+2. **Night Ops combo badge** — Was broken because early_bird was awarded instead of nocturnal_scholar
+3. **Badge card overflow** — Text spilling past bounding box; reduced to maxLines 1/2 with ellipsis
+
+### Files Changed
+- `lib/models/quiz_question.dart` — Added `showDayPicker` flag
+- `lib/utils/quiz_questions.dart` — Q2 "Other" option, Q8 custom time + no schedule options
+- `lib/screens/quiz_screen.dart` — Day picker dialog, time picker for Q8, greyed Sunday/Monday
+- `lib/widgets/quiz/quiz_answer_option.dart` — `selectedDayName` prop, calendar icon
+- `lib/services/quiz_inference_service.dart` — `q2_c_<day>` inference, `q8_custom_<hour>` inference, badge logic fixes
+- `lib/widgets/settings/settings_explanation_dialog.dart` — Day picker answer descriptions
+- `lib/screens/settings_screen.dart` — Tappable badge chips, View All Badges bottom sheet
+- `lib/widgets/quiz/badge_card.dart` — Expanded image layout, reduced padding
+- `lib/screens/badge_reveal_screen.dart` — Explicit height for grid items
+
+---
+
+## Validation Scope
+
+**Files to review (focus on changes since v1):**
+- [ ] `lib/models/quiz_question.dart`
+- [ ] `lib/utils/quiz_questions.dart`
+- [ ] `lib/screens/quiz_screen.dart` — Day picker dialog, time picker integration
+- [ ] `lib/services/quiz_inference_service.dart` — Badge logic, custom bedtime/day inference
+- [ ] `lib/widgets/quiz/quiz_answer_option.dart`
+- [ ] `lib/widgets/quiz/badge_card.dart` — Layout with Expanded
+- [ ] `lib/screens/settings_screen.dart` — Badge detail dialog, bottom sheet
+- [ ] `lib/screens/badge_reveal_screen.dart`
+- [ ] `lib/widgets/settings/settings_explanation_dialog.dart`
+
+**Key areas to validate:**
+1. Day picker answer storage format (`q2_c_<dayIndex>`) — correct parsing and inference
+2. Custom bedtime answer storage (`q8_custom_<hour>`) — correct cutoff calculation
+3. Badge logic for custom bedtime — hours 0-6 nocturnal, 20-23 early bird, 7-19 no badge
+4. Combo badge chain still works (nocturnal_scholar + exacting_enthusiast → night_ops)
+5. Prefill logic for custom day/time when retaking quiz
+6. Badge card layout doesn't overflow in any configuration (especially combo badges)
+7. Bottom sheet scrolling and badge detail dialog dismiss correctly
+
+---
+
+## Review Checklist
+
+### Code Correctness
+- [ ] No null safety violations
+- [ ] No race conditions or async issues
+- [ ] Error handling covers edge cases
+- [ ] No memory leaks (dispose patterns correct)
+- [ ] No potential crashes (bounds checks, null access)
+- [ ] Day index parsing handles invalid values
+- [ ] Hour parsing handles invalid values
+- [ ] Bedtime cutoff calculation wraps correctly at midnight
+
+### Data Integrity
+- [ ] `q2_c_<day>` correctly maps to weekStartDay 0-6
+- [ ] `q8_custom_<hour>` correctly calculates todayCutoffHour
+- [ ] Prefill correctly reverses custom answers back to picker state
+- [ ] Badge calculation produces consistent results across retakes
+
+### UI/UX
+- [ ] Day picker dialog shows all 7 days
+- [ ] Sunday and Monday are properly greyed out and non-tappable
+- [ ] Badge chips respond to taps in Settings
+- [ ] Badge detail dialog is properly sized and dismissible
+- [ ] Bottom sheet scrolls properly with many badges
+- [ ] Badge card text doesn't overflow (maxLines enforced)
+
+---
+
+## Findings
+
+_Start reviewing and add issues below using the standard format._
+
+---
+
+## Summary
+
+**Total Issues Found:** [X]
+
+**By Severity:**
+- CRITICAL: [count]
+- HIGH: [count]
+- MEDIUM: [count]
+- LOW: [count]
+
+---
+
+## Verdict
+
+**Release Ready:** [YES / NO / YES WITH FIXES]
+
+**Must Fix Before Release:**
+- [List CRITICAL and HIGH issues]
+
+**Can Defer:**
+- [List MEDIUM and LOW issues]
+
+---
+
+**Review completed by:** Codex
+**Date:** [YYYY-MM-DD]
+**Confidence level:** [High / Medium / Low]

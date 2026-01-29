@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
-        android:label="pin_and_paper"
+        android:label="Pin and Paper"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

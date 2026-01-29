@@ -178,8 +178,16 @@ Data Layer (SQLite)
   - Cold-start navigation (tap notification → scroll to task)
   - 1,965 lines production code, DB v8→v10
 
+- ✅ **Phase 3.9:** Onboarding Quiz & User Preferences (Jan 2026)
+  - 10-question scenario-based quiz inferring time perception preferences
+  - 23 personality badges (19 individual + 4 combo) with animated reveal
+  - Inference engine maps answers to 8+ app settings automatically
+  - Day picker, custom bedtime time picker, "Explain My Settings" dialog
+  - Tappable badge chips + "View All Badges" bottom sheet
+  - 3,727 lines production code, DB v11
+
 **Next Up:**
-- 🔜 **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
+- 🔜 **Phase 4:** Bounded Workspace View
 
 **Deferred to Phase 6+:**
 - ⏸️ Voice input (speech-to-text)
@@ -334,14 +342,13 @@ Each phase builds on the previous:
   - 1,965 lines production code, DB v8→v10
 
 ### Current Stats
-- **~13,000+ lines of production code**
+- **~16,000+ lines of production code**
 - **396 tests passing** (95%+ pass rate)
-- **Database:** v10 (10 migrations complete)
-- **Phases completed:** 2 full phases + 10 subphases
-- **Latest:** Phase 3.8 - Due Date Notifications
+- **Database:** v11 (11 migrations complete)
+- **Phases completed:** 2 full phases + 11 subphases
+- **Latest:** Phase 3.9 - Onboarding Quiz & User Preferences
 
 ### Next Up
-- **Phase 3.9:** Onboarding Quiz & User Preferences (1 week)
 - **Phase 4:** Bounded Workspace View (4-5 weeks)
 
 ---

@@ -2,9 +2,9 @@ name: pin_and_paper
 description: ADHD-friendly task management with beautiful aesthetic
 publish_to: 'none'
 # Version format: MAJOR.MINOR.PATCH+BUILD
-# 3.8.0 = Phase 3.8 complete (Due Date Notifications)
-# +6 = Build number (increment with each build)
-version: 3.8.0+6
+# 3.9.0 = Phase 3.9 complete (Onboarding Quiz & User Preferences)
+# +7 = Build number (increment with each build)
+version: 3.9.0+7
 
 environment:
   sdk: '>=3.5.0 <4.0.0'  # Supports Flutter 3.24+ (Dart 3.5+) through current stable
@@ -65,6 +65,4 @@ flutter:
     - assets/js/chrono.min.js
     - assets/images/quiz/
     - assets/images/badges/1x/
-    - assets/images/badges/2x/
-    - assets/images/badges/3x/
     - assets/images/onboarding/
