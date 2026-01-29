@@ -79,7 +79,12 @@
 **Solution:** Center-cropped all badge PNGs to square format (218×218 for 1x, then replaced with 436×436 from high-res originals).
 **Outcome:** Badges fill their cards properly and look sharp on high-DPI devices.
 
-### Challenge 3: Q2 "Other" Day Option
+### Challenge 3: Q8 Prefill Using Dead Answer ID
+**Problem:** After replacing `q8_d` with `q8_custom` and `q8_e`, the prefill logic still mapped cutoffHour > 5 to `q8_d`, silently normalizing settings on retake. Custom times also weren't restored in the UI.
+**Solution:** Prefill now derives `q8_custom_<bedtime>` from cutoff hour. `loadPrefillFromSettings()` parses custom answer IDs to populate `_customTimes`. All dead `q8_d` code removed from inference and badges.
+**Outcome:** Quiz retake is idempotent — completing without changes preserves existing settings.
+
+### Challenge 4: Q2 "Other" Day Option
 **Problem:** First validation fix removed the "Other" option entirely instead of implementing a proper picker.
 **Solution:** Added `showDayPicker` flag, full SimpleDialog with all 7 days (Sunday/Monday greyed out since they have dedicated options), custom answer format `q2_c_<dayIndex>`.
 **Outcome:** Users can pick any day of the week as their week start.
@@ -106,27 +111,28 @@
 - [ ] Widget theme compliance cleanup (~60 hardcoded colors in lib/widgets/) — Target: Backlog
 - [ ] Alternate app icons selectable from within app — Target: Backlog
 - [ ] Dark mode using semantic color system — Target: Phase 5+
+- [ ] Autocomplete children quiz option not wired to behavior — Target: Backlog
 
-**Total deferred:** 3 items
+**Total deferred:** 4 items
 
 ---
 
 ## Team Contributions
 
-**Codex Findings (v1):**
-- Total issues found: 11
-- Critical/High: 4
-- Fixed during phase: All 11
+**Codex Findings:**
+- v1: 11 issues found (4 Critical/High) — all fixed
+- v2: 3 issues found (1 HIGH, 1 MEDIUM, 1 LOW) — all fixed
+- Strongest at: data integrity, prefill logic, edge cases
 
-**Gemini Findings (v1):**
-- Build/lint issues found: 5
-- UI/accessibility issues: 3
-- All resolved: ✅
+**Gemini Findings:**
+- v1: 8 issues found (5 build/lint, 3 UI) — all resolved
+- v2: 4 issues found (2 CRITICAL, 1 HIGH, 1 LOW) — 1 valid (stale typo file), 3 pre-existing/misattributed
+- Note: Gemini's v2 "CRITICAL" test failures (flutter_js, ProviderNotFound) and "HIGH" asset issue pre-date Phase 3.9
 
 **Claude Implementation:**
 - Subphases implemented: 5 (3.9.0–3.9.4)
-- Validation cycles: 2 (v1 complete, v2 in progress)
-- Post-validation fixes: 5 commits
+- Validation cycles: 2 (v1 complete, v2 complete)
+- Post-validation fixes: 6 commits
 
 ---
 
@@ -141,8 +147,8 @@
 **Validation Documents:**
 - [codex-validation.md](./codex-validation.md) (v1, completed)
 - [gemini-validation.md](./gemini-validation.md) (v1, completed)
-- [codex-validation-v2.md](./codex-validation-v2.md) (v2, pending)
-- [gemini-validation-v2.md](./gemini-validation-v2.md) (v2, pending)
+- [codex-validation-v2.md](./codex-validation-v2.md) (v2, complete — 3 issues, all fixed)
+- [gemini-validation-v2.md](./gemini-validation-v2.md) (v2, complete — 4 issues, 1 fixed, 3 pre-existing)
 
 **Findings Documents:**
 - [codex-findings.md](./codex-findings.md)
