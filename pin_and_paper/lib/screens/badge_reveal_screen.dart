@@ -147,6 +147,7 @@ class BadgeRevealScreen extends StatelessWidget {
           children: List.generate(badgeList.length, (index) {
             return SizedBox(
               width: itemWidth,
+              height: itemWidth * (1 / 0.7),
               child: BadgeCard(
                 badge: badgeList[index],
                 delay: Duration(milliseconds: 200 + (startIndex + index) * 150),

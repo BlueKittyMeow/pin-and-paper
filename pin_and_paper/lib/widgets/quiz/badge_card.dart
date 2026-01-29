@@ -67,7 +67,7 @@ class _BadgeCardState extends State<BadgeCard>
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
           decoration: BoxDecoration(
             color: AppTheme.creamPaper,
             borderRadius: BorderRadius.circular(16),
@@ -88,13 +88,12 @@ class _BadgeCardState extends State<BadgeCard>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Badge image
-              SizedBox(
-                width: 144,
-                height: 144,
+              // Badge image — fills available space
+              Expanded(
                 child: Image.asset(
                   widget.badge.imagePath,
                   fit: BoxFit.contain,
+                  width: double.infinity,
                   errorBuilder: (context, error, stackTrace) {
                     // Fallback icon when image asset is missing
                     return Container(
@@ -111,32 +110,32 @@ class _BadgeCardState extends State<BadgeCard>
                   },
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
 
               // Badge name
               Text(
                 widget.badge.name,
                 style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.richBlack,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 2),
 
               // Badge description
               Text(
                 widget.badge.description,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: AppTheme.muted,
-                  height: 1.3,
+                  height: 1.2,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 3,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
 

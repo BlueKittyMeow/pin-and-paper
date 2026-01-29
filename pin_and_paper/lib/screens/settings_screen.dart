@@ -1392,7 +1392,11 @@ Package Name: ${info.packageName}
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        child: BadgeCard(badge: badge, animate: false),
+        child: SizedBox(
+          width: 240,
+          height: 340,
+          child: BadgeCard(badge: badge, animate: false),
+        ),
       ),
     );
   }
@@ -1434,7 +1438,7 @@ Package Name: ${info.packageName}
             Expanded(
               child: GridView.builder(
                 controller: scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   childAspectRatio: 0.7,
