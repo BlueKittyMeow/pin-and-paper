@@ -111,32 +111,150 @@ Only document YOUR OWN findings here.
 
 _Start reviewing and add issues below using the standard format._
 
+### Issue #1: Q8 Prefill Uses Nonexistent Answer ID (`q8_d`) and Breaks Idempotency
+
+**File:** `pin_and_paper/lib/services/quiz_inference_service.dart:120`
+**Type:** Data Integrity
+**Severity:** HIGH
+
+**Description:**
+`prefillFromSettings()` maps any cutoff hour > 5 to `q8_d`, but `q8_d` is no longer a valid answer (Q8 now has `q8_a`, `q8_b`, `q8_c`, `q8_custom`, `q8_e`). This creates a hidden prefill state: the question is marked answered while no option is visibly selected, and on retake it can silently normalize the user’s cutoff to 6:59 (because inference treats `q8_d` as “4am+”). It also prevents true round‑trip for custom bedtime (`q8_custom_<hour>`).
+
+**Current Code:**
+```dart
+// Q8: Sleep schedule (based on todayCutoffHour)
+if (cutoffHour == 0) {
+  answers[8] = 'q8_a'; // Before midnight
+} else if (cutoffHour <= 4) {
+  answers[8] = 'q8_b'; // 12-2am
+} else if (cutoffHour <= 5) {
+  answers[8] = 'q8_c'; // 2-4am
+} else {
+  answers[8] = 'q8_d'; // 4am+ or varies
+}
+```
+
+**Suggested Fix:**
+```dart
+// Replace q8_d with custom or explicit option.
+if (cutoffHour == 0) {
+  answers[8] = 'q8_a';
+} else if (cutoffHour <= 4) {
+  answers[8] = 'q8_b';
+} else if (cutoffHour <= 5) {
+  answers[8] = 'q8_c';
+} else {
+  // Derive bedtime from cutoff (cutoff = bedtime + 2)
+  final bedtime = (cutoffHour + 22) % 24;
+  answers[8] = 'q8_custom_$bedtime';
+}
+```
+Also remove `q8_d` handling in inference/badges or re‑introduce a visible `q8_d` option.
+
+**Impact:**
+Retake can silently shift settings even if the user doesn’t change any answers, and Q8 may appear unanswered while still blocking accurate user intent.
+
+**Reproduction Steps:**
+1. Set todayCutoffHour to 8 in Settings.
+2. Retake quiz (prefill enabled) and complete without changing Q8.
+3. Expected: cutoff remains 8; Actual: cutoff normalized to 6 (via `q8_d`).
+
+### Issue #2: Prefill Does Not Restore Custom Times for Q3/Q4/Q8
+
+**File:** `pin_and_paper/lib/providers/quiz_provider.dart:140`
+**Type:** Bug
+**Severity:** MEDIUM
+
+**Description:**
+`loadPrefillFromSettings()` only sets `_answers` and never repopulates `_customTimes`. When a prefilled answer is custom (e.g., `q3_custom_17`), the UI shows the option selected but does not show the selected time, and the time picker opens at `TimeOfDay.now()` instead of the inferred time.
+
+**Current Code:**
+```dart
+final prefilled = _inferenceService.prefillFromSettings(settings);
+_answers.addAll(prefilled);
+```
+
+**Suggested Fix:**
+```dart
+for (final entry in prefilled.entries) {
+  final answer = entry.value;
+  if (answer.contains('custom_')) {
+    final hour = int.tryParse(answer.split('_').last);
+    if (hour != null) {
+      _customTimes[entry.key] = TimeOfDay(hour: hour, minute: 0);
+    }
+  }
+}
+```
+
+**Impact:**
+Retake UX is inconsistent; users can’t see or reliably edit their previously inferred custom times.
+
+**Reproduction Steps:**
+1. Set tonightHour to 23 and retake the quiz.
+2. Observe Q3 shows selected option but no time label.
+3. Tap the option: time picker opens at current time, not 11pm.
+
+### Issue #3: Day Picker Display Can Crash on Invalid Day Index
+
+**File:** `pin_and_paper/lib/screens/quiz_screen.dart:172`
+**Type:** Bug
+**Severity:** LOW
+
+**Description:**
+When rendering the selected day name for `q2_c_<dayIndex>`, the code indexes `_dayNames[dayIndex]` without bounds checking. If a stored answer is corrupted or out of range (e.g., `q2_c_7`), this throws a `RangeError` during build.
+
+**Current Code:**
+```dart
+final dayIndex = int.tryParse(currentAnswer.split('_').last);
+if (dayIndex != null) {
+  selectedDayName = _dayNames[dayIndex];
+}
+```
+
+**Suggested Fix:**
+```dart
+if (dayIndex != null) {
+  final safeIndex = dayIndex.clamp(0, _dayNames.length - 1);
+  selectedDayName = _dayNames[safeIndex];
+}
+```
+
+**Impact:**
+Potential crash on retake if persisted data or future migrations introduce invalid day values.
+
+**Reproduction Steps:**
+1. Force an invalid saved answer (`q2_c_7`) in DB.
+2. Open quiz retake.
+3. App crashes while rendering Q2.
+
 ---
 
 ## Summary
 
-**Total Issues Found:** [X]
+**Total Issues Found:** 3
 
 **By Severity:**
-- CRITICAL: [count]
-- HIGH: [count]
-- MEDIUM: [count]
-- LOW: [count]
+- CRITICAL: 0
+- HIGH: 1
+- MEDIUM: 1
+- LOW: 1
 
 ---
 
 ## Verdict
 
-**Release Ready:** [YES / NO / YES WITH FIXES]
+**Release Ready:** NO
 
 **Must Fix Before Release:**
-- [List CRITICAL and HIGH issues]
+- Issue #1 (Q8 prefill uses nonexistent `q8_d` and breaks idempotency)
 
 **Can Defer:**
-- [List MEDIUM and LOW issues]
+- Issue #2 (prefill doesn’t restore custom times)
+- Issue #3 (day picker bounds check)
 
 ---
 
 **Review completed by:** Codex
-**Date:** [YYYY-MM-DD]
-**Confidence level:** [High / Medium / Low]
+**Date:** 2026-01-29
+**Confidence level:** Medium

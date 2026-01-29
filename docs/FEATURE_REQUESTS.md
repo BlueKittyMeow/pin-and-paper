@@ -222,7 +222,14 @@
 - **Description:** ~60 hardcoded `Colors.*` instances remain in `lib/widgets/`. Phase 3.9.0 cleaned screens only. Migrate widgets to use `AppTheme` semantic colors for full theme compliance.
 - **Source:** Phase 3.9.0 summary — known limitation
 
+### Quiz Behavior Gaps (Phase 3.9 Deferred)
+
+#### Autocomplete Children Quiz Option Not Wired
+- **Priority:** MEDIUM | **Complexity:** LOW
+- **Description:** The onboarding quiz includes a question about subtask auto-completion behavior (always autocomplete children, never, or ask each time), but the answer is not currently tied to any app behavior. The quiz stores the answer and awards a badge, but no setting controls this feature yet. Need to add the actual autocomplete-children setting and wire it to task completion logic.
+- **Source:** Phase 3.9 manual testing (2026-01-29)
+
 ---
 
-**Document Version:** 2.1
-**Updated:** 2026-01-29 (added Phase 3.9 deferred items)
+**Document Version:** 2.2
+**Updated:** 2026-01-29 (added autocomplete children gap)
