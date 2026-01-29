@@ -12,6 +12,7 @@ import '../services/database_service.dart';
 import '../services/date_parsing_service.dart'; // Phase 3.9
 import '../services/notification_service.dart'; // Phase 3.8
 import '../services/quiz_service.dart'; // Phase 3.9
+import '../widgets/quiz/badge_card.dart'; // Phase 3.9
 import '../services/user_settings_service.dart'; // Phase 3.8
 import '../services/reminder_service.dart'; // Phase 3.8
 import '../utils/badge_definitions.dart'; // Phase 3.9
@@ -303,25 +304,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           spacing: 8,
                           runSpacing: 8,
                           children: _earnedBadges.map((badge) {
-                            return Chip(
-                              avatar: Icon(
-                                _badgeCategoryIcon(badge.category),
-                                size: 18,
-                                color: _badgeCategoryColor(badge.category),
+                            return GestureDetector(
+                              onTap: () => _showBadgeDetail(badge),
+                              child: Chip(
+                                avatar: Icon(
+                                  _badgeCategoryIcon(badge.category),
+                                  size: 18,
+                                  color: _badgeCategoryColor(badge.category),
+                                ),
+                                label: Text(
+                                  badge.name,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                backgroundColor:
+                                    AppTheme.kraftPaper.withValues(alpha: 0.4),
+                                side: BorderSide.none,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
                               ),
-                              label: Text(
-                                badge.name,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                              backgroundColor:
-                                  AppTheme.kraftPaper.withValues(alpha: 0.4),
-                              side: BorderSide.none,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          onPressed: () => _showAllBadges(),
+                          icon: const Icon(Icons.grid_view_rounded, size: 18),
+                          label: const Text('View All Badges'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.deepShadow,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                       ],
                       if (_quizCompleted)
                         ListTile(
@@ -1371,6 +1385,73 @@ Package Name: ${info.packageName}
         ? 12
         : (_todayCutoffHour > 12 ? _todayCutoffHour - 12 : _todayCutoffHour);
     return '$displayHour:${_todayCutoffMinute.toString().padLeft(2, '0')} $period';
+  }
+
+  void _showBadgeDetail(Badge badge) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: BadgeCard(badge: badge, animate: false),
+      ),
+    );
+  }
+
+  void _showAllBadges() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.warmBeige,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.muted.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Your Time Personality',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.richBlack,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: GridView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.7,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: _earnedBadges.length,
+                itemBuilder: (context, index) => BadgeCard(
+                  badge: _earnedBadges[index],
+                  animate: false,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _navigateToQuiz({required bool isRetake}) async {
