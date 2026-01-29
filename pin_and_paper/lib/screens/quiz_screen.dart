@@ -171,7 +171,7 @@ class _QuizScreenState extends State<QuizScreen> {
                               String? selectedDayName;
                               if (answer.showDayPicker && isSelected && currentAnswer != null) {
                                 final dayIndex = int.tryParse(currentAnswer.split('_').last);
-                                if (dayIndex != null) {
+                                if (dayIndex != null && dayIndex >= 0 && dayIndex < _dayNames.length) {
                                   selectedDayName = _dayNames[dayIndex];
                                 }
                               }

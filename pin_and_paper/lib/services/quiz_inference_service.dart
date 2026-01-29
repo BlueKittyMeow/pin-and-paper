@@ -130,9 +130,6 @@ class QuizInferenceService {
       } else if (q8 == 'q8_c') {
         // Sleeps 2-4am: strong night owl
         inferred = inferred.copyWith(todayCutoffHour: 5, todayCutoffMinute: 59);
-      } else if (q8 == 'q8_d') {
-        // Sleeps 4am+ or varies: extreme night owl
-        inferred = inferred.copyWith(todayCutoffHour: 6, todayCutoffMinute: 59);
       } else if (q8 != null && q8.startsWith('q8_custom_')) {
         // Custom bedtime: set cutoff to bedtime + 2 hours (clamped)
         final hour = int.tryParse(q8.split('_').last);
@@ -229,7 +226,7 @@ class QuizInferenceService {
     final q8 = answers[8];
     if (q8 == 'q8_a') {
       badges.add(BadgeDefinitions.early_bird);
-    } else if (q8 == 'q8_c' || q8 == 'q8_d') {
+    } else if (q8 == 'q8_c') {
       badges.add(BadgeDefinitions.nocturnal_scholar);
     } else if (q8 != null && q8.startsWith('q8_custom_')) {
       final hour = int.tryParse(q8.split('_').last);
@@ -359,7 +356,9 @@ class QuizInferenceService {
     } else if (cutoffHour <= 5) {
       answers[8] = 'q8_c'; // 2-4am
     } else {
-      answers[8] = 'q8_d'; // 4am+ or varies
+      // Derive bedtime from cutoff (cutoff = bedtime + 2)
+      final bedtime = (cutoffHour + 22) % 24;
+      answers[8] = 'q8_custom_$bedtime';
     }
 
     return answers;

@@ -142,6 +142,15 @@ class QuizProvider extends ChangeNotifier {
     final settings = await _settingsService.getUserSettings();
     final prefilled = _inferenceService.prefillFromSettings(settings);
     _answers.addAll(prefilled);
+    // Restore custom times from prefilled answers (e.g., q3_custom_17 → 17:00)
+    for (final entry in prefilled.entries) {
+      if (entry.value.contains('custom_')) {
+        final hour = int.tryParse(entry.value.split('_').last);
+        if (hour != null) {
+          _customTimes[entry.key] = TimeOfDay(hour: hour, minute: 0);
+        }
+      }
+    }
     notifyListeners();
   }
 
