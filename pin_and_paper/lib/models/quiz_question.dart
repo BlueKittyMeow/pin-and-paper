@@ -4,12 +4,14 @@ class QuizAnswer {
   final String text;
   final String? description;
   final bool showTimePicker; // If true, show time picker when selected
+  final bool showDayPicker; // If true, show day-of-week picker when selected
 
   const QuizAnswer({
     required this.id,
     required this.text,
     this.description,
     this.showTimePicker = false,
+    this.showDayPicker = false,
   });
 }
 

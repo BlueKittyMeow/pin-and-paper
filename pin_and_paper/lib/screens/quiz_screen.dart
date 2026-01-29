@@ -24,6 +24,9 @@ class QuizScreen extends StatefulWidget {
 }
 
 class _QuizScreenState extends State<QuizScreen> {
+  static const _dayNames = [
+    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+  ];
   @override
   void initState() {
     super.initState();
@@ -160,14 +163,24 @@ class _QuizScreenState extends State<QuizScreen> {
                             ...question.answers.map((answer) {
                               final currentAnswer = quizProvider.answers[question.id];
                               final isSelected = currentAnswer == answer.id ||
-                                  (answer.showTimePicker &&
+                                  ((answer.showTimePicker || answer.showDayPicker) &&
                                       currentAnswer != null &&
                                       currentAnswer.startsWith('${answer.id}_'));
+
+                              // Resolve selected day name for day picker answers
+                              String? selectedDayName;
+                              if (answer.showDayPicker && isSelected && currentAnswer != null) {
+                                final dayIndex = int.tryParse(currentAnswer.split('_').last);
+                                if (dayIndex != null) {
+                                  selectedDayName = _dayNames[dayIndex];
+                                }
+                              }
 
                               return QuizAnswerOption(
                                 answer: answer,
                                 isSelected: isSelected,
                                 selectedTime: quizProvider.customTimes[question.id],
+                                selectedDayName: selectedDayName,
                                 onTap: () => _handleAnswerTap(
                                   quizProvider,
                                   question.id,
@@ -298,9 +311,48 @@ class _QuizScreenState extends State<QuizScreen> {
           customTime: selectedTime,
         );
       }
+    } else if (answer.showDayPicker) {
+      // Show day-of-week picker dialog
+      final selectedDay = await _showDayPickerDialog();
+      if (selectedDay != null && mounted) {
+        final answerId = '${answer.id}_$selectedDay';
+        quizProvider.selectAnswer(questionId, answerId);
+      }
     } else {
       quizProvider.selectAnswer(questionId, answer.id);
     }
+  }
+
+  Future<int?> _showDayPickerDialog() async {
+    return showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        backgroundColor: AppTheme.creamPaper,
+        title: const Text(
+          'Pick your week start day',
+          style: TextStyle(
+            color: AppTheme.richBlack,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        children: List.generate(7, (index) {
+          // Sunday (0) and Monday (1) have dedicated quiz options
+          final isDisabled = index == 0 || index == 1;
+          return SimpleDialogOption(
+            onPressed: isDisabled ? null : () => Navigator.pop(context, index),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Text(
+              isDisabled ? '${_dayNames[index]} (select above)' : _dayNames[index],
+              style: TextStyle(
+                fontSize: 16,
+                color: isDisabled ? AppTheme.muted : AppTheme.richBlack,
+              ),
+            ),
+          );
+        }),
+      ),
+    );
   }
 
   Future<void> _submitQuiz(QuizProvider quizProvider) async {

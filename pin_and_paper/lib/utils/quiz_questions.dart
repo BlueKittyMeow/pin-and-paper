@@ -68,6 +68,12 @@ class QuizQuestions {
         text: 'Monday',
         description: 'International / work week style',
       ),
+      QuizAnswer(
+        id: 'q2_c',
+        text: 'Other',
+        description: 'Let me pick a different day',
+        showDayPicker: true,
+      ),
     ],
   );
 
@@ -249,9 +255,15 @@ class QuizQuestions {
         description: 'Late night',
       ),
       QuizAnswer(
-        id: 'q8_d',
-        text: '4am or later / Varies wildly',
-        description: 'No consistent schedule',
+        id: 'q8_custom',
+        text: 'Let me pick the exact time',
+        description: 'Choose your usual bedtime',
+        showTimePicker: true,
+      ),
+      QuizAnswer(
+        id: 'q8_e',
+        text: 'No consistent schedule',
+        description: 'It varies too much to say',
       ),
     ],
   );

@@ -40,6 +40,11 @@ class QuizInferenceService {
       inferred = inferred.copyWith(weekStartDay: 0); // Sunday
     } else if (q2 == 'q2_b') {
       inferred = inferred.copyWith(weekStartDay: 1); // Monday
+    } else if (q2 != null && q2.startsWith('q2_c_')) {
+      final day = int.tryParse(q2.split('_').last);
+      if (day != null) {
+        inferred = inferred.copyWith(weekStartDay: day.clamp(0, 6));
+      }
     }
 
     // Q3: "Tonight" → tonightHour
@@ -128,7 +133,16 @@ class QuizInferenceService {
       } else if (q8 == 'q8_d') {
         // Sleeps 4am+ or varies: extreme night owl
         inferred = inferred.copyWith(todayCutoffHour: 6, todayCutoffMinute: 59);
+      } else if (q8 != null && q8.startsWith('q8_custom_')) {
+        // Custom bedtime: set cutoff to bedtime + 2 hours (clamped)
+        final hour = int.tryParse(q8.split('_').last);
+        if (hour != null) {
+          // Bedtime hour → cutoff hour (add 2, wrap around midnight)
+          final cutoff = (hour + 2) % 24;
+          inferred = inferred.copyWith(todayCutoffHour: cutoff, todayCutoffMinute: 59);
+        }
       }
+      // q8_e (no consistent schedule): keep Q1 default cutoff
     }
 
     return inferred;
@@ -155,6 +169,8 @@ class QuizInferenceService {
       badges.add(BadgeDefinitions.sunday_traditionalist);
     } else if (q2 == 'q2_b') {
       badges.add(BadgeDefinitions.monday_starter);
+    } else if (q2 != null && q2.startsWith('q2_c_')) {
+      badges.add(BadgeDefinitions.calendar_rebel);
     }
 
     // Q3: "Tonight" contributes to daily rhythm (twilight_worker for late night)
@@ -215,7 +231,20 @@ class QuizInferenceService {
       badges.add(BadgeDefinitions.early_bird);
     } else if (q8 == 'q8_c' || q8 == 'q8_d') {
       badges.add(BadgeDefinitions.nocturnal_scholar);
+    } else if (q8 != null && q8.startsWith('q8_custom_')) {
+      final hour = int.tryParse(q8.split('_').last);
+      if (hour != null) {
+        // Bedtime interpretation: hours 0-6 = after midnight (nocturnal),
+        // hours 20-23 = before midnight (early bird)
+        if (hour >= 0 && hour <= 6) {
+          badges.add(BadgeDefinitions.nocturnal_scholar);
+        } else if (hour >= 20 && hour <= 23) {
+          badges.add(BadgeDefinitions.early_bird);
+        }
+        // 7-19: daytime/ambiguous — no sleep badge
+      }
     }
+    // q8_e (no consistent schedule): no badge
 
     // Combo badges (require multiple individual badges)
     _addComboBadges(badges);
@@ -266,9 +295,10 @@ class QuizInferenceService {
     final weekStart = settings.weekStartDay.clamp(0, 6);
     if (weekStart == 0) {
       answers[2] = 'q2_a'; // Sunday
-    } else {
-      // Default to Monday for any other day (no "Other" option available)
+    } else if (weekStart == 1) {
       answers[2] = 'q2_b'; // Monday
+    } else {
+      answers[2] = 'q2_c_$weekStart'; // Custom day
     }
 
     // Q3: "Tonight" (based on tonightHour)

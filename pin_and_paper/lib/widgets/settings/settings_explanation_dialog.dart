@@ -485,11 +485,19 @@ class _SettingsExplanationDialogState extends State<SettingsExplanationDialog> {
       orElse: () => questions.first,
     );
 
-    // Handle custom time answers
+    // Handle custom time answers (e.g., q3_custom_20)
     if (answerId.contains('custom_')) {
       final hour = int.tryParse(answerId.split('_').last);
       if (hour != null) {
         return '${question.title}: Custom (${_formatHour(hour)})';
+      }
+    }
+
+    // Handle day picker answers (e.g., q2_c_3 → Wednesday)
+    if (answerId.startsWith('q2_c_')) {
+      final day = int.tryParse(answerId.split('_').last);
+      if (day != null) {
+        return '"Other" (${_dayName(day)})';
       }
     }
 

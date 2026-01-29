@@ -90,8 +90,8 @@ class _BadgeCardState extends State<BadgeCard>
             children: [
               // Badge image
               SizedBox(
-                width: 72,
-                height: 72,
+                width: 144,
+                height: 144,
                 child: Image.asset(
                   widget.badge.imagePath,
                   fit: BoxFit.contain,
@@ -104,7 +104,7 @@ class _BadgeCardState extends State<BadgeCard>
                       ),
                       child: Icon(
                         _categoryIcon,
-                        size: 36,
+                        size: 72,
                         color: _categoryColor,
                       ),
                     );

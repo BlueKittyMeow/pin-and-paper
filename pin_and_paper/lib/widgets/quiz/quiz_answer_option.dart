@@ -11,6 +11,7 @@ class QuizAnswerOption extends StatelessWidget {
   final QuizAnswer answer;
   final bool isSelected;
   final TimeOfDay? selectedTime;
+  final String? selectedDayName;
   final VoidCallback onTap;
 
   const QuizAnswerOption({
@@ -18,6 +19,7 @@ class QuizAnswerOption extends StatelessWidget {
     required this.answer,
     required this.isSelected,
     this.selectedTime,
+    this.selectedDayName,
     required this.onTap,
   });
 
@@ -98,8 +100,41 @@ class QuizAnswerOption extends StatelessWidget {
                     size: 20,
                     color: isSelected ? AppTheme.deepShadow : AppTheme.muted,
                   ),
+
+                // Day picker icon hint
+                if (answer.showDayPicker)
+                  Icon(
+                    Icons.calendar_today_rounded,
+                    size: 20,
+                    color: isSelected ? AppTheme.deepShadow : AppTheme.muted,
+                  ),
               ],
             ),
+
+            // Show selected custom day
+            if (answer.showDayPicker && isSelected && selectedDayName != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                margin: const EdgeInsets.only(left: 36),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.success.withValues(alpha: 0.4),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  'Selected: $selectedDayName',
+                  style: const TextStyle(
+                    color: AppTheme.success,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
 
             // Show selected custom time
             if (answer.showTimePicker && isSelected && selectedTime != null) ...[
