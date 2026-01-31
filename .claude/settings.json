@@ -7,6 +7,9 @@
       "Read(./docs/archive/phase-3.6.5/**)",
       "Read(./docs/archive/phase-3.6A/**)",
       "Read(./docs/archive/phase-3.6B/**)"
+    ],
+    "additionalDirectories": [
+      "/home/bluekitty/Documents/Git/pin_and_paper_dev_harness"
     ]
   },
   "hooks": {
