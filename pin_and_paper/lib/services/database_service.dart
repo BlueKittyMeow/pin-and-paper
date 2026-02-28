@@ -95,6 +95,9 @@ class DatabaseService {
         notes TEXT DEFAULT NULL,
         position_before_completion INTEGER DEFAULT NULL,
 
+        -- Phase 4.0: Sync layer
+        updated_at INTEGER,
+
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
       )
     ''');
@@ -213,7 +216,8 @@ class DatabaseService {
         name TEXT NOT NULL UNIQUE COLLATE NOCASE,
         color TEXT,
         created_at INTEGER NOT NULL,
-        deleted_at INTEGER DEFAULT NULL
+        deleted_at INTEGER DEFAULT NULL,
+        updated_at INTEGER
       )
     ''');
 
@@ -349,7 +353,39 @@ class DatabaseService {
     ''');
 
     // ===========================================
-    // 5. SEED USER SETTINGS TABLE
+    // 5. SYNC TABLES (Phase 4.0)
+    // ===========================================
+
+    // Sync log: tracks local mutations for push to Supabase
+    await db.execute('''
+      CREATE TABLE sync_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT,
+        created_at INTEGER NOT NULL,
+        synced INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_sync_log_pending ON sync_log(synced, created_at)');
+
+    // Sync meta: single-row sync state
+    await db.execute('''
+      CREATE TABLE sync_meta (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        user_id TEXT,
+        last_push_at INTEGER,
+        last_pull_at INTEGER,
+        sync_enabled INTEGER DEFAULT 0,
+        CHECK (id = 1)
+      )
+    ''');
+    await db.execute('INSERT INTO sync_meta (id) VALUES (1)');
+
+    // ===========================================
+    // 6. SEED USER SETTINGS TABLE
     // ===========================================
 
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -462,6 +498,11 @@ class DatabaseService {
     // Migrate from version 10 to 11: Phase 3.9 - Quiz responses + quick-add date parsing
     if (oldVersion < 11) {
       await _migrateToV11(db);
+    }
+
+    // Migrate from version 11 to 12: Phase 4.0 - Sync layer
+    if (oldVersion < 12) {
+      await _migrateToV12(db);
     }
   }
 
@@ -1156,6 +1197,67 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v11 successfully');
+  }
+
+  /// Phase 4.0 Migration: v11 → v12
+  ///
+  /// Adds:
+  /// - updated_at column to tasks and tags (for LWW merge in sync)
+  /// - sync_log table (tracks local mutations for push to Supabase)
+  /// - sync_meta table (single-row sync state: user_id, timestamps, enabled)
+  ///
+  /// Backfills updated_at from created_at for existing rows.
+  Future<void> _migrateToV12(Database db) async {
+    debugPrint('Migrating database from v11 to v12: Sync layer');
+
+    await db.transaction((txn) async {
+      // ===========================================
+      // 1. ADD updated_at TO TASKS AND TAGS
+      // ===========================================
+      await txn.execute(
+          'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN updated_at INTEGER');
+      await txn.execute(
+          'UPDATE ${AppConstants.tasksTable} SET updated_at = created_at WHERE updated_at IS NULL');
+
+      await txn.execute(
+          'ALTER TABLE ${AppConstants.tagsTable} ADD COLUMN updated_at INTEGER');
+      await txn.execute(
+          'UPDATE ${AppConstants.tagsTable} SET updated_at = created_at WHERE updated_at IS NULL');
+
+      // ===========================================
+      // 2. CREATE SYNC_LOG TABLE
+      // ===========================================
+      await txn.execute('''
+        CREATE TABLE sync_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          table_name TEXT NOT NULL,
+          record_id TEXT NOT NULL,
+          operation TEXT NOT NULL,
+          payload TEXT,
+          created_at INTEGER NOT NULL,
+          synced INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      await txn.execute(
+          'CREATE INDEX idx_sync_log_pending ON sync_log(synced, created_at)');
+
+      // ===========================================
+      // 3. CREATE SYNC_META TABLE (single-row)
+      // ===========================================
+      await txn.execute('''
+        CREATE TABLE sync_meta (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+          user_id TEXT,
+          last_push_at INTEGER,
+          last_pull_at INTEGER,
+          sync_enabled INTEGER DEFAULT 0,
+          CHECK (id = 1)
+        )
+      ''');
+      await txn.execute('INSERT INTO sync_meta (id) VALUES (1)');
+    });
+
+    debugPrint('✅ Database migrated to v12 successfully');
   }
 
   Future<void> close() async {

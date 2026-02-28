@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 11; // Phase 3.9: quiz responses + enable_quick_add_date_parsing
+  static const int databaseVersion = 12; // Phase 4.0: Sync layer (sync_log, sync_meta, updated_at)
 
   // Table names
   static const String tasksTable = 'tasks';

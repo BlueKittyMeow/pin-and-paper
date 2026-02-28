@@ -132,6 +132,40 @@ class TestDatabaseHelper {
       )
     ''');
 
+    // Phase 4.0: Sync layer — updated_at on tasks and tags
+    await db.execute('ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN updated_at INTEGER');
+    await db.execute('UPDATE ${AppConstants.tasksTable} SET updated_at = created_at WHERE updated_at IS NULL');
+
+    await db.execute('ALTER TABLE ${AppConstants.tagsTable} ADD COLUMN updated_at INTEGER');
+    await db.execute('UPDATE ${AppConstants.tagsTable} SET updated_at = created_at WHERE updated_at IS NULL');
+
+    // Phase 4.0: Sync log table
+    await db.execute('''
+      CREATE TABLE sync_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT,
+        created_at INTEGER NOT NULL,
+        synced INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute('CREATE INDEX idx_sync_log_pending ON sync_log(synced, created_at)');
+
+    // Phase 4.0: Sync meta table (single-row)
+    await db.execute('''
+      CREATE TABLE sync_meta (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        user_id TEXT,
+        last_push_at INTEGER,
+        last_pull_at INTEGER,
+        sync_enabled INTEGER DEFAULT 0,
+        CHECK (id = 1)
+      )
+    ''');
+    await db.execute('INSERT INTO sync_meta (id) VALUES (1)');
+
     // Create indexes for performance
     await db.execute('''
       CREATE INDEX idx_tasks_parent_id ON ${AppConstants.tasksTable}(parent_id)
@@ -192,5 +226,8 @@ class TestDatabaseHelper {
     await db.delete(AppConstants.brainDumpDraftsTable);
     await db.delete(AppConstants.apiUsageLogTable);
     await db.delete(AppConstants.userSettingsTable);
+    // Sync tables
+    await db.delete('sync_log');
+    await db.rawUpdate('UPDATE sync_meta SET user_id = NULL, last_push_at = NULL, last_pull_at = NULL, sync_enabled = 0 WHERE id = 1');
   }
 }
