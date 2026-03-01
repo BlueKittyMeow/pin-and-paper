@@ -53,6 +53,22 @@ class AuthService {
     return url;
   }
 
+  /// Handle a pasted redirect URL to complete OAuth on platforms
+  /// where deep links don't work (e.g., Linux dev builds).
+  ///
+  /// The URL looks like: io.supabase.pinandpaper://login-callback/#access_token=...&refresh_token=...
+  /// Returns true if session was established, false otherwise.
+  Future<bool> handleRedirectUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      await _supabase.auth.getSessionFromUrl(uri);
+      return true;
+    } catch (e) {
+      debugPrint('[Auth] Failed to parse redirect URL: $e');
+      return false;
+    }
+  }
+
   /// Sign out. SyncService listens for auth changes and will
   /// auto-disable sync on sign-out.
   Future<void> signOut() async {

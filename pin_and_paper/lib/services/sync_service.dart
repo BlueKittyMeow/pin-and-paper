@@ -40,6 +40,10 @@ class SyncService {
   /// Wire this to TaskProvider.refreshTasks() in main.dart.
   VoidCallback? onDataChanged;
 
+  /// Callback invoked after any push() or pull() completes (success or empty).
+  /// Used by SettingsScreen to refresh the "Last synced" timestamp live.
+  VoidCallback? onSyncComplete;
+
   /// Whether Supabase is available (false in test mode).
   bool get _hasSupabase => _testDb == null;
 
@@ -643,6 +647,7 @@ class SyncService {
       return SyncResult.error;
     } finally {
       _isSyncing = false;
+      onSyncComplete?.call();
       // If a pull was requested during sync, run it now
       if (_pendingPull) {
         _pendingPull = false;
@@ -801,6 +806,7 @@ class SyncService {
       return SyncResult.error;
     } finally {
       _isSyncing = false;
+      onSyncComplete?.call();
       // If another pull was requested during sync, run it now
       if (_pendingPull) {
         _pendingPull = false;

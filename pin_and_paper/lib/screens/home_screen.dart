@@ -21,6 +21,7 @@ import '../widgets/snooze_options_sheet.dart'; // Phase 3.8.4
 import 'brain_dump_screen.dart'; // Phase 2
 import 'settings_screen.dart'; // Phase 2
 import 'quick_complete_screen.dart'; // Phase 2 Stretch
+import '../services/sync_service.dart'; // Phase 4.0
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<TaskProvider>().loadTasks();
       _setupNotificationCallbacks();
       _replayLaunchNotification();
+      _setupSyncCallback(); // Phase 4.0
     });
   }
 
@@ -93,6 +95,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Phase 4.0: Wire SyncService.onDataChanged to filter-aware task refresh.
+  void _setupSyncCallback() {
+    SyncService.instance.onDataChanged = () {
+      if (mounted) {
+        context.read<TaskProvider>().refreshWithCurrentFilters();
+      }
+    };
+  }
+
   /// Phase 3.8.4: Show snooze options and schedule snoozed notification
   Future<void> _showSnoozeSheet(String taskId) async {
     final duration = await SnoozeOptionsSheet.show(context, taskId);
@@ -118,6 +129,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       await ReminderService().snooze(taskId, duration);
     }
+  }
+
+  @override
+  void dispose() {
+    SyncService.instance.onDataChanged = null; // Phase 4.0
+    super.dispose();
   }
 
   @override

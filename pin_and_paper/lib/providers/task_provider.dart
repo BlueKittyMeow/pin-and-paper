@@ -584,6 +584,20 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  /// Reload tasks while preserving any active filters.
+  ///
+  /// Phase 4.0: Called by SyncService.onDataChanged after pull merges
+  /// remote changes. Unlike loadTasks() which always loads the full
+  /// unfiltered hierarchy, this method re-applies the current filter
+  /// so the user's filtered view stays consistent.
+  void refreshWithCurrentFilters() {
+    if (_filterProvider.hasActiveFilters) {
+      _onFilterChanged();
+    } else {
+      loadTasks();
+    }
+  }
+
   Future<void> _performLoadTasks() async {
     _isLoading = true;
     _errorMessage = null;

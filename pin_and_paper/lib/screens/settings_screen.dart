@@ -1,3 +1,4 @@
+import 'dart:async'; // Phase 4.0: StreamSubscription
 import 'package:flutter/material.dart' hide Badge;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +17,9 @@ import '../widgets/quiz/badge_card.dart'; // Phase 3.9
 import '../services/user_settings_service.dart'; // Phase 3.8
 import '../services/reminder_service.dart'; // Phase 3.8
 import '../utils/badge_definitions.dart'; // Phase 3.9
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthState, AuthChangeEvent; // Phase 4.0
+import '../services/auth_service.dart'; // Phase 4.0
+import '../services/sync_service.dart'; // Phase 4.0
 import '../utils/theme.dart';
 import '../utils/constants.dart';
 import '../widgets/permission_explanation_dialog.dart'; // Phase 3.8
@@ -76,6 +80,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Badge> _earnedBadges = [];
   bool _quizCompleted = false;
 
+  // Phase 4.0: Cloud Sync state
+  bool _syncEnabled = false;
+  bool _isSyncLoading = true; // true while loading initial sync state
+  bool _isSyncToggling = false; // true during enable/disable
+  bool _isSigningIn = false; // true during OAuth flow
+  String? _signedInEmail; // null if not signed in
+  DateTime? _lastSyncAt; // max of lastPushAt and lastPullAt
+  String? _oauthUrl; // non-null during sign-in flow (copy/paste fallback)
+  StreamSubscription<AuthState>? _authSub;
+  TextEditingController? _redirectUrlController;
+
   @override
   void initState() {
     super.initState();
@@ -84,11 +99,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadNotificationSettings(); // Phase 3.8
     _loadTimeAndPreferenceSettings(); // Phase 3.9
     _loadQuizStatus(); // Phase 3.9
+    _loadSyncState(); // Phase 4.0
+
+    // Phase 4.0: Permanent auth listener — react to sign-out from token expiry
+    _authSub = AuthService.instance.onAuthStateChange.listen(_onAuthStateChanged);
+
+    // Phase 4.0: Refresh sync timestamps when background sync completes
+    SyncService.instance.onSyncComplete = _refreshSyncTimestamp;
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _authSub?.cancel(); // Phase 4.0
+    _redirectUrlController?.dispose(); // Phase 4.0
+    SyncService.instance.onSyncComplete = null; // Phase 4.0
     super.dispose();
   }
 
@@ -205,6 +230,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               r'💡 Tip: Claude API costs ~$0.01 per brain dump',
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
+            const SizedBox(height: 32),
+
+            // ── Cloud Sync Section (Phase 4.0) ──────────────
+            Text(
+              'Cloud Sync',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Sync your tasks with the cloud so Claude can help manage them.',
+              style: TextStyle(
+                color: AppTheme.muted,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildSyncCard(),
             const SizedBox(height: 32),
 
             // Task Display Section
@@ -1534,5 +1576,376 @@ Package Name: ${info.packageName}
       case BadgeCategory.combo:
         return Icons.stars;
     }
+  }
+
+  // ═══════════════════════════════════════
+  // Phase 4.0: Cloud Sync
+  // ═══════════════════════════════════════
+
+  Future<void> _loadSyncState() async {
+    try {
+      final meta = await SyncService.instance.getSyncMeta();
+      final user = AuthService.instance.currentUser;
+
+      if (mounted) {
+        setState(() {
+          _syncEnabled = meta.syncEnabled;
+          _signedInEmail = user?.email;
+          _lastSyncAt = _latestOf(meta.lastPushAt, meta.lastPullAt);
+          _isSyncLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSyncLoading = false;
+        });
+      }
+    }
+  }
+
+  DateTime? _latestOf(DateTime? a, DateTime? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.isAfter(b) ? a : b;
+  }
+
+  void _onAuthStateChanged(AuthState state) {
+    if (!mounted) return;
+    if (state.event == AuthChangeEvent.signedIn) {
+      _loadSyncState(); // Refresh all sync state
+    } else if (state.event == AuthChangeEvent.signedOut) {
+      setState(() {
+        _syncEnabled = false;
+        _signedInEmail = null;
+        _lastSyncAt = null;
+        _isSigningIn = false;
+        _oauthUrl = null;
+      });
+    }
+  }
+
+  void _refreshSyncTimestamp() async {
+    if (!mounted) return;
+    try {
+      final meta = await SyncService.instance.getSyncMeta();
+      if (mounted) {
+        setState(() {
+          _lastSyncAt = _latestOf(meta.lastPushAt, meta.lastPullAt);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Widget _buildSyncCard() {
+    if (_isSyncLoading) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    final isSignedIn = _signedInEmail != null;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!isSignedIn) ..._buildSignedOutContent(),
+            if (isSignedIn) ..._buildSignedInContent(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSignedOutContent() {
+    return [
+      Row(
+        children: [
+          Icon(Icons.cloud_outlined, color: AppTheme.muted),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Sign in to sync your tasks with Claude',
+              style: TextStyle(color: AppTheme.muted),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _isSigningIn ? null : _handleSignIn,
+          icon: _isSigningIn
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.login),
+          label: Text(_isSigningIn ? 'Opening browser...' : 'Sign in with Google'),
+        ),
+      ),
+      if (_oauthUrl != null) ...[
+        const SizedBox(height: 16),
+        Text(
+          "If your browser didn't open, copy this link and paste it in your browser:",
+          style: TextStyle(fontSize: 12, color: AppTheme.muted),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: SelectableText(
+                _oauthUrl!,
+                style: TextStyle(fontSize: 11, color: AppTheme.info),
+                maxLines: 2,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 18),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: _oauthUrl!));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Link copied to clipboard')),
+                );
+              },
+              tooltip: 'Copy link',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'After signing in, paste the redirect URL here:',
+          style: TextStyle(fontSize: 12, color: AppTheme.muted),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _redirectUrlController ??= TextEditingController(),
+                decoration: const InputDecoration(
+                  hintText: 'io.supabase.pinandpaper://...',
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _handleRedirectUrlPaste,
+              child: const Text('Go'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton(
+            onPressed: _handleCancelSignIn,
+            child: Text('Cancel', style: TextStyle(color: AppTheme.muted)),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _buildSignedInContent() {
+    return [
+      // User email
+      Row(
+        children: [
+          Icon(Icons.account_circle, color: AppTheme.deepShadow),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _signedInEmail!,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+
+      // Sync toggle
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Row(
+          children: [
+            Text(_syncEnabled ? 'Sync enabled' : 'Sync disabled'),
+            if (_isSyncToggling) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ],
+          ],
+        ),
+        subtitle: _lastSyncAt != null
+            ? Text(
+                'Last synced: ${_formatLastSync(_lastSyncAt!)}',
+                style: TextStyle(fontSize: 12, color: AppTheme.muted),
+              )
+            : null,
+        value: _syncEnabled,
+        onChanged: _isSyncToggling ? null : _handleSyncToggle,
+        activeColor: AppTheme.success,
+      ),
+
+      const Divider(),
+      const SizedBox(height: 4),
+
+      // Sign out button
+      TextButton.icon(
+        onPressed: _handleSignOut,
+        icon: Icon(Icons.logout, size: 18, color: AppTheme.danger),
+        label: Text('Sign out', style: TextStyle(color: AppTheme.danger)),
+      ),
+    ];
+  }
+
+  Future<void> _handleSignIn() async {
+    setState(() {
+      _isSigningIn = true;
+      _oauthUrl = null;
+    });
+
+    try {
+      final url = await AuthService.instance.signInWithGoogle();
+      if (mounted) {
+        setState(() {
+          _oauthUrl = url;
+        });
+      }
+      // Auth completion is handled by _onAuthStateChanged (permanent listener)
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+          _oauthUrl = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign-in failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleRedirectUrlPaste() async {
+    final url = _redirectUrlController?.text.trim();
+    if (url == null || url.isEmpty) return;
+
+    final success = await AuthService.instance.handleRedirectUrl(url);
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid redirect URL. Please try again.')),
+      );
+    }
+    // If successful, _onAuthStateChanged will handle the UI update
+  }
+
+  void _handleCancelSignIn() {
+    setState(() {
+      _isSigningIn = false;
+      _oauthUrl = null;
+      _redirectUrlController?.clear();
+    });
+  }
+
+  Future<void> _handleSyncToggle(bool enabled) async {
+    setState(() => _isSyncToggling = true);
+
+    try {
+      if (enabled) {
+        await SyncService.instance.enableSync();
+      } else {
+        await SyncService.instance.disableSync();
+      }
+
+      // Re-read meta to get accurate state
+      final meta = await SyncService.instance.getSyncMeta();
+      if (mounted) {
+        setState(() {
+          _syncEnabled = meta.syncEnabled;
+          _lastSyncAt = _latestOf(meta.lastPushAt, meta.lastPullAt);
+          _isSyncToggling = false;
+        });
+      }
+    } catch (e) {
+      // Re-read actual meta state instead of guessing
+      try {
+        final meta = await SyncService.instance.getSyncMeta();
+        if (mounted) {
+          setState(() {
+            _syncEnabled = meta.syncEnabled;
+            _isSyncToggling = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) setState(() => _isSyncToggling = false);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to ${enabled ? "enable" : "disable"} sync: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'Sync will be disabled. Your local tasks will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Sign out', style: TextStyle(color: AppTheme.danger)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await AuthService.instance.signOut();
+      // UI update handled by _onAuthStateChanged (permanent listener)
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign-out failed: $e')),
+        );
+      }
+    }
+  }
+
+  String _formatLastSync(DateTime lastSync) {
+    final now = DateTime.now();
+    final diff = now.difference(lastSync);
+
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+
+    // Fallback to date
+    return '${lastSync.month}/${lastSync.day}/${lastSync.year}';
   }
 }
