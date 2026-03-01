@@ -30,6 +30,9 @@ class Task {
   final String? notes; // Task description/notes
   final int? positionBeforeCompletion; // For restoring position on uncomplete
 
+  // Phase 4.0: Sync support
+  final DateTime? updatedAt; // LWW timestamp for sync conflict resolution
+
   Task({
     required this.id,
     required this.title,
@@ -49,6 +52,7 @@ class Task {
     this.deletedAt,
     this.notes,
     this.positionBeforeCompletion,
+    this.updatedAt,
   });
 
   /// Serialize to database map
@@ -72,6 +76,7 @@ class Task {
       'deleted_at': deletedAt?.millisecondsSinceEpoch,
       'notes': notes,
       'position_before_completion': positionBeforeCompletion,
+      'updated_at': updatedAt?.millisecondsSinceEpoch,
     };
   }
 
@@ -112,6 +117,9 @@ class Task {
           : null,
       notes: map['notes'] as String?,
       positionBeforeCompletion: map['position_before_completion'] as int?,
+      updatedAt: map['updated_at'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int)
+          : null,
     );
   }
 
@@ -134,6 +142,7 @@ class Task {
     DateTime? deletedAt,
     String? notes,
     int? positionBeforeCompletion,
+    DateTime? updatedAt,
   }) {
     return Task(
       id: id ?? this.id,
@@ -153,6 +162,7 @@ class Task {
       deletedAt: deletedAt ?? this.deletedAt,
       notes: notes ?? this.notes,
       positionBeforeCompletion: positionBeforeCompletion ?? this.positionBeforeCompletion,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 

@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Phase 4.0
 import 'providers/task_provider.dart';
 import 'providers/tag_provider.dart'; // Phase 3.5
 import 'providers/task_sort_provider.dart'; // Phase 3.9 Refactor
@@ -14,6 +15,7 @@ import 'screens/home_screen.dart';
 import 'screens/quiz_screen.dart'; // Phase 3.9
 import 'services/quiz_service.dart'; // Phase 3.9
 import 'services/task_service.dart'; // Phase 3.3
+import 'services/sync_service.dart'; // Phase 4.0
 import 'services/date_parsing_service.dart'; // Phase 3.7
 import 'services/notification_service.dart'; // Phase 3.8
 import 'services/reminder_service.dart'; // Phase 3.8.4
@@ -39,6 +41,19 @@ void main() async {
   } catch (e) {
     print('[Maintenance] Failed to cleanup expired tasks: $e');
     // Don't block app startup on cleanup failure
+  }
+
+  // Phase 4.0: Initialize Supabase + Sync Service
+  try {
+    await Supabase.initialize(
+      url: const String.fromEnvironment('SUPABASE_URL',
+          defaultValue: 'https://qasieyfuspuoauffochm.supabase.co'),
+      anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
+    );
+    await SyncService.instance.initialize();
+  } catch (e) {
+    print('[Phase 4.0] Failed to initialize Supabase/Sync: $e');
+    // Don't block app startup — app works fully offline
   }
 
   // Phase 3.7: Initialize date parsing service

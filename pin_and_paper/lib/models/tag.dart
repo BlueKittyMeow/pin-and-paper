@@ -9,6 +9,7 @@ class Tag {
   final String name; // Unique, case-insensitive (handled by DB)
   final String? color; // Hex color code (e.g., "#FF5722"), NULL = default
   final DateTime createdAt;
+  final DateTime? updatedAt; // Phase 4.0: LWW timestamp for sync
   final DateTime? deletedAt; // NULL = active, non-NULL = soft-deleted
 
   Tag({
@@ -16,6 +17,7 @@ class Tag {
     required this.name,
     required this.createdAt,
     this.color,
+    this.updatedAt,
     this.deletedAt,
   });
 
@@ -26,6 +28,7 @@ class Tag {
       'name': name,
       'color': color,
       'created_at': createdAt.millisecondsSinceEpoch,
+      'updated_at': updatedAt?.millisecondsSinceEpoch,
       'deleted_at': deletedAt?.millisecondsSinceEpoch,
     };
   }
@@ -39,6 +42,9 @@ class Tag {
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         map['created_at'] as int,
       ),
+      updatedAt: map['updated_at'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int)
+          : null,
       deletedAt: map['deleted_at'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['deleted_at'] as int)
           : null,
@@ -51,6 +57,7 @@ class Tag {
     String? name,
     String? color,
     DateTime? createdAt,
+    DateTime? updatedAt,
     DateTime? deletedAt,
   }) {
     return Tag(
@@ -58,6 +65,7 @@ class Tag {
       name: name ?? this.name,
       color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
     );
   }

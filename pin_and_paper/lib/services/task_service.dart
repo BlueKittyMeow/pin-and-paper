@@ -5,6 +5,7 @@ import '../models/task.dart';
 import '../models/task_suggestion.dart'; // Phase 2
 import '../utils/constants.dart';
 import 'database_service.dart';
+import 'sync_service.dart'; // Phase 4.0
 
 class TaskService {
   final DatabaseService _dbService = DatabaseService.instance;
@@ -32,20 +33,30 @@ class TaskService {
     final maxPosition = result.first['max_position'] as int;
     final nextPosition = maxPosition + 1;
 
+    final now = DateTime.now();
     final task = Task(
       id: _generateId(),
       title: title.trim(),
-      createdAt: DateTime.now(),
+      createdAt: now,
       position: nextPosition, // Phase 3.1: Assign calculated position
       dueDate: dueDate, // Phase 3.7: Optional due date from Quick Add
       isAllDay: isAllDay, // Phase 3.7: Optional isAllDay flag
+      updatedAt: now, // Phase 4.0: Sync timestamp
     );
 
+    final taskMap = task.toMap();
     await db.insert(
       AppConstants.tasksTable,
-      task.toMap(),
+      taskMap,
       // Removed ConflictAlgorithm.replace to prevent silent data loss
       // Default is ConflictAlgorithm.abort which throws on duplicate IDs
+    );
+
+    await SyncService.instance.logChange(
+      tableName: 'tasks',
+      recordId: task.id,
+      operation: 'INSERT',
+      payload: taskMap,
     );
 
     return task;
@@ -75,16 +86,27 @@ class TaskService {
         // Only create approved tasks
         if (!suggestion.approved) continue;
 
+        final now = DateTime.now();
         final task = Task(
           id: suggestion.id, // Reuse suggestion ID (already UUID from ClaudeService)
           title: suggestion.title,
-          createdAt: DateTime.now(),
+          createdAt: now,
           position: nextPosition++, // Phase 3.1: Assign and increment position
+          updatedAt: now, // Phase 4.0: Sync timestamp
         );
 
+        final taskMap = task.toMap();
         await txn.insert(
           AppConstants.tasksTable,
-          task.toMap(),
+          taskMap,
+        );
+
+        await SyncService.instance.logChange(
+          tableName: 'tasks',
+          recordId: task.id,
+          operation: 'INSERT',
+          payload: taskMap,
+          txn: txn,
         );
 
         createdTasks.add(task);
@@ -406,17 +428,27 @@ class TaskService {
 
     if (!task.completed) {
       // Completing: Save current position for potential restore
+      final now = DateTime.now();
       final updatedTask = task.copyWith(
         completed: true,
-        completedAt: DateTime.now(),
+        completedAt: now,
         positionBeforeCompletion: task.position,
+        updatedAt: now,
       );
 
+      final taskMap = updatedTask.toMap();
       await db.update(
         AppConstants.tasksTable,
-        updatedTask.toMap(),
+        taskMap,
         where: 'id = ?',
         whereArgs: [task.id],
+      );
+
+      await SyncService.instance.logChange(
+        tableName: 'tasks',
+        recordId: task.id,
+        operation: 'UPDATE',
+        payload: taskMap,
       );
 
       return updatedTask;
@@ -470,16 +502,27 @@ class TaskService {
           : [parentId, targetPosition, taskId]);
 
       // 3. Update task: uncomplete and restore position
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final updateMap = {
+        'completed': 0,
+        'completed_at': null,
+        'position': targetPosition,
+        'position_before_completion': null, // Clear saved position
+        'updated_at': now,
+      };
       await txn.update(
         AppConstants.tasksTable,
-        {
-          'completed': 0,
-          'completed_at': null,
-          'position': targetPosition,
-          'position_before_completion': null, // Clear saved position
-        },
+        updateMap,
         where: 'id = ?',
         whereArgs: [taskId],
+      );
+
+      await SyncService.instance.logChange(
+        tableName: 'tasks',
+        recordId: taskId,
+        operation: 'UPDATE',
+        payload: updateMap,
+        txn: txn,
       );
 
       // 4. Return updated task
@@ -488,6 +531,7 @@ class TaskService {
         completedAt: null,
         position: targetPosition,
         positionBeforeCompletion: null,
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(now),
       );
     });
   }
@@ -535,11 +579,13 @@ class TaskService {
     final originalTask = Task.fromMap(maps.first);
 
     // Perform the update
+    final now = DateTime.now();
     final updateMap = <String, dynamic>{
       'title': trimmedTitle,
       'due_date': dueDate?.millisecondsSinceEpoch,
       'is_all_day': isAllDay ? 1 : 0,
       'notes': notes,
+      'updated_at': now.millisecondsSinceEpoch,
     };
     if (notificationType != null) {
       updateMap['notification_type'] = notificationType;
@@ -552,6 +598,13 @@ class TaskService {
       whereArgs: [taskId],
     );
 
+    await SyncService.instance.logChange(
+      tableName: 'tasks',
+      recordId: taskId,
+      operation: 'UPDATE',
+      payload: updateMap,
+    );
+
     // Return updated copy
     return originalTask.copyWith(
       title: trimmedTitle,
@@ -559,6 +612,7 @@ class TaskService {
       isAllDay: isAllDay,
       notes: notes,
       notificationType: notificationType ?? originalTask.notificationType,
+      updatedAt: now,
     );
   }
 
@@ -593,15 +647,27 @@ class TaskService {
     final originalTask = Task.fromMap(maps.first);
 
     // Perform the update
+    final now = DateTime.now();
+    final updateMap = {
+      'title': trimmedTitle,
+      'updated_at': now.millisecondsSinceEpoch,
+    };
     await db.update(
       AppConstants.tasksTable,
-      {'title': trimmedTitle},
+      updateMap,
       where: 'id = ?',
       whereArgs: [taskId],
     );
 
+    await SyncService.instance.logChange(
+      tableName: 'tasks',
+      recordId: taskId,
+      operation: 'UPDATE',
+      payload: updateMap,
+    );
+
     // Return updated copy (leverages existing copyWith method)
-    return originalTask.copyWith(title: trimmedTitle);
+    return originalTask.copyWith(title: trimmedTitle, updatedAt: now);
   }
 
   // Get count of incomplete tasks
@@ -682,14 +748,25 @@ class TaskService {
         ''', newParentId == null ? [newPosition] : [newParentId, newPosition]);
 
         // Step 4: Insert task at desired position
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final moveMap = {
+          'parent_id': newParentId,
+          'position': newPosition,
+          'updated_at': now,
+        };
         await txn.update(
           AppConstants.tasksTable,
-          {
-            'parent_id': newParentId,
-            'position': newPosition,
-          },
+          moveMap,
           where: 'id = ?',
           whereArgs: [taskId],
+        );
+
+        await SyncService.instance.logChange(
+          tableName: 'tasks',
+          recordId: taskId,
+          operation: 'UPDATE',
+          payload: moveMap,
+          txn: txn,
         );
       } else {
         // Moving to different parent
@@ -719,11 +796,28 @@ class TaskService {
             : [newParentId, newPosition, taskId]);
 
         // Step 4: Insert task at desired position
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final posMap = {
+          'position': newPosition,
+          'updated_at': now,
+        };
         await txn.update(
           AppConstants.tasksTable,
-          {'position': newPosition},
+          posMap,
           where: 'id = ?',
           whereArgs: [taskId],
+        );
+
+        await SyncService.instance.logChange(
+          tableName: 'tasks',
+          recordId: taskId,
+          operation: 'UPDATE',
+          payload: {
+            'parent_id': newParentId,
+            'position': newPosition,
+            'updated_at': now,
+          },
+          txn: txn,
         );
       }
 
@@ -785,6 +879,16 @@ class TaskService {
           where: 'id IN (${List.filled(idsToDelete.length, '?').join(',')})',
           whereArgs: idsToDelete,
         );
+
+        // Log each deleted task for sync
+        for (final id in idsToDelete) {
+          await SyncService.instance.logChange(
+            tableName: 'tasks',
+            recordId: id,
+            operation: 'DELETE',
+            txn: txn,
+          );
+        }
       }
 
       return idsToDelete.length;
@@ -827,12 +931,24 @@ class TaskService {
 
       // Set deleted_at timestamp for all descendants
       if (idsToSoftDelete.isNotEmpty) {
+        final updateMap = {'deleted_at': now, 'updated_at': now};
         await txn.update(
           AppConstants.tasksTable,
-          {'deleted_at': now},
+          updateMap,
           where: 'id IN (${List.filled(idsToSoftDelete.length, '?').join(',')})',
           whereArgs: idsToSoftDelete,
         );
+
+        // Log each soft-deleted task for sync
+        for (final id in idsToSoftDelete) {
+          await SyncService.instance.logChange(
+            tableName: 'tasks',
+            recordId: id,
+            operation: 'UPDATE',
+            payload: updateMap,
+            txn: txn,
+          );
+        }
       }
 
       return idsToSoftDelete.length;
@@ -887,12 +1003,25 @@ class TaskService {
 
       // Clear deleted_at for entire tree path (ancestors + self + descendants)
       if (idsToRestore.isNotEmpty) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final updateMap = {'deleted_at': null, 'updated_at': now};
         await txn.update(
           AppConstants.tasksTable,
-          {'deleted_at': null},
+          updateMap,
           where: 'id IN (${List.filled(idsToRestore.length, '?').join(',')})',
           whereArgs: idsToRestore,
         );
+
+        // Log each restored task for sync
+        for (final id in idsToRestore) {
+          await SyncService.instance.logChange(
+            tableName: 'tasks',
+            recordId: id,
+            operation: 'UPDATE',
+            payload: updateMap,
+            txn: txn,
+          );
+        }
       }
 
       return idsToRestore.length;
@@ -1050,6 +1179,16 @@ class TaskService {
         whereArgs: idsToDelete,
       );
 
+      // Log each deleted task for sync
+      for (final id in idsToDelete) {
+        await SyncService.instance.logChange(
+          tableName: 'tasks',
+          recordId: id,
+          operation: 'DELETE',
+          txn: txn,
+        );
+      }
+
       return idsToDelete.length;
     });
   }
@@ -1086,6 +1225,16 @@ class TaskService {
         where: 'id IN (${List.filled(idsToDelete.length, '?').join(',')})',
         whereArgs: idsToDelete,
       );
+
+      // Log each deleted task for sync
+      for (final id in idsToDelete) {
+        await SyncService.instance.logChange(
+          tableName: 'tasks',
+          recordId: id,
+          operation: 'DELETE',
+          txn: txn,
+        );
+      }
 
       return idsToDelete.length;
     });
@@ -1124,6 +1273,16 @@ class TaskService {
         whereArgs: idsToDelete,
       );
 
+      // Log each deleted task for sync
+      for (final id in idsToDelete) {
+        await SyncService.instance.logChange(
+          tableName: 'tasks',
+          recordId: id,
+          operation: 'DELETE',
+          txn: txn,
+        );
+      }
+
       return idsToDelete.length;
     });
   }
@@ -1160,6 +1319,7 @@ class TaskService {
   // Phase 3.2: Reindex siblings under a parent to maintain sequential positions
   // Reference: docs/phase-03/group1.md:1693-1710
   // Phase 3.3: Excludes soft-deleted tasks from reindexing
+  // Phase 4.0: Sets updated_at and logs changes for sync
   Future<void> _reindexSiblings(
     String? parentId,
     Transaction txn, {
@@ -1182,13 +1342,29 @@ class TaskService {
       orderBy: 'position ASC',
     );
 
+    final now = DateTime.now().millisecondsSinceEpoch;
     for (int i = 0; i < siblings.length; i++) {
-      await txn.update(
-        AppConstants.tasksTable,
-        {'position': i},
-        where: 'id = ?',
-        whereArgs: [siblings[i]['id']],
-      );
+      final siblingId = siblings[i]['id'] as String;
+      final oldPosition = siblings[i]['position'] as int?;
+
+      // Only update if position actually changed
+      if (oldPosition != i) {
+        final updateMap = {'position': i, 'updated_at': now};
+        await txn.update(
+          AppConstants.tasksTable,
+          updateMap,
+          where: 'id = ?',
+          whereArgs: [siblingId],
+        );
+
+        await SyncService.instance.logChange(
+          tableName: 'tasks',
+          recordId: siblingId,
+          operation: 'UPDATE',
+          payload: updateMap,
+          txn: txn,
+        );
+      }
     }
   }
 

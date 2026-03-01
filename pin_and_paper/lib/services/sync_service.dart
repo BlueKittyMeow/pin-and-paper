@@ -1,19 +1,22 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/constants.dart';
 import 'database_service.dart';
 
-/// Local sync engine for the Supabase sync layer.
+/// Sync engine for the Supabase sync layer.
 ///
 /// Handles change tracking (sync_log), LWW merge logic, type conversions
 /// between local SQLite (epoch ms, int booleans) and remote Supabase
-/// (ISO 8601, native booleans), and task_tags union-merge.
+/// (ISO 8601, native booleans), task_tags union-merge, and network
+/// operations (push/pull via Supabase REST + Realtime subscriptions).
 ///
-/// Network operations (push/pull via Supabase REST + Realtime) will be
-/// added in a later phase. This file contains only the local logic that
-/// can be tested with in-memory SQLite.
+/// Phase 4.0: Full network sync with per-entry push, server-timestamp
+/// pull cursor, deduplication, batched fullPush, and connectivity gating.
 class SyncService {
   static final SyncService instance = SyncService._production();
 
@@ -27,6 +30,20 @@ class SyncService {
   SyncService.testInstance(Database db) : _testDb = db;
 
   SyncMeta? _cachedMeta;
+  bool _isSyncing = false;
+  bool _pendingPull = false;
+  Timer? _pullDebounceTimer;
+  StreamSubscription? _connectivitySub;
+  StreamSubscription? _authSub;
+
+  /// Callback invoked after pull merges remote changes into local DB.
+  /// Wire this to TaskProvider.refreshTasks() in main.dart.
+  VoidCallback? onDataChanged;
+
+  /// Whether Supabase is available (false in test mode).
+  bool get _hasSupabase => _testDb == null;
+
+  SupabaseClient get _supabase => Supabase.instance.client;
 
   Future<Database> get _database async {
     if (_testDb != null) return _testDb!;
@@ -88,23 +105,45 @@ class SyncService {
   /// INSERT, UPDATE, DELETE.
   ///
   /// No-op when sync is disabled. For DELETE, [payload] can be null.
+  ///
+  /// When [txn] is provided, the sync_log insert happens inside the same
+  /// transaction as the data write — prevents crash-window data loss.
   Future<void> logChange({
     required String tableName,
     required String recordId,
     required String operation,
     Map<String, dynamic>? payload,
+    DatabaseExecutor? txn,
   }) async {
     final meta = _cachedMeta ?? await getSyncMeta();
     if (!meta.syncEnabled) return;
 
-    final db = await _database;
-    await db.insert('sync_log', {
+    final executor = txn ?? await _database;
+    await executor.insert('sync_log', {
       'table_name': tableName,
       'record_id': recordId,
       'operation': operation,
       'payload': payload != null ? jsonEncode(payload) : null,
       'created_at': DateTime.now().millisecondsSinceEpoch,
       'synced': 0,
+    });
+
+    _schedulePush();
+  }
+
+  // ═══════════════════════════════════════
+  // PUSH SCHEDULING
+  // ═══════════════════════════════════════
+
+  Timer? _pushTimer;
+
+  /// Schedule a push after a 2-second debounce.
+  /// Called from logChange() when sync is enabled.
+  void _schedulePush() {
+    if (!_hasSupabase) return;
+    _pushTimer?.cancel();
+    _pushTimer = Timer(const Duration(seconds: 2), () {
+      push();
     });
   }
 
@@ -214,7 +253,7 @@ class SyncService {
     };
   }
 
-  Map<String, dynamic> _localTagToRemote(
+  Map<String, dynamic> localTagToRemote(
       Map<String, dynamic> local, String userId) {
     return {
       'id': local['id'],
@@ -227,7 +266,7 @@ class SyncService {
     };
   }
 
-  Map<String, dynamic> _remoteTagToLocal(Map<String, dynamic> remote) {
+  Map<String, dynamic> remoteTagToLocal(Map<String, dynamic> remote) {
     return {
       'id': remote['id'],
       'name': remote['name'],
@@ -282,7 +321,7 @@ class SyncService {
       whereArgs: [remote['id']],
     );
 
-    final localData = _remoteTagToLocal(remote);
+    final localData = remoteTagToLocal(remote);
 
     if (localResult.isEmpty) {
       await db.insert(AppConstants.tagsTable, localData);
@@ -407,7 +446,7 @@ class SyncService {
         whereArgs: [recordId],
       );
       if (local.isEmpty) {
-        return {'type': 'delete'};
+        return {'type': 'delete', 'id': recordId};
       }
       return {
         'type': 'upsert',
@@ -422,11 +461,11 @@ class SyncService {
         whereArgs: [recordId],
       );
       if (local.isEmpty) {
-        return {'type': 'delete'};
+        return {'type': 'delete', 'id': recordId};
       }
       return {
         'type': 'upsert',
-        'data': _localTagToRemote(local.first, userId),
+        'data': localTagToRemote(local.first, userId),
       };
     }
 
@@ -446,6 +485,399 @@ class SyncService {
       where: "synced = 0 AND table_name = 'task_tags'",
     );
     return result.isNotEmpty;
+  }
+
+  // ═══════════════════════════════════════
+  // INITIALIZATION
+  // ═══════════════════════════════════════
+
+  /// Call once at app startup (after Supabase.initialize).
+  /// Sets up auth listener, verifies stored user, subscribes to realtime.
+  Future<void> initialize() async {
+    if (!_hasSupabase) return;
+
+    // Listen for auth state changes
+    _authSub = _supabase.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedOut) {
+        _onUserSignedOut();
+      }
+    });
+
+    final meta = await getSyncMeta();
+    if (!meta.syncEnabled) return;
+
+    // Verify stored user matches current auth user
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser == null || currentUser.id != meta.userId) {
+      await disableSync();
+      return;
+    }
+
+    // Subscribe first, then pull (catches changes during pull)
+    _subscribeToRemoteChanges(currentUser.id);
+    _listenForConnectivity();
+    await pull();
+  }
+
+  /// Enable sync for the first time. Triggers initial full push.
+  Future<void> enableSync() async {
+    if (!_hasSupabase) return;
+
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw StateError('Must be authenticated to enable sync');
+
+    await updateSyncMeta(syncEnabled: true, userId: user.id);
+    await fullPush();
+    _subscribeToRemoteChanges(user.id);
+    _listenForConnectivity();
+  }
+
+  /// Disable sync. Local data remains. Remote data remains.
+  Future<void> disableSync() async {
+    if (_hasSupabase) {
+      _supabase.removeAllChannels();
+    }
+    _connectivitySub?.cancel();
+    _pushTimer?.cancel();
+    _pullDebounceTimer?.cancel();
+    await updateSyncMeta(syncEnabled: false);
+  }
+
+  /// Handle user sign-out — disable sync and clear user.
+  Future<void> _onUserSignedOut() async {
+    if (_hasSupabase) {
+      _supabase.removeAllChannels();
+    }
+    _connectivitySub?.cancel();
+    _pushTimer?.cancel();
+    _pullDebounceTimer?.cancel();
+    // Clear userId by setting it to empty, then clearing sync state
+    final db = await _database;
+    await db.update('sync_meta', {
+      'sync_enabled': 0,
+      'user_id': null,
+    }, where: 'id = 1');
+    _cachedMeta = null;
+  }
+
+  void dispose() {
+    _pushTimer?.cancel();
+    _pullDebounceTimer?.cancel();
+    _connectivitySub?.cancel();
+    _authSub?.cancel();
+  }
+
+  // ═══════════════════════════════════════
+  // PUSH (local → Supabase)
+  // ═══════════════════════════════════════
+
+  /// Push pending local changes to Supabase.
+  ///
+  /// Design review fixes applied:
+  /// - Deduplicates sync_log by record_id (keeps latest per record)
+  /// - Marks entries synced one at a time (not in bulk)
+  /// - Stops on first failure to prevent data loss
+  Future<SyncResult> push() async {
+    if (_isSyncing) return SyncResult.skipped;
+    if (!_hasSupabase) return SyncResult.disabled;
+    _isSyncing = true;
+
+    try {
+      final meta = await getSyncMeta();
+      if (!meta.syncEnabled) return SyncResult.disabled;
+      if (meta.userId == null) return SyncResult.disabled;
+
+      final db = await _database;
+      final pending = await db.query(
+        'sync_log',
+        where: 'synced = 0',
+        orderBy: 'created_at ASC',
+      );
+
+      if (pending.isEmpty) return SyncResult.nothingToPush;
+
+      // Deduplicate: for the same record_id, only push the latest entry.
+      // Earlier entries for the same record are redundant since _pushEntry
+      // re-reads current local state for tasks/tags.
+      final seen = <String, Map<String, dynamic>>{};
+      final obsoleteIds = <int>[];
+      for (final entry in pending) {
+        final key = '${entry['table_name']}_${entry['record_id']}';
+        if (seen.containsKey(key)) {
+          // Mark the previous entry as synced (obsolete)
+          obsoleteIds.add(seen[key]!['id'] as int);
+        }
+        seen[key] = entry;
+      }
+
+      // Mark obsolete entries as synced
+      if (obsoleteIds.isNotEmpty) {
+        await db.rawUpdate(
+          'UPDATE sync_log SET synced = 1 WHERE id IN (${obsoleteIds.join(",")})',
+        );
+      }
+
+      // Push remaining unique entries, mark each synced individually
+      for (final entry in seen.values) {
+        try {
+          await _pushEntry(entry, meta.userId!);
+
+          // Mark this entry synced immediately after success
+          await db.update(
+            'sync_log',
+            {'synced': 1},
+            where: 'id = ?',
+            whereArgs: [entry['id']],
+          );
+        } catch (e) {
+          // Stop on first failure — remaining entries stay unsynced
+          debugPrint('[Sync] Push entry failed: $e');
+          return SyncResult.error;
+        }
+      }
+
+      await updateSyncMeta(lastPushAt: DateTime.now());
+      return SyncResult.success;
+    } catch (e) {
+      debugPrint('[Sync] Push failed: $e');
+      return SyncResult.error;
+    } finally {
+      _isSyncing = false;
+      // If a pull was requested during sync, run it now
+      if (_pendingPull) {
+        _pendingPull = false;
+        pull();
+      }
+    }
+  }
+
+  /// Push a single sync_log entry to Supabase.
+  Future<void> _pushEntry(Map<String, dynamic> entry, String userId) async {
+    final db = await _database;
+    final table = entry['table_name'] as String;
+    final recordId = entry['record_id'] as String;
+    final operation = entry['operation'] as String;
+    final payloadJson = entry['payload'] as String?;
+    final payload = payloadJson != null
+        ? jsonDecode(payloadJson) as Map<String, dynamic>
+        : null;
+
+    final prepared = await preparePushEntry(
+      db, table, recordId, operation, payload, userId,
+    );
+    if (prepared == null) return;
+
+    final type = prepared['type'] as String;
+
+    if (type == 'upsert') {
+      await _supabase.from(table).upsert(prepared['data']);
+    } else if (type == 'delete') {
+      await _supabase.from(table).delete().eq('id', prepared['id']);
+    } else if (type == 'delete_task_tag') {
+      await _supabase
+          .from('task_tags')
+          .delete()
+          .eq('task_id', prepared['task_id'])
+          .eq('tag_id', prepared['tag_id']);
+    }
+  }
+
+  /// Full push — initial sync. Pushes ALL local data via bulk upsert.
+  /// Batches at 500 records to avoid payload/timeout limits.
+  Future<void> fullPush() async {
+    if (!_hasSupabase) return;
+
+    final db = await _database;
+    final meta = await getSyncMeta();
+    if (meta.userId == null) return;
+    final userId = meta.userId!;
+
+    const batchSize = 500;
+
+    // Bulk upsert all tasks (batched)
+    final tasks = await db.query(AppConstants.tasksTable);
+    for (int i = 0; i < tasks.length; i += batchSize) {
+      final end = (i + batchSize < tasks.length) ? i + batchSize : tasks.length;
+      final batch = tasks.sublist(i, end);
+      final remoteTasks = batch.map((t) => localTaskToRemote(t, userId)).toList();
+      await _supabase.from('tasks').upsert(remoteTasks);
+    }
+
+    // Bulk upsert all tags (batched)
+    final tags = await db.query(AppConstants.tagsTable);
+    for (int i = 0; i < tags.length; i += batchSize) {
+      final end = (i + batchSize < tags.length) ? i + batchSize : tags.length;
+      final batch = tags.sublist(i, end);
+      final remoteTags = batch.map((t) => localTagToRemote(t, userId)).toList();
+      await _supabase.from('tags').upsert(remoteTags);
+    }
+
+    // Bulk upsert all task_tags (batched)
+    final taskTags = await db.query(AppConstants.taskTagsTable);
+    for (int i = 0; i < taskTags.length; i += batchSize) {
+      final end = (i + batchSize < taskTags.length) ? i + batchSize : taskTags.length;
+      final batch = taskTags.sublist(i, end);
+      final remoteTT = batch.map((tt) => localTaskTagToRemote(tt, userId)).toList();
+      await _supabase.from('task_tags').upsert(remoteTT);
+    }
+
+    // Mark all existing sync_log entries as synced
+    await db.rawUpdate('UPDATE sync_log SET synced = 1 WHERE synced = 0');
+
+    await updateSyncMeta(lastPushAt: DateTime.now());
+  }
+
+  // ═══════════════════════════════════════
+  // PULL (Supabase → local)
+  // ═══════════════════════════════════════
+
+  /// Pull remote changes since last pull and merge via LWW.
+  ///
+  /// Design review fix: Uses max server timestamp from pulled records
+  /// as lastPullAt cursor instead of local clock (prevents clock skew).
+  Future<SyncResult> pull() async {
+    if (_isSyncing) {
+      _pendingPull = true;
+      return SyncResult.skipped;
+    }
+    if (!_hasSupabase) return SyncResult.disabled;
+    _isSyncing = true;
+
+    try {
+      final meta = await getSyncMeta();
+      if (!meta.syncEnabled) return SyncResult.disabled;
+
+      final since = meta.lastPullAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final db = await _database;
+
+      int maxUpdatedAt = since.millisecondsSinceEpoch;
+
+      // Pull tasks updated since last pull
+      final remoteTasks = await _supabase
+          .from('tasks')
+          .select()
+          .gt('updated_at', since.toUtc().toIso8601String())
+          .order('updated_at');
+
+      for (final remote in remoteTasks) {
+        await mergeTask(db, remote);
+        // Track max server timestamp
+        final ts = DateTime.parse(remote['updated_at']).millisecondsSinceEpoch;
+        if (ts > maxUpdatedAt) maxUpdatedAt = ts;
+      }
+
+      // Pull tags updated since last pull
+      final remoteTags = await _supabase
+          .from('tags')
+          .select()
+          .gt('updated_at', since.toUtc().toIso8601String())
+          .order('updated_at');
+
+      for (final remote in remoteTags) {
+        await mergeTag(db, remote);
+        final ts = DateTime.parse(remote['updated_at']).millisecondsSinceEpoch;
+        if (ts > maxUpdatedAt) maxUpdatedAt = ts;
+      }
+
+      // Pull ALL task_tags for this user and union-merge
+      final remoteTaskTags = await _supabase
+          .from('task_tags')
+          .select('task_id, tag_id');
+
+      final hasPending = await hasPendingTaskTagOps();
+      await pullTaskTags(db, remoteTaskTags, hasPendingOps: hasPending);
+
+      // Use max server timestamp as cursor (not local clock)
+      await updateSyncMeta(
+        lastPullAt: DateTime.fromMillisecondsSinceEpoch(maxUpdatedAt),
+      );
+
+      // Notify UI of data changes
+      onDataChanged?.call();
+
+      return SyncResult.success;
+    } catch (e) {
+      debugPrint('[Sync] Pull failed: $e');
+      return SyncResult.error;
+    } finally {
+      _isSyncing = false;
+      // If another pull was requested during sync, run it now
+      if (_pendingPull) {
+        _pendingPull = false;
+        pull();
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════
+  // REALTIME (Supabase → local, live)
+  // ═══════════════════════════════════════
+
+  void _subscribeToRemoteChanges(String userId) {
+    _supabase
+        .channel('sync')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'tasks',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) => _onRemoteChange(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'tags',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) => _onRemoteChange(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'task_tags',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) => _onRemoteChange(),
+        )
+        .subscribe();
+  }
+
+  /// Debounced handler for remote changes — triggers pull after 500ms.
+  void _onRemoteChange() {
+    _pullDebounceTimer?.cancel();
+    _pullDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      pull();
+    });
+  }
+
+  // ═══════════════════════════════════════
+  // CONNECTIVITY
+  // ═══════════════════════════════════════
+
+  /// Listen for connectivity changes. On reconnect, push then pull.
+  /// Design review fix: Only pull after successful push.
+  void _listenForConnectivity() {
+    _connectivitySub?.cancel();
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      if (results.any((r) => r != ConnectivityResult.none)) {
+        // Gate pull on push success to prevent overwriting unpushed local changes
+        push().then((result) {
+          if (result != SyncResult.error) {
+            pull();
+          }
+        });
+      }
+    });
   }
 }
 

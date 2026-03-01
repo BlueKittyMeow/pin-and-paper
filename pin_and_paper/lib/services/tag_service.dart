@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/tag.dart';
 import '../utils/constants.dart';
 import 'database_service.dart';
+import 'sync_service.dart'; // Phase 4.0
 
 /// Service for managing tags and tag-task associations
 ///
@@ -45,18 +46,28 @@ class TagService {
 
     final db = await _dbService.database;
 
+    final now = DateTime.now();
     final tag = Tag(
       id: _generateId(),
       name: name.trim(),
       color: color,
-      createdAt: DateTime.now(),
+      createdAt: now,
+      updatedAt: now,
     );
 
+    final tagMap = tag.toMap();
     await db.insert(
       AppConstants.tagsTable,
-      tag.toMap(),
+      tagMap,
       // Default ConflictAlgorithm.abort throws on duplicate name (UNIQUE constraint)
       // This is intentional - prevents silent overwrite of existing tags
+    );
+
+    await SyncService.instance.logChange(
+      tableName: 'tags',
+      recordId: tag.id,
+      operation: 'INSERT',
+      payload: tagMap,
     );
 
     return tag;
@@ -154,14 +165,23 @@ class TagService {
   Future<void> addTagToTask(String taskId, String tagId) async {
     final db = await _dbService.database;
 
+    final payload = {
+      'task_id': taskId,
+      'tag_id': tagId,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    };
+
     await db.insert(
       AppConstants.taskTagsTable,
-      {
-        'task_id': taskId,
-        'tag_id': tagId,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      },
+      payload,
       conflictAlgorithm: ConflictAlgorithm.ignore, // Idempotent: ignore duplicates
+    );
+
+    await SyncService.instance.logChange(
+      tableName: 'task_tags',
+      recordId: '${taskId}_$tagId',
+      operation: 'INSERT',
+      payload: payload,
     );
   }
 
@@ -179,6 +199,12 @@ class TagService {
       AppConstants.taskTagsTable,
       where: 'task_id = ? AND tag_id = ?',
       whereArgs: [taskId, tagId],
+    );
+
+    await SyncService.instance.logChange(
+      tableName: 'task_tags',
+      recordId: '${taskId}_$tagId',
+      operation: 'DELETE',
     );
 
     // Phase 3.5: Fix #M1 - Idempotent removal
