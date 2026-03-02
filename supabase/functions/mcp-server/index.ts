@@ -4,7 +4,6 @@ import { McpServer } from "npm:@modelcontextprotocol/sdk@1.25.3/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "npm:@modelcontextprotocol/sdk@1.25.3/server/webStandardStreamableHttp.js";
 import { Hono } from "npm:hono@^4.9.7";
 import { createAuthClient } from "./helpers/auth.ts";
-import { APP_ICON_DATA_URI } from "./helpers/icon.ts";
 
 // Tool registrations
 import { registerListTags } from "./tools/list_tags.ts";
@@ -60,7 +59,7 @@ app.all("*", async (c) => {
     title: "Pin and Paper",
     icons: [
       {
-        src: APP_ICON_DATA_URI,
+        src: "https://pin-and-paper-mcp.pin-and-paper.workers.dev/icon.png",
         mimeType: "image/png",
         sizes: ["48x48"],
       },
