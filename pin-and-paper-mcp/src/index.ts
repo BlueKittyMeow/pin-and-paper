@@ -418,18 +418,23 @@ async function handleMcpProxy(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  // Proxy to Supabase Edge Function
-  const proxyUrl = new URL(SUPABASE_FUNCTION_URL);
-  const incoming = new URL(request.url);
-  // Preserve any sub-path after the Worker root
-  if (incoming.pathname !== "/" && incoming.pathname !== "") {
-    proxyUrl.pathname += incoming.pathname;
+  // Proxy to Supabase Edge Function (always use the base function URL)
+  const proxyUrl = SUPABASE_FUNCTION_URL;
+
+  // Build proxy headers: pass through MCP-relevant headers, add apikey for Supabase gateway
+  const proxyHeaders = new Headers();
+  proxyHeaders.set("Authorization", authHeader);
+  proxyHeaders.set("apikey", env.SUPABASE_ANON_KEY);
+  proxyHeaders.set("Content-Type", request.headers.get("Content-Type") ?? "application/json");
+  // MCP Streamable HTTP requires Accept header with both JSON and SSE
+  proxyHeaders.set("Accept", request.headers.get("Accept") ?? "application/json, text/event-stream");
+  // Preserve MCP session header if present
+  const sessionId = request.headers.get("Mcp-Session-Id");
+  if (sessionId) {
+    proxyHeaders.set("Mcp-Session-Id", sessionId);
   }
 
-  const proxyHeaders = new Headers(request.headers);
-  proxyHeaders.set("Authorization", authHeader);
-
-  const proxyRes = await fetch(proxyUrl.toString(), {
+  const proxyRes = await fetch(proxyUrl, {
     method: request.method,
     headers: proxyHeaders,
     body: request.method !== "GET" && request.method !== "HEAD"
@@ -437,7 +442,7 @@ async function handleMcpProxy(request: Request, env: Env): Promise<Response> {
       : undefined,
   });
 
-  // Pass through response with CORS headers
+  // Stream the response through (don't buffer — preserves SSE streaming)
   const resHeaders = new Headers(proxyRes.headers);
   for (const [k, v] of Object.entries(corsHeaders())) {
     resHeaders.set(k, v);
