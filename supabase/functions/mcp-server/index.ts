@@ -4,6 +4,7 @@ import { McpServer } from "npm:@modelcontextprotocol/sdk@1.25.3/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "npm:@modelcontextprotocol/sdk@1.25.3/server/webStandardStreamableHttp.js";
 import { Hono } from "npm:hono@^4.9.7";
 import { createAuthClient } from "./helpers/auth.ts";
+import { APP_ICON_DATA_URI } from "./helpers/icon.ts";
 
 // Tool registrations
 import { registerListTags } from "./tools/list_tags.ts";
@@ -56,6 +57,14 @@ app.all("*", async (c) => {
   const server = new McpServer({
     name: "pin-and-paper",
     version: "1.0.0",
+    title: "Pin and Paper",
+    icons: [
+      {
+        src: APP_ICON_DATA_URI,
+        mimeType: "image/png",
+        sizes: ["48x48"],
+      },
+    ],
   });
 
   // Register all 12 tools, each closing over the authenticated client
