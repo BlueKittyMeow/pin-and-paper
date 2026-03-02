@@ -595,8 +595,10 @@ class TaskItem extends StatelessWidget {
         }
 
         return GestureDetector(
-          // Phase 3.6.5: Tap on completed tasks shows metadata dialog
-          onTap: task.completed ? () => _handleCompletedTaskTap(context) : null,
+          // Tap: completed tasks show metadata dialog, active tasks open edit dialog
+          onTap: task.completed
+              ? () => _handleCompletedTaskTap(context)
+              : () => _handleEdit(context),
           // Phase 3.2: Long-press (mobile) and right-click (desktop) to show context menu
           onLongPressStart: (details) {
             TaskContextMenu.show(
