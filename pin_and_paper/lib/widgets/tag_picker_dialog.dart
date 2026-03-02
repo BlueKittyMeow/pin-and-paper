@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tag.dart';
 import '../providers/tag_provider.dart';
+import '../utils/tag_colors.dart';
 import 'color_picker_dialog.dart';
 import 'tag_chip.dart';
 
@@ -161,6 +162,113 @@ class _TagPickerDialogState extends State<TagPickerDialog> {
     });
   }
 
+  Future<void> _showInlineEditDialog(Tag tag) async {
+    final nameController = TextEditingController(text: tag.name);
+    String? selectedColor = tag.color;
+    String? errorText;
+
+    final result = await showDialog<Map<String, String?>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Tag'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'Tag name',
+                  errorText: errorText,
+                ),
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) {
+                  if (errorText != null) {
+                    setDialogState(() => errorText = null);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('Color: '),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      final color = await ColorPickerDialog.show(
+                        context: context,
+                        initialColor: selectedColor,
+                      );
+                      if (color != null) {
+                        setDialogState(() => selectedColor = color);
+                      }
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: selectedColor != null
+                            ? TagColors.hexToColor(selectedColor!)
+                            : TagColors.defaultColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.grey.shade400,
+                          width: 1,
+                        ),
+                      ),
+                      child: const Icon(Icons.colorize, size: 16, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isEmpty) {
+                  setDialogState(() => errorText = 'Tag name cannot be empty');
+                  return;
+                }
+                Navigator.pop(context, {'name': name, 'color': selectedColor});
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      final newName = result['name']!;
+      final newColor = result['color'];
+
+      final nameChanged = newName != tag.name;
+      final colorChanged = newColor != tag.color;
+
+      if (!nameChanged && !colorChanged) return;
+
+      final tagProvider = context.read<TagProvider>();
+      final updated = await tagProvider.updateTag(
+        tag.id,
+        name: nameChanged ? newName : null,
+        color: colorChanged ? newColor : null,
+      );
+      if (updated == null && mounted && tagProvider.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tagProvider.errorMessage!)),
+        );
+      }
+      // Tag list refreshes automatically via provider
+    }
+  }
+
   List<Tag> _getFilteredTags(List<Tag> allTags) {
     final query = _searchController.text.toLowerCase().trim();
 
@@ -305,6 +413,13 @@ class _TagPickerDialogState extends State<TagPickerDialog> {
                           children: [
                             TagChip(tag: tag, compact: true),
                           ],
+                        ),
+                        secondary: IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          tooltip: 'Edit tag',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          onPressed: () => _showInlineEditDialog(tag),
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
                       );

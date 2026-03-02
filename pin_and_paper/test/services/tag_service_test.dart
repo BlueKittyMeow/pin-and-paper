@@ -3,6 +3,7 @@ import 'package:pin_and_paper/models/task.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/services/database_service.dart';
+import 'package:pin_and_paper/utils/constants.dart';
 import 'package:sqflite/sqflite.dart';
 import '../helpers/test_database_helper.dart';
 
@@ -413,6 +414,258 @@ void main() {
         expect(result[tasks[800].id]?.length, equals(1)); // Task 800 has tag2
         expect(result[tasks[800].id]?.first.name, equals('priority'));
         expect(result[tasks[600].id], isNull); // Task 600 has no tags
+      });
+    });
+
+    group('updateTag', () {
+      test('updates name only', () async {
+        final tag = await tagService.createTag('work', color: '#FF5722');
+
+        final updated = await tagService.updateTag(tag.id, name: 'office');
+
+        expect(updated.name, equals('office'));
+        expect(updated.color, equals('#FF5722')); // Color unchanged
+      });
+
+      test('updates color only', () async {
+        final tag = await tagService.createTag('work', color: '#FF5722');
+
+        final updated = await tagService.updateTag(tag.id, color: '#4CAF50');
+
+        expect(updated.name, equals('work')); // Name unchanged
+        expect(updated.color, equals('#4CAF50'));
+      });
+
+      test('updates both name and color', () async {
+        final tag = await tagService.createTag('work', color: '#FF5722');
+
+        final updated = await tagService.updateTag(tag.id, name: 'office', color: '#4CAF50');
+
+        expect(updated.name, equals('office'));
+        expect(updated.color, equals('#4CAF50'));
+      });
+
+      test('trims whitespace from name', () async {
+        final tag = await tagService.createTag('work');
+
+        final updated = await tagService.updateTag(tag.id, name: '  office  ');
+
+        expect(updated.name, equals('office'));
+      });
+
+      test('sets updated_at timestamp', () async {
+        final tag = await tagService.createTag('work');
+        final beforeUpdate = DateTime.now();
+
+        final updated = await tagService.updateTag(tag.id, name: 'office');
+
+        expect(updated.updatedAt, isNotNull);
+        expect(updated.updatedAt!.millisecondsSinceEpoch,
+            greaterThanOrEqualTo(beforeUpdate.millisecondsSinceEpoch));
+      });
+
+      test('short-circuits on no-op update (same name)', () async {
+        final tag = await tagService.createTag('work', color: '#FF5722');
+        final originalUpdatedAt = tag.updatedAt;
+
+        // Wait a tiny bit so any timestamp would be different
+        await Future.delayed(const Duration(milliseconds: 10));
+        final updated = await tagService.updateTag(tag.id, name: 'work');
+
+        // updated_at should NOT change for a no-op
+        expect(updated.updatedAt?.millisecondsSinceEpoch,
+            equals(originalUpdatedAt?.millisecondsSinceEpoch));
+      });
+
+      test('short-circuits on no-op update (same color)', () async {
+        final tag = await tagService.createTag('work', color: '#FF5722');
+        final originalUpdatedAt = tag.updatedAt;
+
+        await Future.delayed(const Duration(milliseconds: 10));
+        final updated = await tagService.updateTag(tag.id, color: '#FF5722');
+
+        expect(updated.updatedAt?.millisecondsSinceEpoch,
+            equals(originalUpdatedAt?.millisecondsSinceEpoch));
+      });
+
+      test('allows case-only rename of same tag', () async {
+        final tag = await tagService.createTag('work');
+
+        final updated = await tagService.updateTag(tag.id, name: 'Work');
+
+        expect(updated.name, equals('Work'));
+      });
+
+      test('throws ArgumentError on empty name', () async {
+        final tag = await tagService.createTag('work');
+
+        expect(
+          () => tagService.updateTag(tag.id, name: ''),
+          throwsArgumentError,
+        );
+      });
+
+      test('throws ArgumentError on invalid color hex', () async {
+        final tag = await tagService.createTag('work');
+
+        expect(
+          () => tagService.updateTag(tag.id, color: 'invalid'),
+          throwsArgumentError,
+        );
+      });
+
+      test('throws ArgumentError when no fields provided', () async {
+        final tag = await tagService.createTag('work');
+
+        expect(
+          () => tagService.updateTag(tag.id),
+          throwsArgumentError,
+        );
+      });
+
+      test('throws StateError on tag not found', () async {
+        expect(
+          () => tagService.updateTag('nonexistent-id', name: 'test'),
+          throwsStateError,
+        );
+      });
+
+      test('throws StateError on soft-deleted tag', () async {
+        final tag = await tagService.createTag('work');
+        // Soft-delete via direct DB update
+        final db = await DatabaseService.instance.database;
+        await db.update(
+          AppConstants.tagsTable,
+          {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+          where: 'id = ?',
+          whereArgs: [tag.id],
+        );
+
+        expect(
+          () => tagService.updateTag(tag.id, name: 'office'),
+          throwsStateError,
+        );
+      });
+
+      test('throws on duplicate name (case-insensitive)', () async {
+        await tagService.createTag('work');
+        final tag2 = await tagService.createTag('personal');
+
+        expect(
+          () => tagService.updateTag(tag2.id, name: 'Work'),
+          throwsA(isA<Exception>()), // Database UNIQUE constraint
+        );
+      });
+    });
+
+    group('deleteTag', () {
+      test('soft-deletes tag (sets deleted_at)', () async {
+        final tag = await tagService.createTag('work');
+
+        await tagService.deleteTag(tag.id);
+
+        // Tag should no longer appear in getAllTags
+        final tags = await tagService.getAllTags();
+        expect(tags, isEmpty);
+
+        // But should still exist in DB with deleted_at set
+        final db = await DatabaseService.instance.database;
+        final result = await db.query(
+          AppConstants.tagsTable,
+          where: 'id = ?',
+          whereArgs: [tag.id],
+        );
+        expect(result.length, 1);
+        expect(result.first['deleted_at'], isNotNull);
+      });
+
+      test('removes task_tags associations', () async {
+        final task1 = await taskService.createTask('Task 1');
+        final task2 = await taskService.createTask('Task 2');
+        final tag = await tagService.createTag('work');
+        await tagService.addTagToTask(task1.id, tag.id);
+        await tagService.addTagToTask(task2.id, tag.id);
+
+        await tagService.deleteTag(tag.id);
+
+        // task_tags should be hard-deleted
+        final db = await DatabaseService.instance.database;
+        final taskTags = await db.query(
+          AppConstants.taskTagsTable,
+          where: 'tag_id = ?',
+          whereArgs: [tag.id],
+        );
+        expect(taskTags, isEmpty);
+      });
+
+      test('preserves other tags on same tasks', () async {
+        final task = await taskService.createTask('Task 1');
+        final tag1 = await tagService.createTag('work');
+        final tag2 = await tagService.createTag('urgent');
+        await tagService.addTagToTask(task.id, tag1.id);
+        await tagService.addTagToTask(task.id, tag2.id);
+
+        await tagService.deleteTag(tag1.id);
+
+        final tags = await tagService.getTagsForTask(task.id);
+        expect(tags.length, 1);
+        expect(tags.first.name, 'urgent');
+      });
+
+      test('sets updated_at', () async {
+        final tag = await tagService.createTag('work');
+        final beforeDelete = DateTime.now();
+
+        await tagService.deleteTag(tag.id);
+
+        final db = await DatabaseService.instance.database;
+        final result = await db.query(
+          AppConstants.tagsTable,
+          where: 'id = ?',
+          whereArgs: [tag.id],
+        );
+        final updatedAt = result.first['updated_at'] as int;
+        expect(updatedAt, greaterThanOrEqualTo(beforeDelete.millisecondsSinceEpoch));
+      });
+
+      test('throws StateError on tag not found', () async {
+        expect(
+          () => tagService.deleteTag('nonexistent-id'),
+          throwsStateError,
+        );
+      });
+
+      test('throws StateError on already-deleted tag', () async {
+        final tag = await tagService.createTag('work');
+        await tagService.deleteTag(tag.id);
+
+        expect(
+          () => tagService.deleteTag(tag.id),
+          throwsStateError,
+        );
+      });
+
+      test('deleted tag excluded from getTagsForTask', () async {
+        final task = await taskService.createTask('Task 1');
+        final tag = await tagService.createTag('work');
+        await tagService.addTagToTask(task.id, tag.id);
+
+        await tagService.deleteTag(tag.id);
+
+        final tags = await tagService.getTagsForTask(task.id);
+        expect(tags, isEmpty);
+      });
+
+      test('deleted tag excluded from getAllTags', () async {
+        await tagService.createTag('work');
+        await tagService.createTag('personal');
+        final tagToDelete = await tagService.createTag('temp');
+
+        await tagService.deleteTag(tagToDelete.id);
+
+        final tags = await tagService.getAllTags();
+        expect(tags.length, 2);
+        expect(tags.map((t) => t.name), containsAll(['work', 'personal']));
       });
     });
 

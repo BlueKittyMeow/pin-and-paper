@@ -1,6 +1,7 @@
 export type ErrorCode =
   | "NOT_FOUND"
   | "VALIDATION_ERROR"
+  | "DUPLICATE_NAME"
   | "UNAUTHORIZED"
   | "INTERNAL_ERROR"
   | "DEPTH_EXCEEDED";

@@ -328,7 +328,49 @@ class SyncService {
     final localData = remoteTagToLocal(remote);
 
     if (localResult.isEmpty) {
-      await db.insert(AppConstants.tagsTable, localData);
+      // Check for name collision (local tag with same name but different UUID)
+      final nameResult = await db.query(
+        AppConstants.tagsTable,
+        where: 'name = ?',
+        whereArgs: [localData['name']],
+      );
+      if (nameResult.isNotEmpty) {
+        // A local tag with this name already exists under a different ID.
+        // Unify: insert remote tag, migrate task_tags FKs, delete old tag.
+        final existingLocal = nameResult.first;
+        final localId = existingLocal['id'];
+        final remoteId = localData['id'];
+
+        // Non-standard LWW: preserve local color when remote color is null.
+        // MCP-created tags lack color, so we keep the user's local color choice.
+        if (localData['color'] == null && existingLocal['color'] != null) {
+          localData['color'] = existingLocal['color'];
+        }
+
+        // Temporarily disable FK checks to allow the migration.
+        await db.execute('PRAGMA foreign_keys = OFF');
+        try {
+          // Delete old tag first (FK checks off, so task_tags won't cascade)
+          await db.delete(
+            AppConstants.tagsTable,
+            where: 'id = ?',
+            whereArgs: [localId],
+          );
+          // Insert remote tag (name is now free)
+          await db.insert(AppConstants.tagsTable, localData);
+          // Migrate task_tags to point to the remote ID
+          await db.update(
+            AppConstants.taskTagsTable,
+            {'tag_id': remoteId},
+            where: 'tag_id = ?',
+            whereArgs: [localId],
+          );
+        } finally {
+          await db.execute('PRAGMA foreign_keys = ON');
+        }
+      } else {
+        await db.insert(AppConstants.tagsTable, localData);
+      }
       return;
     }
 
@@ -338,6 +380,11 @@ class SyncService {
         DateTime.parse(remote['updated_at']).millisecondsSinceEpoch;
 
     if (remoteUpdated >= localUpdated) {
+      // Non-standard LWW: preserve local color when remote color is null.
+      // MCP-created tags lack color, so we keep the user's local color choice.
+      if (localData['color'] == null && local['color'] != null) {
+        localData['color'] = local['color'];
+      }
       await db.update(
         AppConstants.tagsTable,
         localData,
@@ -532,6 +579,7 @@ class SyncService {
 
     await updateSyncMeta(syncEnabled: true, userId: user.id);
     await fullPush();
+    await pull(); // Fetch remote data (e.g. tags added via MCP)
     _subscribeToRemoteChanges(user.id);
     _listenForConnectivity();
   }
@@ -689,6 +737,13 @@ class SyncService {
 
   /// Full push — initial sync. Pushes ALL local data via bulk upsert.
   /// Batches at 500 records to avoid payload/timeout limits.
+  /// Check if a string is a valid UUID v4 format.
+  static final _uuidRegex = RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  );
+  static bool _isValidUuid(String id) => _uuidRegex.hasMatch(id);
+
   Future<void> fullPush() async {
     if (!_hasSupabase) return;
 
@@ -700,7 +755,13 @@ class SyncService {
     const batchSize = 500;
 
     // Bulk upsert all tasks (batched)
-    final tasks = await db.query(AppConstants.tasksTable);
+    // Filter out rows with non-UUID IDs (e.g., test/sample data created
+    // before sync was implemented). Supabase requires UUID primary keys.
+    final allTasks = await db.query(AppConstants.tasksTable);
+    final tasks = allTasks.where((t) => _isValidUuid(t['id'] as String)).toList();
+    if (tasks.length < allTasks.length) {
+      debugPrint('[Sync] Skipped ${allTasks.length - tasks.length} tasks with non-UUID IDs');
+    }
     for (int i = 0; i < tasks.length; i += batchSize) {
       final end = (i + batchSize < tasks.length) ? i + batchSize : tasks.length;
       final batch = tasks.sublist(i, end);
@@ -709,7 +770,11 @@ class SyncService {
     }
 
     // Bulk upsert all tags (batched)
-    final tags = await db.query(AppConstants.tagsTable);
+    final allTags = await db.query(AppConstants.tagsTable);
+    final tags = allTags.where((t) => _isValidUuid(t['id'] as String)).toList();
+    if (tags.length < allTags.length) {
+      debugPrint('[Sync] Skipped ${allTags.length - tags.length} tags with non-UUID IDs');
+    }
     for (int i = 0; i < tags.length; i += batchSize) {
       final end = (i + batchSize < tags.length) ? i + batchSize : tags.length;
       final batch = tags.sublist(i, end);
@@ -718,7 +783,15 @@ class SyncService {
     }
 
     // Bulk upsert all task_tags (batched)
-    final taskTags = await db.query(AppConstants.taskTagsTable);
+    // Filter task_tags where both task_id and tag_id are valid UUIDs
+    final allTaskTags = await db.query(AppConstants.taskTagsTable);
+    final taskTags = allTaskTags.where((tt) =>
+      _isValidUuid(tt['task_id'] as String) &&
+      _isValidUuid(tt['tag_id'] as String)
+    ).toList();
+    if (taskTags.length < allTaskTags.length) {
+      debugPrint('[Sync] Skipped ${allTaskTags.length - taskTags.length} task_tags with non-UUID IDs');
+    }
     for (int i = 0; i < taskTags.length; i += batchSize) {
       final end = (i + batchSize < taskTags.length) ? i + batchSize : taskTags.length;
       final batch = taskTags.sublist(i, end);

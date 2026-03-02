@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../models/badge.dart'; // Phase 3.9
 import '../models/user_settings.dart'; // Phase 3.8: For Value<T> in copyWith
 import '../providers/settings_provider.dart';
+import '../providers/tag_provider.dart';
 import '../providers/task_provider.dart';
 import '../services/settings_service.dart';
 import '../services/api_usage_service.dart';
@@ -26,6 +27,7 @@ import '../widgets/permission_explanation_dialog.dart'; // Phase 3.8
 import '../widgets/settings/settings_explanation_dialog.dart'; // Phase 3.9
 import '../widgets/settings/time_keyword_picker.dart'; // Phase 3.9
 import 'quiz_screen.dart'; // Phase 3.9
+import 'manage_tags_screen.dart'; // Phase 4.0: Tag management
 import 'recently_deleted_screen.dart'; // Phase 3.3
 
 class SettingsScreen extends StatefulWidget {
@@ -804,6 +806,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Card(
               child: Column(
                 children: [
+                  ListTile(
+                    leading: Icon(
+                      Icons.label_outline,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text('Manage Tags'),
+                    subtitle: const Text('Edit, rename, or delete tags'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Consumer<TagProvider>(
+                          builder: (context, tagProvider, _) {
+                            final count = tagProvider.tags.length;
+                            if (count == 0) return const SizedBox.shrink();
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(
+                                  color: AppTheme.creamPaper,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageTagsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
                   ListTile(
                     leading: Icon(
                       Icons.restore_from_trash,
@@ -1854,6 +1902,7 @@ Package Name: ${info.packageName}
   }
 
   void _handleCancelSignIn() {
+    AuthService.instance.cancelSignIn(); // Stop localhost callback server
     setState(() {
       _isSigningIn = false;
       _oauthUrl = null;

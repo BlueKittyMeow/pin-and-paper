@@ -151,6 +151,155 @@ class TagService {
     return results.map((map) => Tag.fromMap(map)).toList();
   }
 
+  /// Update a tag's name and/or color
+  ///
+  /// At least one field must be provided.
+  /// Short-circuits if the new values are identical to current values (no-op).
+  ///
+  /// Throws:
+  /// - ArgumentError if no fields provided, name is empty, or color is invalid hex
+  /// - StateError if tag not found or is soft-deleted
+  /// - DatabaseException if name already exists on a different tag (UNIQUE constraint)
+  Future<Tag> updateTag(String id, {String? name, String? color}) async {
+    // 1. At least one field must be provided
+    if (name == null && color == null) {
+      throw ArgumentError('At least one field (name or color) must be provided');
+    }
+
+    // 2. Validate name if provided
+    if (name != null) {
+      final nameError = Tag.validateName(name);
+      if (nameError != null) {
+        throw ArgumentError(nameError);
+      }
+    }
+
+    // 3. Validate color if provided
+    if (color != null) {
+      final colorError = Tag.validateColor(color);
+      if (colorError != null) {
+        throw ArgumentError(colorError);
+      }
+    }
+
+    // 4. Check tag exists and is not soft-deleted
+    final existing = await getTagById(id);
+    if (existing == null) {
+      throw StateError('Tag not found or has been deleted');
+    }
+
+    // 5. Short-circuit no-op updates
+    final trimmedName = name?.trim();
+    final nameUnchanged = trimmedName == null || trimmedName == existing.name;
+    final colorUnchanged = color == null || color == existing.color;
+    if (nameUnchanged && colorUnchanged) {
+      return existing;
+    }
+
+    // 6. Build update map
+    final db = await _dbService.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final updates = <String, dynamic>{
+      'updated_at': now,
+    };
+    if (trimmedName != null && trimmedName != existing.name) {
+      updates['name'] = trimmedName;
+    }
+    if (color != null && color != existing.color) {
+      updates['color'] = color;
+    }
+
+    // 7. Update DB — UNIQUE constraint throws on duplicate name
+    await db.update(
+      AppConstants.tagsTable,
+      updates,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    // 8. Re-read updated tag
+    final updated = await getTagById(id);
+
+    // 9. Log change for sync
+    await SyncService.instance.logChange(
+      tableName: 'tags',
+      recordId: id,
+      operation: 'UPDATE',
+      payload: updated!.toMap(),
+    );
+
+    return updated;
+  }
+
+  /// Soft-delete a tag and remove all its task associations
+  ///
+  /// Uses a transaction for atomicity (Finding 1 from both Codex and Gemini reviews).
+  /// Task_tags are hard-deleted because:
+  /// - Junction table has no `deleted_at` column
+  /// - Soft-deleted tag shouldn't be associated with tasks
+  /// - `pullTaskTags()` does full union-merge reconciliation
+  ///
+  /// Throws:
+  /// - StateError if tag not found or already soft-deleted
+  Future<void> deleteTag(String id) async {
+    // 1. Check tag exists and is not already soft-deleted
+    final existing = await getTagById(id);
+    if (existing == null) {
+      throw StateError('Tag not found or has already been deleted');
+    }
+
+    final db = await _dbService.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // 2. Query affected task_tags before deletion (for sync logging)
+    final affectedTaskTags = await db.query(
+      AppConstants.taskTagsTable,
+      where: 'tag_id = ?',
+      whereArgs: [id],
+    );
+
+    // 3. Wrap in transaction for atomicity
+    await db.transaction((txn) async {
+      // Soft-delete tag
+      await txn.update(
+        AppConstants.tagsTable,
+        {'deleted_at': now, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      // Hard-delete task_tags
+      await txn.delete(
+        AppConstants.taskTagsTable,
+        where: 'tag_id = ?',
+        whereArgs: [id],
+      );
+    });
+
+    // 4. Log sync changes (after transaction commits)
+    // Log tag as UPDATE (soft delete = UPDATE with deleted_at set)
+    final deletedTag = existing.copyWith(
+      deletedAt: DateTime.fromMillisecondsSinceEpoch(now),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(now),
+    );
+    await SyncService.instance.logChange(
+      tableName: 'tags',
+      recordId: id,
+      operation: 'UPDATE',
+      payload: deletedTag.toMap(),
+    );
+
+    // Log each task_tag DELETE individually
+    for (final taskTag in affectedTaskTags) {
+      final taskId = taskTag['task_id'] as String;
+      await SyncService.instance.logChange(
+        tableName: 'task_tags',
+        recordId: '${taskId}_$id',
+        operation: 'DELETE',
+      );
+    }
+  }
+
   // ===================================================================
   // Tag-Task Associations
   // ===================================================================

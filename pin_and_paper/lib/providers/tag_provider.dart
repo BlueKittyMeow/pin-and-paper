@@ -173,6 +173,52 @@ class TagProvider extends ChangeNotifier {
     }
   }
 
+  /// Update a tag's name and/or color
+  ///
+  /// Returns updated tag on success, null on failure
+  Future<Tag?> updateTag(String id, {String? name, String? color}) async {
+    try {
+      final tag = await _tagService.updateTag(id, name: name, color: color);
+      await loadTags();
+      _errorMessage = null;
+      return tag;
+    } catch (e) {
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('unique constraint') || errorString.contains('already exists')) {
+        _errorMessage = 'A tag with that name already exists';
+      } else if (errorString.contains('not found') || errorString.contains('deleted')) {
+        _errorMessage = 'Tag not found. It may have been deleted.';
+      } else {
+        _errorMessage = 'Failed to update tag. Please try again.';
+      }
+      debugPrint('Error updating tag: $e');
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Delete a tag (soft-delete)
+  ///
+  /// Returns true on success, false on failure
+  Future<bool> deleteTag(String id) async {
+    try {
+      await _tagService.deleteTag(id);
+      await loadTags();
+      _errorMessage = null;
+      return true;
+    } catch (e) {
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('not found') || errorString.contains('deleted')) {
+        _errorMessage = 'Tag not found. It may have already been deleted.';
+      } else {
+        _errorMessage = 'Failed to delete tag. Please try again.';
+      }
+      debugPrint('Error deleting tag: $e');
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Clear error message
   void clearError() {
     _errorMessage = null;

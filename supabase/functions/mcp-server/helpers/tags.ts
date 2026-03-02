@@ -1,6 +1,13 @@
 import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 /**
+ * Validate a hex color string (#RRGGBB format).
+ */
+export function validateHexColor(color: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
+}
+
+/**
  * Resolve an array of tag names to tag records.
  * Creates missing tags with a default color.
  */

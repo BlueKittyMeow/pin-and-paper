@@ -393,6 +393,69 @@ void main() {
         final local = await testDb.query(AppConstants.tagsTable, where: 'id = ?', whereArgs: ['tag-1']);
         expect(local.first['name'], 'Remote Tag');
       });
+
+      test('preserves local color when remote color is null', () async {
+        final t1 = DateTime(2024, 1, 1, 10, 0).millisecondsSinceEpoch;
+        await testDb.insert(AppConstants.tagsTable, {
+          'id': 'tag-1', 'name': 'My Tag', 'color': '#FF5722',
+          'created_at': t1, 'updated_at': t1,
+        });
+
+        // Remote wins LWW (newer) but has null color (MCP-created)
+        final remoteTag = _makeRemoteTag('tag-1', 'My Tag',
+            updatedAt: DateTime(2024, 1, 1, 12, 0));
+        await syncService.mergeTag(testDb, remoteTag);
+
+        final local = await testDb.query(AppConstants.tagsTable,
+            where: 'id = ?', whereArgs: ['tag-1']);
+        expect(local.first['color'], '#FF5722',
+            reason: 'Local color should be preserved when remote color is null');
+      });
+
+      test('overwrites local color when remote has explicit color', () async {
+        final t1 = DateTime(2024, 1, 1, 10, 0).millisecondsSinceEpoch;
+        await testDb.insert(AppConstants.tagsTable, {
+          'id': 'tag-1', 'name': 'My Tag', 'color': '#FF5722',
+          'created_at': t1, 'updated_at': t1,
+        });
+
+        // Remote wins LWW (newer) AND has an explicit color
+        final remoteTag = _makeRemoteTag('tag-1', 'My Tag',
+            updatedAt: DateTime(2024, 1, 1, 12, 0), color: '#4CAF50');
+        await syncService.mergeTag(testDb, remoteTag);
+
+        final local = await testDb.query(AppConstants.tagsTable,
+            where: 'id = ?', whereArgs: ['tag-1']);
+        expect(local.first['color'], '#4CAF50',
+            reason: 'Remote color should overwrite when it has an explicit value');
+      });
+
+      test('preserves local color during name-collision unification when remote color is null', () async {
+        final t1 = DateTime(2024, 1, 1, 10, 0).millisecondsSinceEpoch;
+        // Local tag with color
+        await testDb.insert(AppConstants.tagsTable, {
+          'id': 'local-tag-id', 'name': 'Work', 'color': '#E91E63',
+          'created_at': t1, 'updated_at': t1,
+        });
+
+        // Remote tag with same name but different ID and null color
+        final remoteTag = _makeRemoteTag('remote-tag-id', 'Work',
+            updatedAt: DateTime(2024, 1, 1, 12, 0));
+        await syncService.mergeTag(testDb, remoteTag);
+
+        // Should have unified to the remote ID
+        final local = await testDb.query(AppConstants.tagsTable,
+            where: 'id = ?', whereArgs: ['remote-tag-id']);
+        expect(local.length, 1);
+        expect(local.first['name'], 'Work');
+        expect(local.first['color'], '#E91E63',
+            reason: 'Local color should be preserved during name-collision unification');
+
+        // Old local ID should be gone
+        final oldLocal = await testDb.query(AppConstants.tagsTable,
+            where: 'id = ?', whereArgs: ['local-tag-id']);
+        expect(oldLocal, isEmpty);
+      });
     });
 
     // ═══════════════════════════════════════
@@ -668,11 +731,11 @@ Map<String, dynamic> _makeRemoteTask(String id, String title,
 }
 
 Map<String, dynamic> _makeRemoteTag(String id, String name,
-    {required DateTime updatedAt}) {
+    {required DateTime updatedAt, String? color}) {
   return {
     'id': id,
     'name': name,
-    'color': null,
+    'color': color,
     'created_at': updatedAt.toUtc().toIso8601String(),
     'updated_at': updatedAt.toUtc().toIso8601String(),
     'deleted_at': null,

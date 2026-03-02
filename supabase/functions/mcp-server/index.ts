@@ -17,6 +17,7 @@ import { registerUpdateTask } from "./tools/update_task.ts";
 import { registerDeleteTask } from "./tools/delete_task.ts";
 import { registerRestoreTask } from "./tools/restore_task.ts";
 import { registerManageTags } from "./tools/manage_tags.ts";
+import { registerUpdateTag } from "./tools/update_tag.ts";
 
 const app = new Hono().basePath("/mcp-server");
 
@@ -57,7 +58,7 @@ app.all("*", async (c) => {
     version: "1.0.0",
   });
 
-  // Register all 11 tools, each closing over the authenticated client
+  // Register all 12 tools, each closing over the authenticated client
   registerListTags(server, supabase, user.id);
   registerGetSummary(server, supabase, user.id);
   registerSearchTasks(server, supabase, user.id);
@@ -69,6 +70,7 @@ app.all("*", async (c) => {
   registerDeleteTask(server, supabase, user.id);
   registerRestoreTask(server, supabase, user.id);
   registerManageTags(server, supabase, user.id);
+  registerUpdateTag(server, supabase, user.id);
 
   const transport = new WebStandardStreamableHTTPServerTransport();
   await server.connect(transport);

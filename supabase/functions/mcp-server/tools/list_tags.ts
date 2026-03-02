@@ -48,7 +48,27 @@ export function registerListTags(
           task_count: countMap.get(tag.id) ?? 0,
         }));
 
-        return toolSuccess({ tags: result });
+        const PRESET_COLORS = [
+          { hex: "#FF5722", name: "Deep Orange" },
+          { hex: "#E91E63", name: "Pink" },
+          { hex: "#9C27B0", name: "Purple" },
+          { hex: "#673AB7", name: "Deep Purple" },
+          { hex: "#3F51B5", name: "Indigo" },
+          { hex: "#2196F3", name: "Blue" },
+          { hex: "#03A9F4", name: "Light Blue" },
+          { hex: "#00BCD4", name: "Cyan" },
+          { hex: "#009688", name: "Teal" },
+          { hex: "#4CAF50", name: "Green" },
+          { hex: "#FF9800", name: "Orange" },
+          { hex: "#FFC107", name: "Amber" },
+        ];
+
+        return toolSuccess({
+          tags: result,
+          available_colors: PRESET_COLORS,
+          color_note:
+            "These are preset colors. Any valid #RRGGBB hex is also accepted via update_tag.",
+        });
       } catch (err) {
         return toolError(
           "INTERNAL_ERROR",
