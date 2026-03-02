@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Pin and Paper
+Comment=A local-first to-do app
+Exec=pin_and_paper %U
+Icon=com.example.pin_and_paper
+Terminal=false
+Type=Application
+Categories=Utility;ProjectManagement;
+StartupWMClass=com.example.pin_and_paper
+MimeType=x-scheme-handler/pinandpaper;
