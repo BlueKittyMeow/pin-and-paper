@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 ///
 /// Phase 4.0: On desktop Linux, uses a localhost callback server
 /// since custom URL schemes require OS-level registration (.desktop file).
-/// The server catches the OAuth redirect and exchanges the PKCE code.
+/// On mobile, uses deep links with app_links to catch the OAuth redirect.
 class AuthService {
   static final AuthService instance = AuthService._();
   AuthService._();
@@ -22,30 +23,43 @@ class AuthService {
       _supabase.auth.onAuthStateChange;
 
   HttpServer? _callbackServer;
+  StreamSubscription? _deepLinkSub;
+
+  /// Deep link redirect URL for mobile OAuth (Android/iOS).
+  /// The app intercepts this via intent-filter / app_links.
+  static const _mobileRedirectUrl =
+      'io.supabase.pinandpaper://login-callback/';
 
   /// Sign in with Google OAuth.
   ///
-  /// Starts a temporary localhost HTTP server to catch the OAuth callback,
-  /// then opens the browser for Google sign-in. When the browser redirects
-  /// back to localhost, the server extracts the PKCE code and exchanges
-  /// it for a session.
+  /// On desktop: starts a temporary localhost HTTP server to catch the
+  /// OAuth callback, then opens the browser for Google sign-in.
+  ///
+  /// On mobile: uses a deep link redirect that the OS routes back to
+  /// the app, then manually exchanges the PKCE code for a session.
   ///
   /// Returns the OAuth URL (for copy/paste fallback if browser doesn't open).
   Future<String> signInWithGoogle() async {
-    // Start a local HTTP server on a fixed port for OAuth callback.
-    // Fixed port so the exact redirect URL can be allowlisted in Supabase
-    // (Supabase doesn't support wildcard port matching).
-    const callbackPort = 54321;
-    await _callbackServer?.close(force: true);
-    _callbackServer = await HttpServer.bind('localhost', callbackPort);
-    final redirectUrl = 'http://localhost:$callbackPort/auth-callback';
+    final String redirectUrl;
 
-    debugPrint('[Auth] Callback server listening on port $callbackPort');
+    if (Platform.isAndroid || Platform.isIOS) {
+      // Mobile: use deep link with explicit listener
+      redirectUrl = _mobileRedirectUrl;
+      _listenForDeepLink();
+    } else {
+      // Desktop: use localhost callback server
+      const callbackPort = 54321;
+      await _callbackServer?.close(force: true);
+      _callbackServer = await HttpServer.bind('localhost', callbackPort);
+      redirectUrl = 'http://localhost:$callbackPort/auth-callback';
 
-    // Listen for the OAuth callback (don't await — runs in background)
-    _listenForCallback(_callbackServer!);
+      debugPrint('[Auth] Callback server listening on port $callbackPort');
 
-    // Get the OAuth URL with our localhost redirect
+      // Listen for the OAuth callback (don't await — runs in background)
+      _listenForCallback(_callbackServer!);
+    }
+
+    // Get the OAuth URL with our platform-appropriate redirect
     final res = await _supabase.auth.getOAuthSignInUrl(
       provider: OAuthProvider.google,
       redirectTo: redirectUrl,
@@ -65,6 +79,26 @@ class AuthService {
     }
 
     return url;
+  }
+
+  /// Listen for the OAuth deep link callback on mobile.
+  void _listenForDeepLink() {
+    _deepLinkSub?.cancel();
+    final appLinks = AppLinks();
+    _deepLinkSub = appLinks.uriLinkStream.listen((uri) async {
+      debugPrint('[Auth] Deep link received: $uri');
+      final code = uri.queryParameters['code'];
+      if (code != null) {
+        try {
+          await _supabase.auth.exchangeCodeForSession(code);
+          debugPrint('[Auth] Session established via deep link');
+        } catch (e) {
+          debugPrint('[Auth] Failed to exchange code for session: $e');
+        }
+        _deepLinkSub?.cancel();
+        _deepLinkSub = null;
+      }
+    });
   }
 
   /// Listen for the OAuth callback on the localhost server.
@@ -110,6 +144,8 @@ class AuthService {
   Future<void> cancelSignIn() async {
     await _callbackServer?.close(force: true);
     _callbackServer = null;
+    _deepLinkSub?.cancel();
+    _deepLinkSub = null;
   }
 
   /// Handle a pasted redirect URL to complete OAuth on platforms

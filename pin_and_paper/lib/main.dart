@@ -48,7 +48,8 @@ void main() async {
     await Supabase.initialize(
       url: const String.fromEnvironment('SUPABASE_URL',
           defaultValue: 'https://qasieyfuspuoauffochm.supabase.co'),
-      anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
+      anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY',
+          defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhc2lleWZ1c3B1b2F1ZmZvY2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNDgxMzksImV4cCI6MjA4NzgyNDEzOX0.6VNF5_a5Qxxf1-68JmAqANIli4bo0SHa5trV5H3zuo8'),
     );
     await SyncService.instance.initialize();
   } catch (e) {

@@ -806,6 +806,43 @@ class SyncService {
   }
 
   // ═══════════════════════════════════════
+  // PULL HELPERS
+  // ═══════════════════════════════════════
+
+  /// Sort tasks so parents come before children (topological order).
+  /// Prevents FK constraint failures when inserting hierarchical tasks.
+  List<Map<String, dynamic>> _topologicalSortTasks(
+      List<dynamic> tasks) {
+    final byId = <String, Map<String, dynamic>>{};
+    for (final t in tasks) {
+      byId[t['id'] as String] = Map<String, dynamic>.from(t);
+    }
+
+    final sorted = <Map<String, dynamic>>[];
+    final visited = <String>{};
+
+    void visit(Map<String, dynamic> task) {
+      final id = task['id'] as String;
+      if (visited.contains(id)) return;
+      visited.add(id);
+
+      // If parent is in this batch, visit it first
+      final parentId = task['parent_id'] as String?;
+      if (parentId != null && byId.containsKey(parentId)) {
+        visit(byId[parentId]!);
+      }
+
+      sorted.add(task);
+    }
+
+    for (final task in byId.values) {
+      visit(task);
+    }
+
+    return sorted;
+  }
+
+  // ═══════════════════════════════════════
   // PULL (Supabase → local)
   // ═══════════════════════════════════════
 
@@ -837,7 +874,11 @@ class SyncService {
           .gt('updated_at', since.toUtc().toIso8601String())
           .order('updated_at');
 
-      for (final remote in remoteTasks) {
+      // Sort parents before children to avoid FK constraint failures.
+      // Tasks with null parent_id come first, then children after their parents.
+      final sortedTasks = _topologicalSortTasks(remoteTasks);
+
+      for (final remote in sortedTasks) {
         await mergeTask(db, remote);
         // Track max server timestamp
         final ts = DateTime.parse(remote['updated_at']).millisecondsSinceEpoch;
