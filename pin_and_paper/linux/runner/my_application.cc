@@ -64,13 +64,19 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
-  // Phase 3.6B: Set app icon
+  // Set app icon — resolve path relative to the executable so it works
+  // regardless of the working directory the app is launched from.
   g_autoptr(GError) icon_error = nullptr;
-  g_autoptr(GdkPixbuf) icon = gdk_pixbuf_new_from_file("linux/runner/app_icon.png", &icon_error);
-  if (icon != nullptr) {
-    gtk_window_set_icon(window, icon);
-  } else if (icon_error != nullptr) {
-    g_warning("Failed to load app icon: %s", icon_error->message);
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe_path != nullptr) {
+    g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+    g_autofree gchar* icon_path = g_build_filename(exe_dir, "linux", "runner", "app_icon.png", nullptr);
+    g_autoptr(GdkPixbuf) icon = gdk_pixbuf_new_from_file(icon_path, &icon_error);
+    if (icon != nullptr) {
+      gtk_window_set_icon(window, icon);
+    } else if (icon_error != nullptr) {
+      g_warning("Failed to load app icon: %s", icon_error->message);
+    }
   }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

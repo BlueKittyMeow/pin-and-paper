@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.pin_and_paper"
-    compileSdk = 35  // Phase 3.8: Required for flutter_local_notifications
+    compileSdk = 36  // Phase 4.0: Required by androidx.browser 1.9.0 + androidx.core 1.17.0
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
