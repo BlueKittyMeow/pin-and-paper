@@ -801,7 +801,11 @@ class SyncService {
     // First, reconcile tag IDs with remote to avoid UNIQUE(user_id, name)
     // conflicts when the same tag was created independently on another device.
     final allTags = await db.query(AppConstants.tagsTable);
-    final tags = allTags.where((t) => _isValidUuid(t['id'] as String)).toList();
+    // Make mutable copies — sqflite returns read-only maps
+    final tags = allTags
+        .where((t) => _isValidUuid(t['id'] as String))
+        .map((t) => Map<String, dynamic>.from(t))
+        .toList();
     if (tags.length < allTags.length) {
       debugPrint('[Sync] Skipped ${allTags.length - tags.length} tags with non-UUID IDs');
     }
@@ -840,18 +844,39 @@ class SyncService {
       final end = (i + batchSize < tags.length) ? i + batchSize : tags.length;
       final batch = tags.sublist(i, end);
       final remoteTags = batch.map((t) => localTagToRemote(t, userId)).toList();
-      await _supabase.from('tags').upsert(remoteTags);
+      // Use onConflict on the business key (user_id, name) with ignoreDuplicates
+      // so tags that already exist remotely (e.g. pushed from another device) are
+      // skipped rather than causing a unique constraint violation. The subsequent
+      // pull() will reconcile any skipped tags back to local.
+      await _supabase.from('tags').upsert(
+        remoteTags,
+        onConflict: 'user_id,name',
+        ignoreDuplicates: true,
+      );
     }
+
+    // Re-fetch remote tags to build a set of valid remote tag IDs.
+    // This ensures task_tags only reference tags that actually exist remotely,
+    // avoiding FK violations when some tags were skipped above.
+    final postUpsertRemoteTags = await _supabase
+        .from('tags')
+        .select('id')
+        .eq('user_id', userId);
+    final remoteTagIds = <String>{
+      for (final rt in postUpsertRemoteTags) rt['id'] as String,
+    };
 
     // Bulk upsert all task_tags (batched)
     // Filter task_tags where both task_id and tag_id are valid UUIDs
+    // and where the tag_id exists remotely (to avoid FK violations)
     final allTaskTags = await db.query(AppConstants.taskTagsTable);
     final taskTags = allTaskTags.where((tt) =>
       _isValidUuid(tt['task_id'] as String) &&
-      _isValidUuid(tt['tag_id'] as String)
+      _isValidUuid(tt['tag_id'] as String) &&
+      remoteTagIds.contains(tt['tag_id'] as String)
     ).toList();
     if (taskTags.length < allTaskTags.length) {
-      debugPrint('[Sync] Skipped ${allTaskTags.length - taskTags.length} task_tags with non-UUID IDs');
+      debugPrint('[Sync] Skipped ${allTaskTags.length - taskTags.length} task_tags with non-UUID or missing remote tag IDs');
     }
     for (int i = 0; i < taskTags.length; i += batchSize) {
       final end = (i + batchSize < taskTags.length) ? i + batchSize : taskTags.length;
