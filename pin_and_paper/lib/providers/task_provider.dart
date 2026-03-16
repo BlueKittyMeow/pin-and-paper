@@ -599,9 +599,17 @@ class TaskProvider extends ChangeNotifier {
   }
 
   Future<void> _performLoadTasks() async {
-    _isLoading = true;
+    // Only show loading indicator on initial load (when no tasks loaded yet).
+    // During refreshes (e.g. after reorder), skip the loading state to avoid
+    // destroying the tree widget and resetting scroll position.
+    final isInitialLoad = _tasks.isEmpty;
+    if (isInitialLoad) {
+      _isLoading = true;
+    }
     _errorMessage = null;
-    notifyListeners();
+    if (isInitialLoad) {
+      notifyListeners();
+    }
 
     try {
       // Phase 3.2: Load with hierarchy information (depth computed dynamically)

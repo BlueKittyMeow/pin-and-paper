@@ -102,8 +102,13 @@ class TaskHierarchyProvider extends ChangeNotifier {
     _treeController.roots = activeRoots;
     _treeController.rebuild();
 
-    // Increment version to force AnimatedTreeView rebuild
-    _treeVersion++;
+    // Increment version to force AnimatedTreeView rebuild — but NOT during
+    // reorder mode. Changing the ValueKey destroys/recreates the entire
+    // AnimatedTreeView, which resets scroll position and corrupts the
+    // drag gesture state, breaking subsequent drag-and-drop operations.
+    if (!_isReorderMode) {
+      _treeVersion++;
+    }
     // Expansion state preserved automatically by TaskTreeController (ID-based)
   }
 

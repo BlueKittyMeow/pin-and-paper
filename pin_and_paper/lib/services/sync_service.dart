@@ -98,7 +98,21 @@ class SyncService {
     if (updates.isNotEmpty) {
       await db.update('sync_meta', updates, where: 'id = 1');
     }
-    _cachedMeta = null;
+    // Update cache in-place instead of clearing it. Clearing causes a
+    // deadlock when logChange() is called inside a transaction — the
+    // getSyncMeta() fallback tries to read the DB outside the txn, which
+    // is queued behind the active transaction, creating a circular wait.
+    if (_cachedMeta != null) {
+      _cachedMeta = SyncMeta(
+        userId: userId ?? _cachedMeta!.userId,
+        lastPushAt: lastPushAt ?? _cachedMeta!.lastPushAt,
+        lastPullAt: lastPullAt ?? _cachedMeta!.lastPullAt,
+        syncEnabled: syncEnabled ?? _cachedMeta!.syncEnabled,
+      );
+    } else {
+      // No cache yet — clear so next getSyncMeta() rebuilds from DB
+      _cachedMeta = null;
+    }
   }
 
   // ═══════════════════════════════════════
