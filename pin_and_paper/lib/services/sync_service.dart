@@ -437,13 +437,27 @@ class SyncService {
     final remoteSet =
         remoteTaskTags.map((r) => '${r['task_id']}_${r['tag_id']}').toSet();
 
-    // Add remote-only rows
+    // Build sets of locally existing task and tag IDs for FK validation
+    final localTaskIds = (await db.query(AppConstants.tasksTable, columns: ['id']))
+        .map((r) => r['id'] as String)
+        .toSet();
+    final localTagIds = (await db.query(AppConstants.tagsTable, columns: ['id']))
+        .map((r) => r['id'] as String)
+        .toSet();
+
+    // Add remote-only rows (skip if referenced task or tag doesn't exist locally)
     for (final remote in remoteTaskTags) {
       final key = '${remote['task_id']}_${remote['tag_id']}';
       if (!localSet.contains(key)) {
+        final taskId = remote['task_id'] as String;
+        final tagId = remote['tag_id'] as String;
+        if (!localTaskIds.contains(taskId) || !localTagIds.contains(tagId)) {
+          debugPrint('[Sync] Skipping task_tag $taskId/$tagId — missing local FK');
+          continue;
+        }
         await db.insert(AppConstants.taskTagsTable, {
-          'task_id': remote['task_id'],
-          'tag_id': remote['tag_id'],
+          'task_id': taskId,
+          'tag_id': tagId,
           'created_at': DateTime.now().millisecondsSinceEpoch,
         });
       }
