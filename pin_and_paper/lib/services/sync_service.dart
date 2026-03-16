@@ -770,11 +770,44 @@ class SyncService {
     }
 
     // Bulk upsert all tags (batched)
+    // First, reconcile tag IDs with remote to avoid UNIQUE(user_id, name)
+    // conflicts when the same tag was created independently on another device.
     final allTags = await db.query(AppConstants.tagsTable);
     final tags = allTags.where((t) => _isValidUuid(t['id'] as String)).toList();
     if (tags.length < allTags.length) {
       debugPrint('[Sync] Skipped ${allTags.length - tags.length} tags with non-UUID IDs');
     }
+
+    final existingRemoteTags = await _supabase
+        .from('tags')
+        .select('id, name')
+        .eq('user_id', userId);
+    final remoteTagByName = <String, String>{};
+    for (final rt in existingRemoteTags) {
+      remoteTagByName[rt['name'] as String] = rt['id'] as String;
+    }
+
+    // Remap local tag IDs to match remote where names collide
+    for (final tag in tags) {
+      final localId = tag['id'] as String;
+      final name = tag['name'] as String;
+      final remoteId = remoteTagByName[name];
+      if (remoteId != null && remoteId != localId) {
+        debugPrint('[Sync] Remapping tag "$name" from $localId to $remoteId');
+        // Update task_tags references first (FK constraint)
+        await db.rawUpdate(
+          'UPDATE ${AppConstants.taskTagsTable} SET tag_id = ? WHERE tag_id = ?',
+          [remoteId, localId],
+        );
+        // Update the tag itself
+        await db.rawUpdate(
+          'UPDATE ${AppConstants.tagsTable} SET id = ? WHERE id = ?',
+          [remoteId, localId],
+        );
+        tag['id'] = remoteId;
+      }
+    }
+
     for (int i = 0; i < tags.length; i += batchSize) {
       final end = (i + batchSize < tags.length) ? i + batchSize : tags.length;
       final batch = tags.sublist(i, end);
