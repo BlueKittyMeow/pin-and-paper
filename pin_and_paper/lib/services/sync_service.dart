@@ -133,7 +133,33 @@ class SyncService {
     Map<String, dynamic>? payload,
     DatabaseExecutor? txn,
   }) async {
-    final meta = _cachedMeta ?? await getSyncMeta();
+    // When called inside a transaction, we must NOT query the DB outside that
+    // transaction — it would deadlock against the exclusive txn lock. If the
+    // cache is cold and we're inside a txn, read sync_meta through the txn.
+    SyncMeta meta;
+    if (_cachedMeta != null) {
+      meta = _cachedMeta!;
+    } else if (txn != null) {
+      final result = await txn.query('sync_meta', where: 'id = 1');
+      if (result.isEmpty) {
+        meta = SyncMeta();
+      } else {
+        final row = result.first;
+        meta = SyncMeta(
+          userId: row['user_id'] as String?,
+          lastPushAt: row['last_push_at'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(row['last_push_at'] as int)
+              : null,
+          lastPullAt: row['last_pull_at'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(row['last_pull_at'] as int)
+              : null,
+          syncEnabled: (row['sync_enabled'] as int?) == 1,
+        );
+      }
+      _cachedMeta = meta;
+    } else {
+      meta = await getSyncMeta();
+    }
     if (!meta.syncEnabled) return;
 
     final executor = txn ?? await _database;
