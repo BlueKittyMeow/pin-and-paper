@@ -23,6 +23,10 @@ const ALLOWED_REDIRECT_URIS = [
   "http://localhost:6274/oauth/callback",
 ];
 
+const ALLOWED_REDIRECT_PREFIXES = [
+  "https://chatgpt.com/connector/oauth/",
+];
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -94,8 +98,11 @@ async function handleAuthorize(url: URL, env: Env): Promise<Response> {
   const state = url.searchParams.get("state") ?? "";
   const scope = url.searchParams.get("scope") ?? "";
 
-  // Validate redirect URI
-  if (!ALLOWED_REDIRECT_URIS.includes(redirectUri)) {
+  // Validate redirect URI (exact match or prefix match for dynamic URIs)
+  const redirectAllowed =
+    ALLOWED_REDIRECT_URIS.includes(redirectUri) ||
+    ALLOWED_REDIRECT_PREFIXES.some((prefix) => redirectUri.startsWith(prefix));
+  if (!redirectAllowed) {
     return jsonResponse({ error: "Invalid redirect_uri" }, 400);
   }
 
