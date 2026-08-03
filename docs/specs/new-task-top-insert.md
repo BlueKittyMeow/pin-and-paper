@@ -66,11 +66,18 @@ with negatives), which harmlessly erases negatives.
    non-compact (soft-delete gaps); under MIN−1 it becomes the steady state
    (trace in review: drag X "above Y" with positions {−2,−1,0} → X lands at
    very top, not above Y).
-   **Fix in the provider:** compute `newPosition` as the target node's *index*
-   among its siblings in ascending-position order (excluding the dragged task,
-   preserving the existing before/after drop semantics), which equals its
-   post-reindex position. Same computation for the cross-parent branch
-   (index within destination siblings). No service-signature change.
+   **Fix in the provider:** let `t` = index of the target node in (siblings of
+   `newParentId`, sorted ascending by `position`, dragged task removed). Then
+   `whenAbove → newPosition = t`; `whenBelow → newPosition = t + 1` (verified
+   algebraically and by hand-trace in second review; the existing count-based
+   `whenInside` path is correct as-is). Same computation for the cross-parent
+   branch. No service-signature change.
+   **Filtered-view guard (required):** when `_filterProvider.hasActiveFilters`,
+   `_tasks` is the filtered subset, so compute `t` from a DB query for the true
+   sibling list (siblings of `newParentId`, `deleted_at IS NULL`, ascending
+   position, dragged task excluded) — extending the existing
+   `needsDbQuery && hasActiveFilters` guard that `whenInside` already has
+   (`task_provider.dart:1125-1137`) to `whenAbove`/`whenBelow`.
 
 7. **Cosmetic while touching `updateTaskParent`:** same-parent Step 3 shift
    (`task_service.dart:743-748`) lacks the `AND id != ?` exclusion the
@@ -121,6 +128,7 @@ New tests to add:
 - bulk create: approved suggestions appear in order at the top.
 - `getFilteredTasks` returns smallest-position-first.
 - **same-parent drag reorder with pre-existing negative positions** (guards change #6): with roots {−2,−1,0}, dragging the bottom task above the middle one must place it exactly there.
+- **same-parent drag reorder while a tag filter is active** (guards the filtered-view DB-query guard in change #6).
 - cross-parent move with negative source/destination positions.
 
 **Env note:** run only the affected test files (`flutter test test/<file>`);
