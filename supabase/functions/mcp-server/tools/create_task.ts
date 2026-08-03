@@ -3,7 +3,7 @@ import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@^4.1.13";
 import { toolError, toolSuccess } from "../helpers/errors.ts";
 import { validateDepthForNewChild } from "../helpers/depth.ts";
-import { shiftSiblingsUp } from "../helpers/position.ts";
+import { topInsertPosition } from "../helpers/position.ts";
 import { insertTaskTags, resolveTagNames } from "../helpers/tags.ts";
 
 export function registerCreateTask(
@@ -66,8 +66,9 @@ export function registerCreateTask(
           }
         }
 
-        // Shift siblings to make room at position 0
-        await shiftSiblingsUp(supabase, parent_id, userId);
+        // New-task-top-insert: new tasks go above the current minimum
+        // sibling position so they appear at the top of the list
+        const position = await topInsertPosition(supabase, parent_id, userId);
 
         // Resolve tags
         const resolvedTags = await resolveTagNames(
@@ -89,7 +90,7 @@ export function registerCreateTask(
             is_all_day,
             start_date: start_date ?? null,
             parent_id: parent_id ?? null,
-            position: 0,
+            position,
             completed: false,
           })
           .select()

@@ -3,7 +3,7 @@ import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@^4.1.13";
 import { toolError, toolSuccess } from "../helpers/errors.ts";
 import { validateDepthForNewChild } from "../helpers/depth.ts";
-import { shiftSiblingsUp } from "../helpers/position.ts";
+import { planBatchPositions } from "../helpers/position.ts";
 import { insertTaskTags, resolveTagNames } from "../helpers/tags.ts";
 
 export function registerCreateMultiple(
@@ -36,7 +36,16 @@ export function registerCreateMultiple(
       try {
         const created: Array<Record<string, unknown>> = [];
 
-        for (const input of taskInputs) {
+        // New-task-top-insert: per parent, the batch's n new siblings take
+        // MIN - n .. MIN - 1 so they display in the given order at the top
+        // of the list (mirrors the app's createMultipleTasks)
+        const positions = await planBatchPositions(
+          supabase,
+          taskInputs.map((t) => t.parent_id ?? null),
+          userId,
+        );
+
+        for (const [index, input] of taskInputs.entries()) {
           // Validate depth
           if (input.parent_id) {
             const depth = await validateDepthForNewChild(
@@ -50,9 +59,6 @@ export function registerCreateMultiple(
               );
             }
           }
-
-          // Shift siblings
-          await shiftSiblingsUp(supabase, input.parent_id, userId);
 
           // Resolve tags
           const resolvedTags = await resolveTagNames(
@@ -74,7 +80,7 @@ export function registerCreateMultiple(
               is_all_day: input.is_all_day,
               start_date: input.start_date ?? null,
               parent_id: input.parent_id ?? null,
-              position: 0,
+              position: positions[index],
               completed: false,
             })
             .select()

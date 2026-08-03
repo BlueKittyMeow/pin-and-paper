@@ -3,7 +3,7 @@ import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@^4.1.13";
 import { toolError, toolSuccess } from "../helpers/errors.ts";
 import { validateDepthForMove } from "../helpers/depth.ts";
-import { shiftSiblingsUp } from "../helpers/position.ts";
+import { topInsertPosition } from "../helpers/position.ts";
 import { replaceTaskTags } from "../helpers/tags.ts";
 import { formatTask } from "../helpers/format.ts";
 
@@ -132,10 +132,10 @@ export function registerUpdateTask(
             }
           }
 
-          // Shift siblings at new parent to make room at position 0
-          await shiftSiblingsUp(supabase, parent_id, userId);
+          // New-task-top-insert: moved task goes above the new parent's
+          // current minimum sibling position (top of that list)
           updates.parent_id = parent_id;
-          updates.position = 0;
+          updates.position = await topInsertPosition(supabase, parent_id, userId);
         }
 
         // Apply updates
