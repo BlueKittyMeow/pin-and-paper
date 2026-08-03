@@ -1,7 +1,7 @@
 # Pin and Paper — Core API Contract
 
-**Generated:** 2026-01-30
-**App Version:** 3.9.0 · Database Version: 11
+**Generated:** 2026-01-30 (§3 SyncService/AuthService/DatabaseService, §6, and §12 refreshed **2026-08-03** — see inline notes)
+**App Version:** 3.9.0 · Database Version: 12
 **Purpose:** Interface contract for building dev harnesses and visual modules. Implementation details (SQLite migrations, provider wiring, business logic internals) are intentionally omitted.
 
 ---
@@ -524,8 +524,8 @@ Future<void>   setSortReversed(bool reversed);
 static final DatabaseService instance;
 
 Future<Database> get database;
-void setTestDatabase(Database testDb);   // @visibleForTesting
-Future<void> resetDatabase();            // @visibleForTesting
+static void setTestDatabase(Database testDb);   // @visibleForTesting
+static Future<void> resetDatabase();             // @visibleForTesting
 Future<void> close();
 
 // Brain dump drafts
@@ -535,6 +535,70 @@ Future<void> cleanupOldDrafts();
 
 // API usage log
 Future<void> insertApiUsageLog(Map<String, dynamic> logEntry);
+```
+
+> **Corrected 2026-08-03:** `setTestDatabase` and `resetDatabase` are `static` members on `DatabaseService`, not instance methods — call them as `DatabaseService.setTestDatabase(db)` / `DatabaseService.resetDatabase()`, not through `.instance`.
+
+### SyncService (Singleton)
+
+**New section (2026-08-03).** Phase 4.0 added a Supabase sync layer; it didn't exist when this doc was last generated. Full behavior (LWW merge rules, `task_tags` union-merge, push/pull batching) is intentionally omitted per this doc's scope — this is the surface a visual module or harness would ever touch.
+
+```dart
+static final SyncService instance;
+
+// Test-only alternate constructor, bypasses Supabase entirely:
+// SyncService.testInstance(Database db)   // @visibleForTesting
+
+Future<SyncMeta> getSyncMeta();
+Future<void>     updateSyncMeta({bool? syncEnabled, String? userId, DateTime? lastPushAt, DateTime? lastPullAt});
+
+/// Log a local mutation; call from TaskService/TagService after every
+/// INSERT/UPDATE/DELETE. No-op when sync is disabled.
+Future<void> logChange({
+  required String tableName,
+  required String recordId,
+  required String operation,
+  Map<String, dynamic>? payload,
+  DatabaseExecutor? txn,
+});
+
+Future<void> initialize();
+Future<void> enableSync();
+Future<void> disableSync();
+Future<SyncResult> push();
+Future<void>       fullPush();
+Future<SyncResult> pull();
+void dispose();
+
+// Callbacks (settable)
+VoidCallback? onDataChanged;    // fires after pull merges remote changes in
+VoidCallback? onSyncComplete;   // fires after any push()/pull() completes
+
+class SyncMeta {
+  String? userId;
+  DateTime? lastPushAt;
+  DateTime? lastPullAt;
+  bool syncEnabled;
+}
+
+enum SyncResult { success, nothingToPush, skipped, disabled, error }
+```
+
+### AuthService (Singleton)
+
+**New section (2026-08-03).** Google sign-in via Supabase, added alongside sync.
+
+```dart
+static final AuthService instance;
+
+User? get currentUser;          // Supabase User, null if signed out
+bool get isSignedIn;
+Stream<AuthState> get onAuthStateChange;
+
+Future<String> signInWithGoogle();
+Future<void>   cancelSignIn();
+Future<bool>   handleRedirectUrl(String url);
+Future<void>   signOut();
 ```
 
 ---
@@ -794,7 +858,7 @@ These `UserSettings` fields directly influence how the UI should render:
 
 ## 6. Events / Reactive Patterns
 
-There are **no Streams or StreamControllers** in the codebase. All reactivity uses Flutter's `ChangeNotifier` pattern:
+**Corrected 2026-08-03:** this section previously claimed there are no Streams anywhere in the codebase. That's no longer true — `AuthService.onAuthStateChange` (§3) is a `Stream<AuthState>`, and `SyncService` holds internal `StreamSubscription`s for connectivity/auth-change listening. The claim still holds for the **app's own data/UI layer**: providers, services, and visual modules all communicate through `ChangeNotifier`, not custom Streams. A visual module should still expect `ChangeNotifier`-style reactivity (see `pin_and_paper_canvas`'s `SpatialDataSource`, which is itself a `ChangeNotifier` — `docs/INTERFACE_CONTRACTS.md` Part 1) — the Streams that do exist are internal to auth/sync plumbing, not something a module integrates with directly.
 
 ### How state changes propagate
 
@@ -843,7 +907,7 @@ notificationService.onCancelRequested = (String taskId) async { ... };
 class AppConstants {
   static const String appName = 'Pin and Paper';
   static const String appVersion = '3.9.0';
-  static const int databaseVersion = 11;
+  static const int databaseVersion = 12; // Corrected 2026-08-03 (was 11); Phase 4.0 sync layer (sync_log, sync_meta, updated_at)
   static const int maxTasksInMemory = 500;
   static const Duration autoSaveDelay = Duration(milliseconds: 500);
   static const int maxBrainDumpLength = 10000;
@@ -968,3 +1032,18 @@ class SearchException implements Exception {
 /// Called when user taps a notification action while the app is in the background.
 void onBackgroundNotificationAction(NotificationResponse response);
 ```
+
+---
+
+## 12. Spatial Canvas Modules (POC)
+
+**New section (2026-08-03).** Two visual modules referenced in this doc's history are now real, buildable packages — not stubs:
+
+| Package | Status | What it is |
+|---------|--------|------------|
+| `pin_and_paper_canvas` | Milestone 1 done | `SpatialCanvas` widget, `SpatialEntity`/`SpatialDataSource`/`SpatialCanvasController`, viewport math. Has a runnable `example/` app. |
+| `pin_and_paper_card_renderer` | Milestone 2 done | `TaskCardData`, `TagChip`, the `TaskCard` widget (`kCardSize` 220×140). Previewed inside the canvas module's `example/` app rather than its own. |
+
+Both live at `~/Documents/Git/pin_and_paper_canvas/` and `~/Documents/Git/pin_and_paper_card_renderer/`, branch `claude/drag-drop-canvas-mvp-cu6uoy`. Neither is wired into this app yet — that's Milestones 3–4, not started (this app is still on `databaseVersion = 12`, no `canvas_x`/`canvas_y` columns, no `TaskService.updateTaskCanvasPosition`).
+
+For the as-built contracts these modules actually implement (not the original design-time draft), see `pin_and_paper_dev_harness/docs/INTERFACE_CONTRACTS.md`. For the plan governing this work end-to-end, including what's built vs. pending, see `pin_and_paper_dev_harness/docs/working/DRAG_DROP_CANVAS_MVP_PLAN.md` and its Progress Log.
