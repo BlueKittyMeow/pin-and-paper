@@ -52,6 +52,14 @@ dependencies:
   supabase_flutter: ^2.8.0  # Supabase client + auth + realtime
   url_launcher: ^6.2.0     # OAuth browser launch + copy/paste fallback
 
+  # Phase 4.4-MVP: Spatial View (Milestone 4) — path deps, app is nested one
+  # level inside this repo (pin-and-paper/pin_and_paper/), so both modules'
+  # sibling checkouts are two levels up.
+  pin_and_paper_canvas:
+    path: ../../pin_and_paper_canvas
+  pin_and_paper_card_renderer:
+    path: ../../pin_and_paper_card_renderer
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -70,3 +78,4 @@ flutter:
     - assets/images/quiz/
     - assets/images/badges/1x/
     - assets/images/onboarding/
+    - assets/images/spatial/SeamlessKraft1.jpg
