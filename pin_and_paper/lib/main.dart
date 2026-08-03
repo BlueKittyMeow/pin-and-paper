@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -31,7 +32,53 @@ void main() async {
   // Phase 3.3: Ensure Flutter binding is initialized for async operations
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Phase 3.3: Clean up tasks deleted more than 30 days ago (automatic maintenance)
+  // Phase 4.0: Initialize Supabase (cheap storage read, no awaited network).
+  // Stays here (not deferred) because sync_service.dart/auth_service.dart
+  // reference Supabase.instance, which throws if accessed before initialize.
+  try {
+    await Supabase.initialize(
+      url: const String.fromEnvironment('SUPABASE_URL',
+          defaultValue: 'https://qasieyfuspuoauffochm.supabase.co'),
+      anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY',
+          defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhc2lleWZ1c3B1b2F1ZmZvY2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNDgxMzksImV4cCI6MjA4NzgyNDEzOX0.6VNF5_a5Qxxf1-68JmAqANIli4bo0SHa5trV5H3zuo8'),
+    );
+  } catch (e) {
+    print('[Phase 4.0] Failed to initialize Supabase/Sync: $e');
+    // Don't block app startup — app works fully offline
+  }
+
+  // Fast-launch: everything else that was previously awaited before runApp()
+  // (task cleanup, sync pull, date parsing engine boot, notifications) is
+  // deferred to _deferredStartup(), scheduled after the first frame so the
+  // task list (which reads local SQLite independently) renders immediately.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_deferredStartup());
+  });
+
+  runApp(const PinAndPaperApp());
+}
+
+/// Fast-launch: runs the heavy startup steps that used to block `runApp()`.
+/// Scheduled via `addPostFrameCallback` so the first frame (task list, backed
+/// by local SQLite) renders before any of this work begins. Steps run
+/// sequentially, each in its own try/catch mirroring the original inline
+/// blocks, in the order required by their dependencies (cleanup before sync
+/// pull, reminders reschedule/checkMissed after the pull).
+Future<void> _deferredStartup() async {
+  // Let the first frame settle (gestures/animations) before starting the
+  // synchronous QuickJS evaluate() calls in step (c).
+  await Future.delayed(const Duration(milliseconds: 300));
+
+  // (a) Phase 3.9: Load date parsing preferences first, so the today-cutoff
+  // is correct before any date bucketing repaints. Safe before initialize()
+  // — only sets prefs-backed fields.
+  try {
+    await DateParsingService().loadSettings();
+  } catch (e) {
+    print('[Phase 3.7] Failed to load DateParsingService settings: $e');
+  }
+
+  // (b) Phase 3.3: Clean up tasks deleted more than 30 days ago (automatic maintenance)
   try {
     final taskService = TaskService();
     final deletedCount = await taskService.cleanupExpiredDeletedTasks();
@@ -43,47 +90,44 @@ void main() async {
     // Don't block app startup on cleanup failure
   }
 
-  // Phase 4.0: Initialize Supabase + Sync Service
+  // (c) Phase 3.7: Initialize date parsing service (QuickJS boot)
   try {
-    await Supabase.initialize(
-      url: const String.fromEnvironment('SUPABASE_URL',
-          defaultValue: 'https://qasieyfuspuoauffochm.supabase.co'),
-      anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY',
-          defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhc2lleWZ1c3B1b2F1ZmZvY2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNDgxMzksImV4cCI6MjA4NzgyNDEzOX0.6VNF5_a5Qxxf1-68JmAqANIli4bo0SHa5trV5H3zuo8'),
-    );
+    await DateParsingService().initialize();
+  } catch (e) {
+    print('[Phase 3.7] Failed to initialize DateParsingService: $e');
+    // Don't block app startup on date parsing initialization failure
+  }
+
+  // (d) Phase 3.8: Initialize notification service (timezone + plugin)
+  try {
+    await NotificationService().initialize();
+  } catch (e) {
+    print('[Phase 3.8] Failed to initialize NotificationService: $e');
+    // Don't block app startup on notification initialization failure
+  }
+
+  // (e) Phase 4.0: Initialize Sync Service (contains the network pull) —
+  // near-last so local init steps don't wait behind it.
+  try {
     await SyncService.instance.initialize();
   } catch (e) {
     print('[Phase 4.0] Failed to initialize Supabase/Sync: $e');
     // Don't block app startup — app works fully offline
   }
 
-  // Phase 3.7: Initialize date parsing service
+  // (f) Phase 3.8.4: Reschedule reminders, then check for missed
+  // notifications, after the sync pull — heals reminders silently dropped
+  // during the deferred window and covers remotely-created/synced tasks.
   try {
-    final dateParser = DateParsingService();
-    await dateParser.initialize();
-    await dateParser.loadSettings(); // Phase 3.9: Load user preferences
+    await ReminderService().rescheduleAll();
   } catch (e) {
-    print('[Phase 3.7] Failed to initialize DateParsingService: $e');
-    // Don't block app startup on date parsing initialization failure
+    print('[Phase 3.8] Failed to reschedule reminders: $e');
   }
-
-  // Phase 3.8: Initialize notification service (timezone + plugin)
   try {
-    final notificationService = NotificationService();
-    await notificationService.initialize();
-
-    // Phase 3.8.4: Check for missed notifications on app start
-    try {
-      await ReminderService().checkMissed();
-    } catch (e) {
-      print('[Phase 3.8] Failed to check missed notifications: $e');
-    }
+    await ReminderService().checkMissed();
   } catch (e) {
-    print('[Phase 3.8] Failed to initialize NotificationService: $e');
-    // Don't block app startup on notification initialization failure
+    print('[Phase 3.8] Failed to check missed notifications: $e');
   }
-
-  runApp(const PinAndPaperApp());
 }
 
 class PinAndPaperApp extends StatelessWidget {

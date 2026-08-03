@@ -227,6 +227,11 @@ void main() {
       });
 
       test('handles null gracefully when not initialized', () {
+        // The singleton may already be initialized from earlier tests in
+        // this group (e.g. on platforms where flutter_js loads). Dispose
+        // first so this test exercises the actual pre-init guard rather
+        // than passing by accident because nothing reset `_initialized`.
+        service.dispose();
         // Before initialization, parse should handle gracefully
         final result = service.parse('tomorrow');
         // On web or before init, should return null
