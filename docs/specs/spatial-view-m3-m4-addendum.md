@@ -94,6 +94,32 @@ null or clobber `canvas_x/canvas_y`.
    named follow-up: narrow sketchpad's pubspec `assets:` glob (or decouple
    card_renderer) before any size-sensitive release.
 
+11. **Landing tray for unplaced tasks (owner design, 2026-08-03 —
+   SUPERSEDES the plan's deterministic grid for null-position tasks).**
+   Tasks with no stored `canvas_x/canvas_y` do not scatter into a grid;
+   they land as a neat STACK in a designated tray zone at the desk's
+   bottom-right — like new index cards dropped into an inbox. Spec:
+   - Tray anchor: `Offset(canvasSize.width - 300, canvasSize.height - 220)`;
+     each unplaced card offsets `Offset(7, 5) * i` from the anchor, ordered
+     so the NEWEST task is physically on top of the stack (consistent with
+     `zIndex = -position`). If more than ~15 are unplaced, tighten the
+     per-card offset so the stack never escapes the tray zone.
+   - Stack positions are in-memory only (same rule as the plan's grid):
+     nothing persists until the user drags a card out of the tray, which
+     writes `canvas_x/canvas_y` as usual. Cards re-stack in the tray on
+     each entry until placed — that's the inbox behaving correctly, not a
+     limitation.
+   - Tray delineation: the desk `background` widget adds a subtle
+     rounded-rect outline at the tray zone (muted amber, low alpha, maybe a
+     small "NEW" label in the established small-caps style) so the area
+     reads as furniture, not decoration.
+   - "Fan through the stack" as a gesture (spread the stack to browse) is a
+     named FOLLOW-UP, not M4: day one, browsing the stack = dragging cards
+     off the top, which works with zero extra code.
+   - Tests: N tasks without positions stack at the tray anchor with the
+     expected offsets and newest-on-top z-order; dragging the top card out
+     persists its position and the next card becomes the top.
+
 ## Explicitly NOT in M3/M4 (queued behind them)
 
 - The amethyst desk object + example-style desk persistence-of-decor: the
