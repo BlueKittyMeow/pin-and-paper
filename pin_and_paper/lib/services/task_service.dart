@@ -683,6 +683,52 @@ class TaskService {
     return originalTask.copyWith(title: trimmedTitle, updatedAt: now);
   }
 
+  // Phase 4.4-MVP: Update task's spatial canvas position
+  /// Updates the stored canvas_x/canvas_y for a task (drag-end only, so no
+  /// throttling needed).
+  ///
+  /// NOTE: bumping updated_at on drag can win coarse LWW over a concurrent
+  /// remote edit made around the same time - this is a pre-existing accepted
+  /// sync limitation (see updateTaskTitle and friends, which have the same
+  /// property), not something new introduced here.
+  ///
+  /// Throws [Exception] if task not found
+  Future<void> updateTaskCanvasPosition(String taskId, double x, double y) async {
+    final db = await _dbService.database;
+
+    // Fetch the original task first to have all its data
+    final maps = await db.query(
+      AppConstants.tasksTable,
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    if (maps.isEmpty) {
+      throw Exception('Task not found: $taskId');
+    }
+
+    // Perform the update
+    final now = DateTime.now();
+    final updateMap = {
+      'canvas_x': x,
+      'canvas_y': y,
+      'updated_at': now.millisecondsSinceEpoch,
+    };
+    await db.update(
+      AppConstants.tasksTable,
+      updateMap,
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    await SyncService.instance.logChange(
+      tableName: 'tasks',
+      recordId: taskId,
+      operation: 'UPDATE',
+      payload: updateMap,
+    );
+  }
+
   // Get count of incomplete tasks
   // Phase 3.3: Excludes soft-deleted tasks
   Future<int> getIncompleteTaskCount() async {

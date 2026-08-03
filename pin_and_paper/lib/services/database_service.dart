@@ -98,6 +98,10 @@ class DatabaseService {
         -- Phase 4.0: Sync layer
         updated_at INTEGER,
 
+        -- Phase 4.4-MVP: Spatial canvas positions (NULL = never placed)
+        canvas_x REAL,
+        canvas_y REAL,
+
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
       )
     ''');
@@ -503,6 +507,11 @@ class DatabaseService {
     // Migrate from version 11 to 12: Phase 4.0 - Sync layer
     if (oldVersion < 12) {
       await _migrateToV12(db);
+    }
+
+    // Migrate from version 12 to 13: Phase 4.4-MVP - Spatial canvas positions
+    if (oldVersion < 13) {
+      await _migrateToV13(db);
     }
   }
 
@@ -1258,6 +1267,27 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v12 successfully');
+  }
+
+  /// Phase 4.4-MVP Migration: v12 → v13
+  ///
+  /// Adds:
+  /// - canvas_x, canvas_y columns to tasks (nullable; NULL = never placed
+  ///   on the spatial canvas)
+  ///
+  /// x/y only per approved scope - canvas_rotation/canvas_z are deferred
+  /// to a later migration when those features land.
+  Future<void> _migrateToV13(Database db) async {
+    debugPrint('Migrating database from v12 to v13: Spatial canvas positions');
+
+    await db.transaction((txn) async {
+      await txn.execute(
+          'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_x REAL');
+      await txn.execute(
+          'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_y REAL');
+    });
+
+    debugPrint('✅ Database migrated to v13 successfully');
   }
 
   Future<void> close() async {

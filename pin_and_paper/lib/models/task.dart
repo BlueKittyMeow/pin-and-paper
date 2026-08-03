@@ -33,6 +33,10 @@ class Task {
   // Phase 4.0: Sync support
   final DateTime? updatedAt; // LWW timestamp for sync conflict resolution
 
+  // Phase 4.4-MVP: Spatial canvas position
+  final double? canvasX; // NULL = never placed on the spatial canvas
+  final double? canvasY; // NULL = never placed on the spatial canvas
+
   Task({
     required this.id,
     required this.title,
@@ -53,6 +57,8 @@ class Task {
     this.notes,
     this.positionBeforeCompletion,
     this.updatedAt,
+    this.canvasX,
+    this.canvasY,
   });
 
   /// Serialize to database map
@@ -77,6 +83,8 @@ class Task {
       'notes': notes,
       'position_before_completion': positionBeforeCompletion,
       'updated_at': updatedAt?.millisecondsSinceEpoch,
+      'canvas_x': canvasX,
+      'canvas_y': canvasY,
     };
   }
 
@@ -120,6 +128,8 @@ class Task {
       updatedAt: map['updated_at'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int)
           : null,
+      canvasX: (map['canvas_x'] as num?)?.toDouble(),
+      canvasY: (map['canvas_y'] as num?)?.toDouble(),
     );
   }
 
@@ -143,6 +153,8 @@ class Task {
     String? notes,
     int? positionBeforeCompletion,
     DateTime? updatedAt,
+    double? canvasX,
+    double? canvasY,
   }) {
     return Task(
       id: id ?? this.id,
@@ -163,6 +175,8 @@ class Task {
       notes: notes ?? this.notes,
       positionBeforeCompletion: positionBeforeCompletion ?? this.positionBeforeCompletion,
       updatedAt: updatedAt ?? this.updatedAt,
+      canvasX: canvasX ?? this.canvasX,
+      canvasY: canvasY ?? this.canvasY,
     );
   }
 

@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 12; // Phase 4.0: Sync layer (sync_log, sync_meta, updated_at)
+  static const int databaseVersion = 13; // Phase 4.4-MVP: Spatial canvas positions (canvas_x, canvas_y)
 
   // Table names
   static const String tasksTable = 'tasks';

@@ -294,4 +294,162 @@ void main() {
       expect(deserialized.parentId, 'parent-task');
     });
   });
+
+  group('Task Model - Phase 4.4-MVP Canvas Fields', () {
+    final now = DateTime(2025, 10, 30, 10, 30);
+
+    test('toMap includes canvas_x/canvas_y when set', () {
+      final task = Task(
+        id: 'task-canvas-1',
+        title: 'Placed on canvas',
+        createdAt: now,
+        canvasX: 123.5,
+        canvasY: -45.25,
+      );
+
+      final map = task.toMap();
+
+      expect(map['canvas_x'], 123.5);
+      expect(map['canvas_y'], -45.25);
+    });
+
+    test('toMap includes NULL canvas_x/canvas_y when unset', () {
+      final task = Task(
+        id: 'task-canvas-2',
+        title: 'Never placed',
+        createdAt: now,
+      );
+
+      final map = task.toMap();
+
+      expect(map['canvas_x'], isNull);
+      expect(map['canvas_y'], isNull);
+    });
+
+    test('fromMap deserializes canvas_x/canvas_y correctly', () {
+      final map = {
+        'id': 'task-canvas-3',
+        'title': 'From map with canvas position',
+        'completed': 0,
+        'created_at': now.millisecondsSinceEpoch,
+        'canvas_x': 200.0,
+        'canvas_y': 150.75,
+      };
+
+      final task = Task.fromMap(map);
+
+      expect(task.canvasX, 200.0);
+      expect(task.canvasY, 150.75);
+    });
+
+    test('fromMap handles integer canvas_x/canvas_y (num coercion)', () {
+      // SQLite may return whole-number REALs as ints depending on driver
+      final map = {
+        'id': 'task-canvas-4',
+        'title': 'Integer canvas coords',
+        'completed': 0,
+        'created_at': now.millisecondsSinceEpoch,
+        'canvas_x': 200,
+        'canvas_y': -50,
+      };
+
+      final task = Task.fromMap(map);
+
+      expect(task.canvasX, 200.0);
+      expect(task.canvasY, -50.0);
+    });
+
+    test('fromMap handles NULL canvas_x/canvas_y (never placed / pre-v13 rows)', () {
+      final map = {
+        'id': 'task-canvas-5',
+        'title': 'Never placed on canvas',
+        'completed': 0,
+        'created_at': now.millisecondsSinceEpoch,
+        'canvas_x': null,
+        'canvas_y': null,
+      };
+
+      final task = Task.fromMap(map);
+
+      expect(task.canvasX, isNull);
+      expect(task.canvasY, isNull);
+    });
+
+    test('fromMap handles missing canvas_x/canvas_y keys (backward compatibility)', () {
+      final map = {
+        'id': 'task-canvas-6',
+        'title': 'Map without canvas keys at all',
+        'completed': 0,
+        'created_at': now.millisecondsSinceEpoch,
+      };
+
+      final task = Task.fromMap(map);
+
+      expect(task.canvasX, isNull);
+      expect(task.canvasY, isNull);
+    });
+
+    test('copyWith updates canvas fields correctly', () {
+      final original = Task(
+        id: 'task-canvas-7',
+        title: 'Original',
+        createdAt: now,
+      );
+
+      final updated = original.copyWith(canvasX: 10.0, canvasY: 20.0);
+
+      // Original should be unchanged
+      expect(original.canvasX, isNull);
+      expect(original.canvasY, isNull);
+
+      // Updated should have new values
+      expect(updated.canvasX, 10.0);
+      expect(updated.canvasY, 20.0);
+    });
+
+    test('copyWith preserves canvas fields when not specified', () {
+      final original = Task(
+        id: 'task-canvas-8',
+        title: 'Already placed',
+        createdAt: now,
+        canvasX: 5.0,
+        canvasY: 6.0,
+      );
+
+      final updated = original.copyWith(title: 'Renamed');
+
+      expect(updated.canvasX, 5.0);
+      expect(updated.canvasY, 6.0);
+    });
+
+    test('Round-trip serialization preserves canvas fields', () {
+      final original = Task(
+        id: 'task-canvas-9',
+        title: 'Round-trip canvas test',
+        createdAt: now,
+        canvasX: 77.5,
+        canvasY: -12.25,
+      );
+
+      final map = original.toMap();
+      final deserialized = Task.fromMap(map);
+
+      expect(deserialized.canvasX, original.canvasX);
+      expect(deserialized.canvasY, original.canvasY);
+    });
+
+    test('Round-trip serialization preserves NULL canvas fields', () {
+      final original = Task(
+        id: 'task-canvas-10',
+        title: 'Round-trip null canvas test',
+        createdAt: now,
+      );
+
+      final map = original.toMap();
+      final deserialized = Task.fromMap(map);
+
+      expect(deserialized.canvasX, isNull);
+      expect(deserialized.canvasY, isNull);
+    });
+  });
 }

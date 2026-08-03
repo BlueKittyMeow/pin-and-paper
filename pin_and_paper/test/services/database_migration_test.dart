@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/utils/constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../helpers/test_database_helper.dart';
 
 /// Tests for database migrations
 ///
@@ -276,6 +277,188 @@ void main() {
       expect(v6Tags[1]['name'], equals('Urgent'));
       expect(v6Tags[2]['name'], equals('Work'));
     });
+  });
+
+  group('Database Migration v12 → v13', () {
+    late Database db;
+
+    setUpAll(() {
+      // Initialize sqflite_ffi for testing
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    tearDown(() async {
+      if (db.isOpen) {
+        await db.close();
+      }
+    });
+
+    /// Helper: Create a v12 database with the schema as it existed just
+    /// before the v13 spatial-canvas migration (no canvas_x/canvas_y).
+    Future<Database> createV12Database() async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 12,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE ${AppConstants.tasksTable} (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                completed INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                completed_at INTEGER,
+                due_date INTEGER,
+                is_all_day INTEGER DEFAULT 1,
+                start_date INTEGER,
+                parent_id TEXT,
+                position INTEGER NOT NULL DEFAULT 0,
+                is_template INTEGER DEFAULT 0,
+                notification_type TEXT DEFAULT 'use_global',
+                notification_time INTEGER,
+                deleted_at INTEGER DEFAULT NULL,
+                notes TEXT DEFAULT NULL,
+                position_before_completion INTEGER DEFAULT NULL,
+                updated_at INTEGER,
+                FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE sync_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                table_name TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                payload TEXT,
+                created_at INTEGER NOT NULL,
+                synced INTEGER NOT NULL DEFAULT 0
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE sync_meta (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                user_id TEXT,
+                last_push_at INTEGER,
+                last_pull_at INTEGER,
+                sync_enabled INTEGER DEFAULT 0,
+                CHECK (id = 1)
+              )
+            ''');
+            await db.insert('sync_meta', {'id': 1});
+          },
+        ),
+      );
+
+      return db;
+    }
+
+    test('migrates from v12 to v13: adds canvas_x/canvas_y and data survives', () async {
+      // 1. Create v12 database
+      db = await createV12Database();
+
+      // 2. Add sample data
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.insert(AppConstants.tasksTable, {
+        'id': 'task-1',
+        'title': 'Pre-migration task',
+        'completed': 0,
+        'created_at': now,
+        'position': 0,
+        'is_template': 0,
+        'is_all_day': 1,
+        'notification_type': 'use_global',
+        'updated_at': now,
+      });
+
+      // 3. Run migration directly on the same database
+      await _migrateV12ToV13(db);
+
+      // 4. Verify schema changes
+      final taskColumns = await db.rawQuery('PRAGMA table_info(${AppConstants.tasksTable})');
+      final columnNames = taskColumns.map((col) => col['name'] as String).toList();
+
+      expect(columnNames, contains('canvas_x'));
+      expect(columnNames, contains('canvas_y'));
+
+      // 5. Verify existing data preserved, new columns default to NULL
+      final tasks = await db.query(AppConstants.tasksTable);
+      expect(tasks.length, equals(1));
+      expect(tasks.first['id'], equals('task-1'));
+      expect(tasks.first['title'], equals('Pre-migration task'));
+      expect(tasks.first['canvas_x'], isNull);
+      expect(tasks.first['canvas_y'], isNull);
+    });
+
+    test('canvas_x/canvas_y accept and round-trip real values after migration', () async {
+      db = await createV12Database();
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert(AppConstants.tasksTable, {
+        'id': 'task-2',
+        'title': 'Task to place on canvas',
+        'completed': 0,
+        'created_at': now,
+        'position': 0,
+        'is_template': 0,
+        'is_all_day': 1,
+        'notification_type': 'use_global',
+        'updated_at': now,
+      });
+
+      await _migrateV12ToV13(db);
+
+      await db.update(
+        AppConstants.tasksTable,
+        {'canvas_x': 123.5, 'canvas_y': -45.25},
+        where: 'id = ?',
+        whereArgs: ['task-2'],
+      );
+
+      final rows = await db.query(AppConstants.tasksTable, where: 'id = ?', whereArgs: ['task-2']);
+      expect(rows.first['canvas_x'], equals(123.5));
+      expect(rows.first['canvas_y'], equals(-45.25));
+    });
+
+    test('fresh v13 install schema matches the migrated schema', () async {
+      // The fresh-install schema (test harness equivalent of DatabaseService._createDB)
+      // must have the same canvas_x/canvas_y columns as a migrated v12 database.
+      final freshDb = await TestDatabaseHelper.createTestDatabase();
+
+      final freshColumns = await freshDb.rawQuery('PRAGMA table_info(${AppConstants.tasksTable})');
+      final freshColumnNames = freshColumns.map((col) => col['name'] as String).toSet();
+
+      expect(freshColumnNames, contains('canvas_x'));
+      expect(freshColumnNames, contains('canvas_y'));
+
+      // Fresh-installed tasks have NULL canvas position until placed
+      await freshDb.insert(AppConstants.tasksTable, {
+        'id': 'fresh-task-1',
+        'title': 'Fresh task',
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+      });
+      final rows = await freshDb.query(AppConstants.tasksTable, where: 'id = ?', whereArgs: ['fresh-task-1']);
+      expect(rows.first['canvas_x'], isNull);
+      expect(rows.first['canvas_y'], isNull);
+
+      await freshDb.close();
+    });
+  });
+}
+
+/// Manual implementation of v12→v13 migration for testing
+///
+/// This replicates the logic from DatabaseService._migrateToV13
+/// so we can test it without making the method public.
+Future<void> _migrateV12ToV13(Database db) async {
+  await db.transaction((txn) async {
+    await txn.execute(
+        'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_x REAL');
+    await txn.execute(
+        'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_y REAL');
   });
 }
 

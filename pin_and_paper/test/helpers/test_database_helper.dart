@@ -71,6 +71,8 @@ class TestDatabaseHelper {
         deleted_at INTEGER,
         notes TEXT DEFAULT NULL,
         position_before_completion INTEGER DEFAULT NULL,
+        canvas_x REAL,
+        canvas_y REAL,
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable} (id) ON DELETE CASCADE
       )
     ''');
