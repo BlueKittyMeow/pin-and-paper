@@ -1,6 +1,6 @@
 # Spec: New tasks appear at the top of the list
 
-**Date:** 2026-08-02 · **Author:** Fable 5 · **Status:** Reviewed (Sonnet, PASS WITH CHANGES, amendments folded in) — ready to implement
+**Date:** 2026-08-02 · **Author:** Fable 5 · **Status:** Implemented (twice-reviewed; 108/108 affected tests green)
 **Bug:** Tasks created in the app appear at the *bottom* of the task list.
 
 ## Root cause
@@ -70,8 +70,13 @@ with negatives), which harmlessly erases negatives.
    `newParentId`, sorted ascending by `position`, dragged task removed). Then
    `whenAbove → newPosition = t`; `whenBelow → newPosition = t + 1` (verified
    algebraically and by hand-trace in second review; the existing count-based
-   `whenInside` path is correct as-is). Same computation for the cross-parent
-   branch. No service-signature change.
+   `whenInside` path is correct as-is). **Same-parent branch only** — the
+   cross-parent branch keeps the raw `targetNode.position`: `updateTaskParent`
+   never reindexes the *destination* sibling list, so raw positions remain
+   valid there and the rank formula would misplace drops into non-compact
+   destinations (implementation-time correction, verified by counter-example
+   with destination positions {−5,−3,−1} and covered by test). No
+   service-signature change.
    **Filtered-view guard (required):** when `_filterProvider.hasActiveFilters`,
    `_tasks` is the filtered subset, so compute `t` from a DB query for the true
    sibling list (siblings of `newParentId`, `deleted_at IS NULL`, ascending

@@ -395,21 +395,21 @@ void main() {
       final task2 = await taskService.createTask('Task 2');
       final task3 = await taskService.createTask('Task 3');
 
-      // Positions should be 0, 1, 2
+      // New-task-top-insert: positions should be 0, -1, -2 (MIN - 1, newest = smallest)
       expect(task1.position, 0);
-      expect(task2.position, 1);
-      expect(task3.position, 2);
+      expect(task2.position, -1);
+      expect(task3.position, -2);
 
-      // Soft delete task2 (position 1)
+      // Soft delete task2 (position -1)
       await taskService.softDeleteTask(task2.id);
 
-      // Create new task - should get position 2 (ignoring deleted task's position)
+      // Create new task - should get position -3 (ignoring deleted task's position)
       final task4 = await taskService.createTask('Task 4');
 
-      // Position should be 3 (max of active tasks is 2, so 2 + 1 = 3)
-      expect(task4.position, 3, reason: 'Should calculate position from active tasks only');
+      // Position should be -3 (min of active tasks is -2, so -2 - 1 = -3)
+      expect(task4.position, -3, reason: 'Should calculate position from active tasks only');
 
-      // Verify active tasks have positions 0, 2, 3 (gap at 1 from deleted task)
+      // Verify active tasks have positions 0, -2, -3 (gap at -1 from deleted task)
       final active = await taskService.getAllTasks();
       expect(active.length, 3);
     });

@@ -23,22 +23,22 @@ class TaskService {
 
     final db = await _dbService.database;
 
-    // Phase 3.1: Calculate next position for top-level tasks
+    // New-task-top-insert: New tasks go above the current minimum position so
+    // they appear at the *top* of the list (newest = smallest position).
     // Phase 3.3: Only consider active (not deleted) tasks for position calculation
     final result = await db.rawQuery('''
-      SELECT COALESCE(MAX(position), -1) as max_position
+      SELECT COALESCE(MIN(position), 1) - 1 AS next_position
       FROM ${AppConstants.tasksTable}
       WHERE parent_id IS NULL AND deleted_at IS NULL
     ''');
-    final maxPosition = result.first['max_position'] as int;
-    final nextPosition = maxPosition + 1;
+    final nextPosition = result.first['next_position'] as int;
 
     final now = DateTime.now();
     final task = Task(
       id: _generateId(),
       title: title.trim(),
       createdAt: now,
-      position: nextPosition, // Phase 3.1: Assign calculated position
+      position: nextPosition, // New-task-top-insert: Assign calculated position (top of list)
       dueDate: dueDate, // Phase 3.7: Optional due date from Quick Add
       isAllDay: isAllDay, // Phase 3.7: Optional isAllDay flag
       updatedAt: now, // Phase 4.0: Sync timestamp
@@ -70,14 +70,21 @@ class TaskService {
     final db = await _dbService.database;
     final List<Task> createdTasks = [];
 
-    // Phase 3.1: Get starting position for bulk insert
+    // New-task-top-insert: Batch must display top-most-first in the given
+    // order, above existing tasks. Count approved suggestions first (n), find
+    // the current minimum position (m, default 1), then start at m - n and
+    // increment per inserted task. The first approved suggestion gets the
+    // smallest position (m - n) so it appears first; the last inserted gets
+    // m - 1, which sits just above the previous minimum.
     // Phase 3.3: Only consider active (not deleted) tasks for position calculation
+    final approvedCount = suggestions.where((s) => s.approved).length;
     final result = await db.rawQuery('''
-      SELECT COALESCE(MAX(position), -1) as max_position
+      SELECT COALESCE(MIN(position), 1) AS min_position
       FROM ${AppConstants.tasksTable}
       WHERE parent_id IS NULL AND deleted_at IS NULL
     ''');
-    int nextPosition = (result.first['max_position'] as int) + 1;
+    final minPosition = result.first['min_position'] as int;
+    int nextPosition = minPosition - approvedCount;
 
     // Use a transaction for atomicity and performance
     // All tasks are created in one database operation instead of N operations
@@ -91,7 +98,7 @@ class TaskService {
           id: suggestion.id, // Reuse suggestion ID (already UUID from ClaudeService)
           title: suggestion.title,
           createdAt: now,
-          position: nextPosition++, // Phase 3.1: Assign and increment position
+          position: nextPosition++, // New-task-top-insert: Assign and increment position
           updatedAt: now, // Phase 4.0: Sync timestamp
         );
 
@@ -125,9 +132,9 @@ class TaskService {
     final List<Map<String, dynamic>> maps = await db.query(
       AppConstants.tasksTable,
       where: 'deleted_at IS NULL',  // Phase 3.3: Exclude soft-deleted
-      // Bug fix: DESC ordering - newest tasks (highest position) appear first
-      // This matches TaskProvider.createTask() which inserts at index 0
-      orderBy: 'position DESC',
+      // New-task-top-insert: ASC ordering - newest tasks (smallest/most negative
+      // position, via MIN - 1) appear first. Unused by UI; exercised by tests only.
+      orderBy: 'position ASC',
     );
 
     return maps.map((map) => Task.fromMap(map)).toList();
@@ -155,6 +162,11 @@ class TaskService {
 
     // Recursive CTE to get tasks with depth
     // Orders by: root position, then children under parents
+    // New-task-top-insert: position can now be negative (MIN - 1 insertion), so the
+    // sort_key adds a large offset before padding - printf('%05d', -10) sorts as
+    // "-0010", which lexicographically sorts *after* "-0002", corrupting order once
+    // negatives exist. Shifting into a fixed-width non-negative range keeps string
+    // order == numeric order.
     // Reference: docs/phase-03/group1.md:1508-1578
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       WITH RECURSIVE task_tree AS (
@@ -162,7 +174,7 @@ class TaskService {
         SELECT
           *,
           0 as depth,
-          printf('%05d', position) as sort_key
+          printf('%011d', position + 1000000000) as sort_key
         FROM ${AppConstants.tasksTable}
         WHERE parent_id IS NULL AND deleted_at IS NULL
 
@@ -172,7 +184,7 @@ class TaskService {
         SELECT
           t.*,
           tt.depth + 1 as depth,
-          tt.sort_key || '.' || printf('%05d', t.position) as sort_key
+          tt.sort_key || '.' || printf('%011d', t.position + 1000000000) as sort_key
         FROM ${AppConstants.tasksTable} t
         INNER JOIN task_tree tt ON t.parent_id = tt.id
         WHERE tt.depth < 3 AND t.deleted_at IS NULL  -- Max 4 levels (0-indexed: 0, 1, 2, 3)
@@ -249,7 +261,8 @@ class TaskService {
   /// - `completed` status (active vs completed)
   /// - Excludes soft-deleted tasks (deleted_at IS NULL)
   ///
-  /// Returns tasks ordered by position.
+  /// Returns tasks ordered by position ascending (newest first - New-task-top-insert:
+  /// smallest position = newest, consistent with the tree view's ordering).
   Future<List<Task>> getFilteredTasks(
     FilterState filter, {
     required bool completed,
@@ -277,7 +290,7 @@ class TaskService {
           INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
           WHERE task_tags.tag_id IN (${List.filled(filter.selectedTagIds.length, '?').join(', ')})
             AND ${baseConditions.join(' AND ')}
-          ORDER BY tasks.position DESC;
+          ORDER BY tasks.position ASC;
         ''';
         args = [...filter.selectedTagIds, ...baseArgs];
       } else {
@@ -293,7 +306,7 @@ class TaskService {
             HAVING COUNT(DISTINCT tag_id) = ?
           )
             AND ${baseConditions.join(' AND ')}
-          ORDER BY tasks.position DESC;
+          ORDER BY tasks.position ASC;
         ''';
         args = [...filter.selectedTagIds, filter.selectedTagIds.length, ...baseArgs];
       }
@@ -304,7 +317,7 @@ class TaskService {
         FROM ${AppConstants.tasksTable} tasks
         INNER JOIN ${AppConstants.taskTagsTable} task_tags ON tasks.id = task_tags.task_id
         WHERE ${baseConditions.join(' AND ')}
-        ORDER BY tasks.position DESC;
+        ORDER BY tasks.position ASC;
       ''';
       args = baseArgs;
     } else if (filter.presenceFilter == TagPresenceFilter.onlyUntagged) {
@@ -317,7 +330,7 @@ class TaskService {
           FROM ${AppConstants.taskTagsTable}
         )
           AND ${baseConditions.join(' AND ')}
-        ORDER BY tasks.position DESC;
+        ORDER BY tasks.position ASC;
       ''';
       args = baseArgs;
     } else {
@@ -326,7 +339,7 @@ class TaskService {
         SELECT tasks.*
         FROM ${AppConstants.tasksTable} tasks
         WHERE ${baseConditions.join(' AND ')}
-        ORDER BY tasks.position DESC;
+        ORDER BY tasks.position ASC;
       ''';
       args = baseArgs;
     }
@@ -740,12 +753,16 @@ class TaskService {
         await _reindexSiblings(newParentId, txn, excludeTaskId: taskId);
 
         // Step 3: Shift siblings at >= newPosition up by 1 to make space
+        // Cosmetic (New-task-top-insert #7): exclude the dragged task for symmetry with
+        // the cross-parent branch below. Currently harmless either way - Step 4 always
+        // overwrites this task's position afterward - but keeps the two branches matching.
         await txn.rawUpdate('''
           UPDATE ${AppConstants.tasksTable}
           SET position = position + 1
           WHERE ${newParentId == null ? 'parent_id IS NULL' : 'parent_id = ?'}
             AND position >= ?
-        ''', newParentId == null ? [newPosition] : [newParentId, newPosition]);
+            AND id != ?
+        ''', newParentId == null ? [newPosition, taskId] : [newParentId, newPosition, taskId]);
 
         // Step 4: Insert task at desired position
         final now = DateTime.now().millisecondsSinceEpoch;

@@ -1094,6 +1094,8 @@ class TaskProvider extends ChangeNotifier {
     int newPosition = 0;
     int newDepth = 0;
     bool needsDbQuery = false; // Track if we need to query actual sibling count
+    bool isAboveOrBelow = false; // New-task-top-insert #6: may need the sibling-rank fix below
+    bool isBelow = false;
 
     // Determine drop location based on hover zone (30/40/30 split)
     // Uses extension from drag_and_drop_task_tile.dart
@@ -1103,6 +1105,7 @@ class TaskProvider extends ChangeNotifier {
         newParentId = details.targetNode.parentId;
         newPosition = details.targetNode.position; // Insert at target's position
         newDepth = details.targetNode.depth;
+        isAboveOrBelow = true;
       },
       whenInside: () {
         // Insert as last child of target
@@ -1118,8 +1121,35 @@ class TaskProvider extends ChangeNotifier {
         newParentId = details.targetNode.parentId;
         newPosition = details.targetNode.position + 1; // Insert after target
         newDepth = details.targetNode.depth;
+        isAboveOrBelow = true;
+        isBelow = true;
       },
     );
+
+    // New-task-top-insert #6 (REQUIRED - drag-reorder staleness fix): for a same-parent
+    // move, updateTaskParent's same-parent branch reindexes the *remaining* siblings to
+    // 0..N-1 before it uses newPosition (see task_service.dart _reindexSiblings call ahead
+    // of the shift). That makes the raw details.targetNode.position read above stale the
+    // moment sibling positions aren't already compact - which is now the steady state for
+    // root-level tasks, since New-task-top-insert keeps assigning them positions below the
+    // current minimum instead of compacting on create. Fix: use the target's *rank* among
+    // its current siblings (ascending position, excluding the dragged task) instead of its
+    // raw position - that rank is exactly the position _reindexSiblings will assign it,
+    // so it survives the reindex, while preserving the existing above/below drop semantics.
+    //
+    // Cross-parent moves don't hit this bug - updateTaskParent's cross-parent branch only
+    // reindexes the SOURCE list, never the destination - so the destination sibling's raw
+    // position is untouched between being read here and being compared in the service, and
+    // switching it to a rank would misplace the drop once destination positions are
+    // non-compact/negative. So only the same-parent case is remapped here.
+    if (isAboveOrBelow && newParentId == details.draggedNode.parentId) {
+      final rank = await _siblingRank(
+        parentId: newParentId,
+        targetId: details.targetNode.id,
+        draggedId: details.draggedNode.id,
+      );
+      newPosition = isBelow ? rank + 1 : rank;
+    }
 
     // Phase 3.6A / Phase 3.9 Refactor: If dropping "inside" and filters active, query actual sibling count
     if (needsDbQuery && _filterProvider.hasActiveFilters) {
@@ -1149,6 +1179,40 @@ class TaskProvider extends ChangeNotifier {
       newParentId: newParentId,
       newPosition: newPosition,
     );
+  }
+
+  /// New-task-top-insert #6: Rank of [targetId] among the active (non-deleted) siblings
+  /// under [parentId], in ascending position order, with [draggedId] excluded from the
+  /// count. This is exactly the position `_reindexSiblings` (task_service.dart) will assign
+  /// [targetId] once the dragged task is pulled out of the list, so it's safe to feed
+  /// straight into `updateTaskParent`'s same-parent branch instead of a raw position.
+  ///
+  /// Bypasses the in-memory `_tasks` list and queries the database directly when a tag
+  /// filter is active, since `_tasks` is then a flat filtered subset (see
+  /// `_onFilterChanged`) that may be missing non-matching siblings and would undercount.
+  Future<int> _siblingRank({
+    required String? parentId,
+    required String targetId,
+    required String draggedId,
+  }) async {
+    if (_filterProvider.hasActiveFilters) {
+      final db = await DatabaseService.instance.database;
+      final rows = await db.query(
+        AppConstants.tasksTable,
+        columns: ['id'],
+        where: parentId == null
+            ? 'parent_id IS NULL AND deleted_at IS NULL AND id != ?'
+            : 'parent_id = ? AND deleted_at IS NULL AND id != ?',
+        whereArgs: parentId == null ? [draggedId] : [parentId, draggedId],
+        orderBy: 'position ASC',
+      );
+      return rows.indexWhere((row) => row['id'] == targetId);
+    }
+
+    // No filter - use in-memory list, which holds the full hierarchy in that case
+    final siblings = _tasks.where((t) => t.parentId == parentId && t.id != draggedId).toList()
+      ..sort((a, b) => a.position.compareTo(b.position));
+    return siblings.indexWhere((t) => t.id == targetId);
   }
 
   /// Soft delete task with CASCADE confirmation (Phase 3.3)

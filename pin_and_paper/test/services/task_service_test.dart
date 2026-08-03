@@ -1,9 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:uuid/uuid.dart';
 import 'package:pin_and_paper/models/filter_state.dart'; // Phase 3.6A
+import 'package:pin_and_paper/models/task_suggestion.dart'; // Phase 2
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/services/tag_service.dart'; // Phase 3.6A
 import 'package:pin_and_paper/services/database_service.dart';
+import 'package:pin_and_paper/utils/constants.dart';
 import '../helpers/test_database_helper.dart';
 
 void main() {
@@ -112,6 +115,95 @@ void main() {
       final count = await taskService.countDescendants(task.id);
 
       expect(count, 0, reason: 'Childless task should have 0 descendants');
+    });
+  });
+
+  group('TaskService - New-task-top-insert (MIN - 1 position assignment)', () {
+    test('createTask(): second task gets a smaller position and sorts first', () async {
+      final task1 = await taskService.createTask('First');
+      final task2 = await taskService.createTask('Second');
+
+      expect(
+        task2.position,
+        lessThan(task1.position),
+        reason: 'Newer task should get a smaller position (MIN - 1)',
+      );
+
+      // Verify the tree/provider-facing order (getTaskHierarchy) shows the
+      // newest task first.
+      final hierarchy = await taskService.getTaskHierarchy();
+      expect(hierarchy.first.id, task2.id, reason: 'Newest task should be first');
+      expect(hierarchy.last.id, task1.id, reason: 'Oldest task should be last');
+    });
+
+    test('getTaskHierarchy() orders correctly with mixed negative/positive positions and nesting', () async {
+      // Exercises the printf fix (getTaskHierarchy: %011d with a +1e9 offset,
+      // rather than %05d which mis-sorts negatives). Craft a mix of negative
+      // and positive positions across both a root and a nested child - a
+      // positive root position can show up from a not-yet-upgraded device
+      // still using the old MAX+1 scheme, or simply from manual reordering.
+      final rootNeg = await taskService.createTask('Root Negative'); // position 0
+      final rootPos = await taskService.createTask('Root Positive'); // position -1
+      final child = await taskService.createTask('Child'); // position -2, will be nested
+
+      await testDb.update(
+        AppConstants.tasksTable,
+        {'position': 5},
+        where: 'id = ?',
+        whereArgs: [rootPos.id],
+      );
+      await testDb.update(
+        AppConstants.tasksTable,
+        {'parent_id': rootNeg.id, 'position': -30},
+        where: 'id = ?',
+        whereArgs: [child.id],
+      );
+
+      final tasks = await taskService.getTaskHierarchy();
+
+      // Roots ascending: rootNeg (0) before rootPos (5)
+      final rootIds = tasks.where((t) => t.parentId == null).map((t) => t.id).toList();
+      expect(rootIds, [rootNeg.id, rootPos.id]);
+
+      // Child should be nested directly after its parent (only child) despite
+      // its own deeply negative position.
+      final rootNegIndex = tasks.indexWhere((t) => t.id == rootNeg.id);
+      final childIndex = tasks.indexWhere((t) => t.id == child.id);
+      expect(
+        childIndex,
+        rootNegIndex + 1,
+        reason: 'Child should immediately follow its parent despite negative position',
+      );
+      expect(tasks[childIndex].depth, 1);
+    });
+
+    test('createMultipleTasks(): approved suggestions appear in order at the top', () async {
+      // Seed an existing task so there's a non-trivial minimum to insert above.
+      final existing = await taskService.createTask('Existing');
+
+      final suggestions = [
+        TaskSuggestion(id: const Uuid().v4(), title: 'Suggestion 1', approved: true),
+        TaskSuggestion(id: const Uuid().v4(), title: 'Suggestion 2', approved: false), // not approved
+        TaskSuggestion(id: const Uuid().v4(), title: 'Suggestion 3', approved: true),
+      ];
+
+      final created = await taskService.createMultipleTasks(suggestions);
+
+      expect(created.length, 2, reason: 'Only approved suggestions should be created');
+      expect(created[0].title, 'Suggestion 1');
+      expect(created[1].title, 'Suggestion 3');
+
+      // First approved suggestion gets the smallest position (appears first)...
+      expect(created[0].position, lessThan(created[1].position));
+      // ...and the whole batch sits above the pre-existing task.
+      expect(created[1].position, lessThan(existing.position));
+
+      final hierarchy = await taskService.getTaskHierarchy();
+      expect(
+        hierarchy.map((t) => t.id).toList(),
+        [created[0].id, created[1].id, existing.id],
+        reason: 'Batch should display top-most-first, above existing tasks',
+      );
     });
   });
 
@@ -563,11 +655,40 @@ void main() {
 
       final tasks = await taskService.getFilteredTasks(filter, completed: false);
 
-      // Should be ordered by position DESC (newest first)
+      // New-task-top-insert: ordered by position ASC (newest first - newest tasks get the
+      // smallest/most-negative position via MIN - 1, so ASC still yields newest-first)
       expect(tasks.length, 3);
-      expect(tasks[0].id, task3.id); // Newest (highest position)
+      expect(tasks[0].id, task3.id); // Newest (smallest/most-negative position)
       expect(tasks[1].id, task2.id);
-      expect(tasks[2].id, task1.id); // Oldest (lowest position)
+      expect(tasks[2].id, task1.id); // Oldest (largest position)
+    });
+
+    test('returns smallest-position-first regardless of creation order', () async {
+      // New-task-top-insert: directly craft an arbitrary, non-monotonic-with-
+      // creation-order position spread (including negatives) so the ordering
+      // is provably driven by `position` itself, not creation order.
+      final tag = await tagService.createTag('work');
+
+      final taskA = await taskService.createTask('Task A');
+      final taskB = await taskService.createTask('Task B');
+      final taskC = await taskService.createTask('Task C');
+
+      await tagService.addTagToTask(taskA.id, tag.id);
+      await tagService.addTagToTask(taskB.id, tag.id);
+      await tagService.addTagToTask(taskC.id, tag.id);
+
+      await testDb.update(AppConstants.tasksTable, {'position': 10}, where: 'id = ?', whereArgs: [taskA.id]);
+      await testDb.update(AppConstants.tasksTable, {'position': -5}, where: 'id = ?', whereArgs: [taskB.id]);
+      await testDb.update(AppConstants.tasksTable, {'position': 0}, where: 'id = ?', whereArgs: [taskC.id]);
+
+      final filter = FilterState(selectedTagIds: [tag.id], logic: FilterLogic.or);
+      final tasks = await taskService.getFilteredTasks(filter, completed: false);
+
+      expect(
+        tasks.map((t) => t.id).toList(),
+        [taskB.id, taskC.id, taskA.id],
+        reason: 'Should be ordered smallest-position-first: B(-5), C(0), A(10)',
+      );
     });
   });
 }

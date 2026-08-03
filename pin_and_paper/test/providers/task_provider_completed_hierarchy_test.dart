@@ -339,7 +339,9 @@ void main() {
       // Get hierarchy
       final hierarchy = taskProvider.completedTasksWithHierarchy;
 
-      // Verify structure: RootA, ChildA, RootB, ChildB
+      // Verify structure: New-task-top-insert assigns positions via MIN - 1, so the
+      // more-recently-created root (Root B) has a smaller (more negative) position than
+      // Root A and now sorts first: RootB, ChildB, RootA, ChildA.
       expect(hierarchy.length, 4, reason: 'Should have 2 trees with 2 tasks each');
 
       // Find indices
@@ -352,8 +354,8 @@ void main() {
       expect(childAIndex, rootAIndex + 1, reason: 'Child A should follow Root A');
       expect(childBIndex, rootBIndex + 1, reason: 'Child B should follow Root B');
 
-      // Verify roots come before children of other trees
-      expect(rootAIndex < childBIndex, true, reason: 'Roots should be processed in order');
+      // Verify the newer root (B) sorts before the older root (A) - newest-first semantics
+      expect(rootBIndex < rootAIndex, true, reason: 'Newer root (B) should sort before older root (A)');
     });
   });
 }
