@@ -116,7 +116,11 @@ void main() {
       final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
 
       dataSource.onEntityMoved(task.id, const Offset(777.0, 333.0), 0);
-      await pumpEventQueue(); // let the fire-and-forget persist land
+
+      // The persist is fire-and-forget; poll for it instead of racing a
+      // single pumpEventQueue() drain against real sqflite_common_ffi I/O
+      // (observed flaky under load -- see _waitForCanvasPosition doc).
+      await _waitForCanvasPosition(taskService, task.id, const Offset(777.0, 333.0));
 
       final reloaded = await taskService.getAllTasks();
       final found = reloaded.firstWhere((t) => t.id == task.id);
@@ -148,7 +152,15 @@ void main() {
 
       // Drag the top card out of the tray onto the open desk.
       firstOpen.onEntityMoved(newest.id, const Offset(900.0, 900.0), 0);
-      await pumpEventQueue();
+
+      // onEntityMoved's persist is fire-and-forget (unawaited) -- a single
+      // pumpEventQueue() drains a fixed number of event-loop turns, which
+      // is not a guarantee that the real sqflite_common_ffi write has
+      // actually landed under load (observed flaky: the write occasionally
+      // hadn't landed yet, so the reopened data source below still saw the
+      // task as unplaced). Poll for the persisted position instead of
+      // racing a single fixed-size drain.
+      await _waitForCanvasPosition(taskService, newest.id, const Offset(900.0, 900.0));
 
       // Reopening (fresh snapshot + fresh data source) is this milestone's
       // headless proxy for "close and reopen the Spatial View".
@@ -197,4 +209,26 @@ void main() {
       expect(dataSource.isFlipped(b.id), isFalse);
     });
   });
+}
+
+/// Polls [taskService] for [taskId]'s stored canvas position to reach
+/// [expected], instead of racing a single fixed-size pumpEventQueue() drain
+/// against onEntityMoved's fire-and-forget persist. sqflite_common_ffi
+/// writes are real async I/O, not fake-clock timers, so a bounded number of
+/// event-loop turns isn't a reliable "wait until settled" under load.
+Future<void> _waitForCanvasPosition(TaskService taskService, String taskId, Offset expected) async {
+  const timeout = Duration(seconds: 5);
+  final deadline = DateTime.now().add(timeout);
+  while (true) {
+    final tasks = await taskService.getAllTasks();
+    final task = tasks.firstWhere((t) => t.id == taskId);
+    if (task.canvasX == expected.dx && task.canvasY == expected.dy) return;
+    if (DateTime.now().isAfter(deadline)) {
+      fail(
+        'Timed out waiting for task $taskId to persist canvas position $expected '
+        '(last seen: (${task.canvasX}, ${task.canvasY}))',
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }

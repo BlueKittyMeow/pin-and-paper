@@ -67,7 +67,15 @@ void main() {
     // Deliberately zero tasks in this DB -- if the guard were (wrongly)
     // keyed on `tasks.isEmpty` instead of `isLoading`, this would already
     // look "loaded", defeating the point of the test.
-    final loadFuture = taskProvider.loadTasks();
+    //
+    // loadTasks() does a real sqflite_common_ffi round trip (not a fake
+    // clock timer), so it must run inside tester.runAsync() -- otherwise
+    // it never completes under AutomatedTestWidgetsFlutterBinding's
+    // synthetic test zone and the test hangs forever. runAsync() runs
+    // taskProvider.loadTasks() synchronously up to its first real await,
+    // so `isLoading` is already true by the time this line returns, same
+    // as calling loadTasks() directly.
+    final loadFuture = tester.runAsync(() => taskProvider.loadTasks());
     expect(taskProvider.isLoading, isTrue);
 
     await tester.pumpWidget(wrap());
@@ -82,8 +90,11 @@ void main() {
   });
 
   testWidgets('builds the desk immediately when TaskProvider already finished loading before mount', (tester) async {
-    await taskService.createTask('Card one');
-    await taskProvider.loadTasks(); // settles before CanvasScreen ever mounts
+    // Real DB work -- see tester.runAsync() note above.
+    await tester.runAsync(() async {
+      await taskService.createTask('Card one');
+      await taskProvider.loadTasks(); // settles before CanvasScreen ever mounts
+    });
     expect(taskProvider.isLoading, isFalse);
 
     await tester.pumpWidget(wrap());
@@ -94,7 +105,8 @@ void main() {
   });
 
   testWidgets('an empty-but-loaded task list shows the desk, not the placeholder forever', (tester) async {
-    await taskProvider.loadTasks(); // zero tasks; isLoading still resolves false
+    // Real DB work -- see tester.runAsync() note above.
+    await tester.runAsync(() => taskProvider.loadTasks()); // zero tasks; isLoading still resolves false
     expect(taskProvider.isLoading, isFalse);
     expect(taskProvider.tasks, isEmpty);
 
