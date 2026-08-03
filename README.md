@@ -4,6 +4,8 @@
 
 A spatial, beautiful workspace for capturing thoughts and organizing chaos. Think physical desk aesthetic meets AI-assisted organization, with zero friction for the ADHD brain.
 
+> 📋 Specs and cross-module plans live in the dev harness. Active plan (drag-and-drop canvas MVP → POC): [`pin_and_paper_dev_harness/docs/working/DRAG_DROP_CANVAS_MVP_PLAN.md`](https://github.com/BlueKittyMeow/pin_and_paper_dev_harness/blob/main/docs/working/DRAG_DROP_CANVAS_MVP_PLAN.md)
+
 ---
 
 ## The Problem
