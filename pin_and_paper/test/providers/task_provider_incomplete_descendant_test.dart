@@ -69,6 +69,17 @@ void main() {
       );
     });
 
+    tearDown(() async {
+      // Drain in-flight async work (filter ops, loadTasks) before the test
+      // database goes away, so stray DatabaseException(database_closed)
+      // errors can't land in a later test.
+      await taskProvider.waitForPendingOperations();
+      taskProvider.dispose();
+      if (testDb.isOpen) {
+        await testDb.close();
+      }
+    });
+
     group('IncompleteDescendantInfo class', () {
       test('hasIncomplete returns true when totalCount > 0', () {
         const info = IncompleteDescendantInfo(

@@ -57,6 +57,17 @@ void main() {
     await taskProvider.loadTasks();
   });
 
+  tearDown(() async {
+    // Drain in-flight async work (filter ops, loadTasks) before the test
+    // database goes away, so stray DatabaseException(database_closed)
+    // errors can't land in a later test.
+    await taskProvider.waitForPendingOperations();
+    taskProvider.dispose();
+    if (testDb.isOpen) {
+      await testDb.close();
+    }
+  });
+
   group('Phase 3.5 Fix #C3: Completed Task Hierarchy', () {
     test('Simple hierarchy: all completed tasks show correct order and depth', () async {
       // Create hierarchy: Parent (depth=0) → Child1 (depth=1) → Child2 (depth=1)

@@ -87,7 +87,33 @@ class TaskProvider extends ChangeNotifier {
     _sortProvider.addListener(_onSortChanged);
 
     // Phase 3.9 Refactor: Listen to filter provider changes and apply filters
-    _filterProvider.addListener(_onFilterChanged);
+    _filterProvider.addListener(_handleFilterProviderChange);
+  }
+
+  /// Fire-and-forget entry point for filter changes.
+  ///
+  /// Tracks the in-flight future so tests can drain pending async work
+  /// before closing the test database (see [waitForPendingOperations]).
+  void _handleFilterProviderChange() {
+    late final Future<void> operation;
+    operation = _onFilterChanged()
+        .whenComplete(() => _pendingFilterOperations.remove(operation));
+    _pendingFilterOperations.add(operation);
+  }
+
+  /// Testing hook: completes once all in-flight filter applications and
+  /// task loads (including ones they chain, e.g. rollback -> loadTasks)
+  /// have settled. Lets tests await quiescence instead of sleeping, and
+  /// drain pending work before tearDown closes the test database.
+  @visibleForTesting
+  Future<void> waitForPendingOperations() async {
+    while (_pendingFilterOperations.isNotEmpty || _loadTasksFuture != null) {
+      await Future.wait(_pendingFilterOperations.toList());
+      final loadFuture = _loadTasksFuture;
+      if (loadFuture != null) {
+        await loadFuture;
+      }
+    }
   }
 
   /// Phase 3.9 Refactor: Callback when sort provider changes
@@ -181,6 +207,10 @@ class TaskProvider extends ChangeNotifier {
 
   // Phase 3.5: Codex review - reentrant guard for loadTasks()
   Future<void>? _loadTasksFuture;
+
+  // In-flight _onFilterChanged futures (fire-and-forget from the listener);
+  // tracked so waitForPendingOperations can drain them in tests.
+  final Set<Future<void>> _pendingFilterOperations = {};
 
   // Phase 3.6.5: Guard against concurrent toggleTaskCompletion calls (race condition fix)
   bool _isTogglingCompletion = false;
@@ -592,7 +622,7 @@ class TaskProvider extends ChangeNotifier {
   /// so the user's filtered view stays consistent.
   void refreshWithCurrentFilters() {
     if (_filterProvider.hasActiveFilters) {
-      _onFilterChanged();
+      _handleFilterProviderChange();
     } else {
       loadTasks();
     }
@@ -1523,7 +1553,7 @@ class TaskProvider extends ChangeNotifier {
   void dispose() {
     _highlightTimer?.cancel();
     _sortProvider.removeListener(_onSortChanged); // Phase 3.9 Refactor
-    _filterProvider.removeListener(_onFilterChanged); // Phase 3.9 Refactor
+    _filterProvider.removeListener(_handleFilterProviderChange); // Phase 3.9 Refactor
     super.dispose();
   }
 }

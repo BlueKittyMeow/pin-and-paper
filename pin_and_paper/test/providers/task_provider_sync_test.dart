@@ -54,9 +54,20 @@ void main() {
       );
     });
 
+    tearDown(() async {
+      // Drain in-flight async work (filter ops, loadTasks) before the test
+      // database goes away, so stray DatabaseException(database_closed)
+      // errors can't land in a later test.
+      await taskProvider.waitForPendingOperations();
+      taskProvider.dispose();
+      if (testDb.isOpen) {
+        await testDb.close();
+      }
+    });
+
     /// Helper: Wait for async listener callbacks to complete
     Future<void> waitForUpdate() async {
-      await Future.delayed(const Duration(milliseconds: 100));
+      await taskProvider.waitForPendingOperations();
     }
 
     // ═══════════════════════════════════════

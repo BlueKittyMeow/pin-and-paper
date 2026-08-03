@@ -45,9 +45,9 @@ void main() {
   const below = Offset(0, 90); // 90 >= 69.9% of height -> whenBelow
 
   /// Filter changes are applied asynchronously via a ChangeNotifier listener
-  /// (TaskProvider._onFilterChanged) - give it a beat to run.
+  /// (TaskProvider._onFilterChanged) - wait for them to settle.
   Future<void> waitForFilterUpdate() async {
-    await Future.delayed(const Duration(milliseconds: 50));
+    await taskProvider.waitForPendingOperations();
   }
 
   setUp(() async {
@@ -68,6 +68,17 @@ void main() {
       filterProvider: filterProvider,
       hierarchyProvider: TaskHierarchyProvider(),
     );
+  });
+
+  tearDown(() async {
+    // Drain in-flight async work (filter ops, loadTasks) before the test
+    // database goes away, so stray DatabaseException(database_closed)
+    // errors can't land in a later test.
+    await taskProvider.waitForPendingOperations();
+    taskProvider.dispose();
+    if (testDb.isOpen) {
+      await testDb.close();
+    }
   });
 
   group('New-task-top-insert #6: same-parent drag reorder', () {
