@@ -662,7 +662,7 @@ packages:
     source: path
     version: "0.0.1"
   pin_and_paper_sketchpad:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "../../pin_and_paper_sketchpad"
       relative: true

@@ -59,6 +59,9 @@ dependencies:
     path: ../../pin_and_paper_canvas
   pin_and_paper_card_renderer:
     path: ../../pin_and_paper_card_renderer
+  # Card drawings M-D5: direct dep on the drawing engine (editor + previews).
+  pin_and_paper_sketchpad:
+    path: ../../pin_and_paper_sketchpad
 
 dev_dependencies:
   flutter_test:
