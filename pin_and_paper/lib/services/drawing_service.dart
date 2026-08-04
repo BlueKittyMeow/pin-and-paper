@@ -33,6 +33,19 @@ class DrawingService {
     return TaskDrawing.fromMap(rows.first);
   }
 
+  /// Returns every task drawing in the database (all tasks, both faces,
+  /// visible flag included) in ONE query.
+  ///
+  /// This is the Spatial View's load path: TaskSpatialDataSource calls it
+  /// once at construction instead of issuing a per-task getDrawingForTask
+  /// (N queries against a 300+-task desk is not acceptable on open).
+  Future<List<TaskDrawing>> getAllDrawings() async {
+    final db = await _dbService.database;
+
+    final rows = await db.query(AppConstants.taskDrawingsTable);
+    return [for (final row in rows) TaskDrawing.fromMap(row)];
+  }
+
   /// Upserts the drawing for a task face: at most one row per
   /// (task_id, face). An existing row keeps its id, visibility, position,
   /// and created_at; only drawing_json and updated_at change.

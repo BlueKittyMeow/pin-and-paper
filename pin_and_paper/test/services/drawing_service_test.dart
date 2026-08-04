@@ -99,6 +99,41 @@ void main() {
     });
   });
 
+  group('DrawingService - getAllDrawings (M-D5 bulk read)', () {
+    test('returns every drawing across tasks and faces, visible flags included', () async {
+      final a = await taskService.createTask('Card A');
+      final b = await taskService.createTask('Card B');
+      await taskService.createTask('Card C — never drawn on');
+
+      await drawingService.saveTaskDrawing(a.id, '{"v":1,"who":"a-front"}');
+      await drawingService.saveTaskDrawing(a.id, '{"v":1,"who":"a-back"}',
+          face: TaskDrawing.faceBack);
+      await drawingService.saveTaskDrawing(b.id, '{"v":1,"who":"b-front"}');
+      await drawingService.setTaskDrawingVisible(a.id, false);
+
+      final all = await drawingService.getAllDrawings();
+
+      expect(all, hasLength(3),
+          reason: 'One row per saved (task, face); undrawn tasks contribute '
+              'nothing');
+      final byKey = {for (final d in all) '${d.taskId}/${d.face}': d};
+      expect(byKey['${a.id}/${TaskDrawing.faceFront}']!.drawingJson,
+          '{"v":1,"who":"a-front"}');
+      expect(byKey['${a.id}/${TaskDrawing.faceFront}']!.visible, isFalse,
+          reason: 'The bulk read must carry the show/hide flag');
+      expect(byKey['${a.id}/${TaskDrawing.faceBack}']!.drawingJson,
+          '{"v":1,"who":"a-back"}');
+      expect(byKey['${a.id}/${TaskDrawing.faceBack}']!.visible, isTrue);
+      expect(byKey['${b.id}/${TaskDrawing.faceFront}']!.drawingJson,
+          '{"v":1,"who":"b-front"}');
+    });
+
+    test('returns an empty list when nothing has been drawn', () async {
+      await taskService.createTask('Undrawn card');
+      expect(await drawingService.getAllDrawings(), isEmpty);
+    });
+  });
+
   group('DrawingService - upsert semantics', () {
     test('re-saving replaces the drawing rather than duplicating', () async {
       final task = await taskService.createTask('Redrawn card');
