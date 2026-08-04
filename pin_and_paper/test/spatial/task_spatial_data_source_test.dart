@@ -137,48 +137,87 @@ void main() {
     });
   });
 
-  group('TaskSpatialDataSource layout — completed tasks', () {
-    test('a completed unplaced task is omitted from the tray stack entirely', () async {
+  group('TaskSpatialDataSource layout — completed tasks & the done pile', () {
+    test('a completed unplaced task moves to the done pile, not the tray', () async {
       final done = await taskService.createTask('Finished chore');
       await taskService.toggleTaskCompletion(done);
       final active = await taskService.createTask('Still to do');
 
       final entities = _cards(await buildDataSource());
+      final byId = {for (final e in entities) e.id: e};
 
-      expect(entities, hasLength(1));
-      expect(entities.single.id, active.id);
-      // The sole remaining tray card sits at the anchor: the completed task
-      // doesn't occupy a tray slot, it's simply gone.
-      expect(entities.single.position, taskTrayAnchor(_kCanvasSize));
+      expect(entities, hasLength(2));
+      // The active card has the tray to itself: the completed task doesn't
+      // occupy a tray slot.
+      expect(byId[active.id]!.position, taskTrayAnchor(_kCanvasSize));
+      expect(byId[done.id]!.position, completedStackAnchor(_kCanvasSize));
     });
 
-    test('a completed task never renders, even with a stored canvas position', () async {
-      // Owner decision 2026-08-03: finished work leaves the desk entirely.
-      // The stored position stays in the DB (uncompleting restores the card
-      // to its exact spot) — that survival is asserted below via the DB, and
-      // the stale-object toggle doubles as the canvas-clobber regression
-      // guard (toggleTaskCompletion only writes the columns it changes).
+    test('a placed completed card sits in the done pile, not at its desk spot', () async {
+      // Doubles as the stale-object canvas-clobber regression guard:
+      // toggleTaskCompletion gets the pre-position Task object and must not
+      // wipe canvas_x/canvas_y (it only writes the columns it owns).
       final placed = await taskService.createTask('Placed then finished');
       await taskService.updateTaskCanvasPosition(placed.id, 600.0, 450.0);
       await taskService.toggleTaskCompletion(placed); // deliberately stale object
 
       final entities = _cards(await buildDataSource());
-      expect(entities, isEmpty);
+      expect(entities, hasLength(1));
+      expect(entities.single.position, completedStackAnchor(_kCanvasSize));
 
       final reloaded = (await taskService.getAllTasks()).firstWhere((t) => t.id == placed.id);
       expect(reloaded.canvasX, 600.0);
       expect(reloaded.canvasY, 450.0);
 
-      // Uncompleting brings the card back exactly where it was placed.
+      // Uncompleting returns the card to its exact desk spot.
       await taskService.uncompleteTask(placed.id);
       final restored = _cards(await buildDataSource());
       expect(restored, hasLength(1));
       expect(restored.single.position, const Offset(600.0, 450.0));
     });
 
-    test('completed unplaced tasks do not count toward the tray tighten threshold', () async {
-      // 10 active + 10 completed unplaced = 20 total, but only the 10 active
-      // stack in the tray — well under the threshold, so no tightening.
+    test('the pile holds only the most recent $kRecentCompletedCount, newest on top', () async {
+      // 12 completions with deterministic completed_at: 'Done 0' oldest.
+      for (var i = 0; i < 12; i++) {
+        final t = await taskService.createTask('Done $i');
+        await taskService.toggleTaskCompletion(t);
+        await testDb.update('tasks', {'completed_at': 1000 + i}, where: 'id = ?', whereArgs: [t.id]);
+      }
+      final entities = _cards(await buildDataSource());
+
+      expect(entities, hasLength(kRecentCompletedCount));
+      final titles = entities.map((e) => e.task.title).toSet();
+      expect(titles, isNot(contains('Done 0'))); // the two oldest dropped off
+      expect(titles, isNot(contains('Done 1')));
+      expect(titles, contains('Done 11'));
+
+      // Newest completion: deepest fan offset AND highest zIndex.
+      final newest = entities.singleWhere((e) => e.task.title == 'Done 11');
+      expect(
+        newest.position,
+        completedStackAnchor(_kCanvasSize) + kTaskTrayBaseStep * (kRecentCompletedCount - 1).toDouble(),
+      );
+      final topZ = entities.map((e) => e.zIndex).reduce((a, b) => a > b ? a : b);
+      expect(newest.zIndex, topZ);
+    });
+
+    test('pile cards snap back when dragged and never persist a position', () async {
+      final done = await taskService.createTask('Done card');
+      await taskService.toggleTaskCompletion(done);
+      final dataSource = await buildDataSource();
+      final before = _cards(dataSource).single.position;
+
+      dataSource.onEntityMoved(done.id, const Offset(500.0, 500.0), 0);
+      await pumpEventQueue();
+
+      expect(_cards(dataSource).single.position, before);
+      final reloaded = (await taskService.getAllTasks()).firstWhere((t) => t.id == done.id);
+      expect(reloaded.canvasX, isNull);
+    });
+
+    test('completed tasks do not count toward the tray tighten threshold', () async {
+      // 10 active + 10 completed = 20 cards total (tray + pile), but only
+      // the 10 active occupy the tray — under the threshold, no tightening.
       for (var i = 0; i < 10; i++) {
         await taskService.createTask('Active $i');
       }
@@ -188,11 +227,79 @@ void main() {
       }
       final entities = _cards(await buildDataSource());
 
-      expect(entities, hasLength(10));
-      // Untightened base step: the furthest card sits at anchor + step*9.
+      expect(entities, hasLength(20)); // 10 tray + 10 pile
+      // Untightened base step: the furthest tray card sits at anchor+step*9.
       final anchor = taskTrayAnchor(_kCanvasSize);
       final positions = entities.map((e) => e.position).toSet();
       expect(positions, contains(anchor + kTaskTrayBaseStep * 9.0));
+    });
+  });
+
+  group('TaskSpatialDataSource — flip view modes', () {
+    test('allBacks/allFronts override per-card flips without destroying them', () async {
+      final a = await taskService.createTask('A');
+      final b = await taskService.createTask('B');
+      final dataSource = await buildDataSource();
+      dataSource.onEntityDoubleTapped(a.id); // A manually flipped
+
+      dataSource.setFlipViewMode(FlipViewMode.allBacks);
+      expect(dataSource.isFlipped(a.id), isTrue);
+      expect(dataSource.isFlipped(b.id), isTrue);
+
+      dataSource.setFlipViewMode(FlipViewMode.allFronts);
+      expect(dataSource.isFlipped(a.id), isFalse);
+      expect(dataSource.isFlipped(b.id), isFalse);
+
+      dataSource.setFlipViewMode(FlipViewMode.manual);
+      expect(dataSource.isFlipped(a.id), isTrue); // manual state survived
+      expect(dataSource.isFlipped(b.id), isFalse);
+    });
+
+    test('commitFlipView adopts the override as the new manual state', () async {
+      final a = await taskService.createTask('A');
+      final b = await taskService.createTask('B');
+      final dataSource = await buildDataSource();
+      dataSource.onEntityDoubleTapped(a.id);
+
+      dataSource.setFlipViewMode(FlipViewMode.allBacks);
+      dataSource.commitFlipView();
+
+      expect(dataSource.flipViewMode, FlipViewMode.manual);
+      expect(dataSource.isFlipped(a.id), isTrue);
+      expect(dataSource.isFlipped(b.id), isTrue);
+    });
+
+    test('double-tap during an override keeps the view and toggles just that card', () async {
+      final a = await taskService.createTask('A');
+      final b = await taskService.createTask('B');
+      final dataSource = await buildDataSource();
+      dataSource.onEntityDoubleTapped(b.id); // pre-override manual flip
+
+      dataSource.setFlipViewMode(FlipViewMode.allFronts);
+      dataSource.onEntityDoubleTapped(a.id); // flip A to its back
+
+      expect(dataSource.flipViewMode, FlipViewMode.manual);
+      expect(dataSource.isFlipped(a.id), isTrue);
+      // B stays as the override showed it (front), not its old manual flip:
+      // the on-screen view must not jump when a double-tap exits override.
+      expect(dataSource.isFlipped(b.id), isFalse);
+    });
+
+    test('mode changes notify once; same-mode sets and manual commits are no-ops', () async {
+      await taskService.createTask('A');
+      final dataSource = await buildDataSource();
+      var notified = 0;
+      dataSource.addListener(() => notified++);
+
+      dataSource.setFlipViewMode(FlipViewMode.manual); // already manual
+      expect(notified, 0);
+      dataSource.setFlipViewMode(FlipViewMode.allBacks);
+      dataSource.setFlipViewMode(FlipViewMode.allBacks);
+      expect(notified, 1);
+      dataSource.commitFlipView();
+      expect(notified, 2);
+      dataSource.commitFlipView(); // already manual: no-op
+      expect(notified, 2);
     });
   });
 

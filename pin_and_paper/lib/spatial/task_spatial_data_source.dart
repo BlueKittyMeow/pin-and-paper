@@ -38,6 +38,23 @@ const int kTaskTrayRenderCap = 20;
 /// Margin used both by the arranged-tray grid and its cell spacing.
 const double kTrayArrangeMargin = 20.0;
 
+/// How many most-recently-finished cards show in the right-side
+/// "recently completed" stack (owner request 2026-08-03). Older completions
+/// simply drop off the pile; the full history lives in the list view.
+const int kRecentCompletedCount = 10;
+
+/// Top-left anchor of the recently-completed stack: upper-right of the
+/// desk, mirroring the landing tray's lower-right inbox — glanceable, out
+/// of the way of live work.
+Offset completedStackAnchor(Size canvasSize) => Offset(canvasSize.width - 300, 80);
+
+/// How card faces are shown: per-card manual flips, or a temporary
+/// everyone-shows-this-face override for quick scanning (owner request
+/// 2026-08-03). Overrides are view-only — the per-card manual states are
+/// kept and restored on return to [manual] — unless explicitly committed
+/// via [TaskSpatialDataSource.commitFlipView].
+enum FlipViewMode { manual, allFronts, allBacks }
+
 /// Top-left anchor of the landing tray: unplaced ("new") task cards stack
 /// here, bottom-right of the desk, like index cards dropped in an inbox.
 ///
@@ -59,11 +76,13 @@ Offset taskTrayStackStep(int unplacedCount) {
 /// snapshot, plus the one [AmethystDeskEntity] desk object.
 ///
 /// Layout (run once at construction):
-/// - Completed tasks never render, placed or not (owner decision 2026-08-03,
-///   superseding the earlier "deliberate placement wins" rule): the desk is
-///   a workspace, and finished work leaves it. A placed completed task keeps
-///   its stored canvas_x/canvas_y in the DB, so uncompleting it restores it
-///   to its exact spot.
+/// - Completed tasks never mix with live work on the desk (owner decision
+///   2026-08-03): the [kRecentCompletedCount] most recently finished fan
+///   out as a read-only "done" pile at [completedStackAnchor]; older
+///   completions drop off. Dragging a pile card snaps back — finished
+///   cards can't be placed. A placed completed task keeps its stored
+///   canvas_x/canvas_y in the DB, so uncompleting it restores it to its
+///   exact desk spot.
 /// - Remaining tasks with a stored [Task.canvasX]/[Task.canvasY] render
 ///   there.
 /// - Tasks with no stored position ("unplaced") stack in the
@@ -116,6 +135,10 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// positions (stacked or arranged). Dragging one moves it to [_placed].
   final List<TaskSpatialEntity> _tray = [];
 
+  /// The most recently finished tasks, oldest-shown first, fanned at
+  /// [completedStackAnchor]. Read-only: never draggable, never persisted.
+  final List<TaskSpatialEntity> _recentCompleted = [];
+
   final AmethystDeskEntity _amethyst;
 
   bool _trayArranged = false;
@@ -133,8 +156,46 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// data (M3/M4 addendum item 1) — toggled by [onEntityDoubleTapped].
   final Set<String> _flippedIds = {};
 
+  FlipViewMode _flipViewMode = FlipViewMode.manual;
+
+  /// Current face-view mode. [FlipViewMode.manual] shows each card per its
+  /// own double-tap state; the override modes force every card to one face
+  /// for quick scanning without touching the per-card states.
+  FlipViewMode get flipViewMode => _flipViewMode;
+
+  /// Switch face-view modes. Same mode is a no-op; [FlipViewMode.manual]
+  /// returns to the per-card states, untouched by the override.
+  void setFlipViewMode(FlipViewMode mode) {
+    if (mode == _flipViewMode) return;
+    _flipViewMode = mode;
+    notifyListeners();
+  }
+
+  /// "Keep these faces": adopt the current override as the new per-card
+  /// manual state — allFronts unflips every card, allBacks flips every
+  /// card — then return to [FlipViewMode.manual]. No-op in manual mode.
+  void commitFlipView() {
+    if (_flipViewMode == FlipViewMode.manual) return;
+    _materializeFlipView();
+    notifyListeners();
+  }
+
+  void _materializeFlipView() {
+    _flippedIds.clear();
+    if (_flipViewMode == FlipViewMode.allBacks) {
+      for (final e in [..._placed, ..._tray, ..._recentCompleted]) {
+        _flippedIds.add(e.id);
+      }
+    }
+    _flipViewMode = FlipViewMode.manual;
+  }
+
   /// Whether [id]'s card is currently showing its back face.
-  bool isFlipped(String id) => _flippedIds.contains(id);
+  bool isFlipped(String id) => switch (_flipViewMode) {
+    FlipViewMode.manual => _flippedIds.contains(id),
+    FlipViewMode.allFronts => false,
+    FlipViewMode.allBacks => true,
+  };
 
   // -- Amethyst persistence (SharedPreferences — decor, not task data) ----
   static const _kAmethystXKey = 'spatial_amethyst_x';
@@ -143,8 +204,12 @@ class TaskSpatialDataSource extends SpatialDataSource {
 
   void _layout(List<Task> tasks) {
     final unplaced = <Task>[];
+    final completed = <Task>[];
     for (final task in tasks) {
-      if (task.completed) continue; // finished work leaves the desk
+      if (task.completed) {
+        completed.add(task); // finished work goes to the done pile, not the desk
+        continue;
+      }
       final x = task.canvasX;
       final y = task.canvasY;
       if (x != null && y != null) {
@@ -153,6 +218,26 @@ class TaskSpatialDataSource extends SpatialDataSource {
         unplaced.add(task);
       }
     }
+
+    // Done pile: newest completion on top. Ascending completedAt puts the
+    // newest last in the fan — largest offset AND highest zIndexOverride,
+    // so offset fan and paint order agree, same principle as the tray.
+    completed.sort((a, b) {
+      final at = a.completedAt?.millisecondsSinceEpoch ?? 0;
+      final bt = b.completedAt?.millisecondsSinceEpoch ?? 0;
+      return at.compareTo(bt);
+    });
+    final recent = completed.length <= kRecentCompletedCount
+        ? completed
+        : completed.sublist(completed.length - kRecentCompletedCount);
+    _recentCompleted.addAll([
+      for (var i = 0; i < recent.length; i++)
+        TaskSpatialEntity(
+          task: recent[i],
+          position: completedStackAnchor(canvasSize) + kTaskTrayBaseStep * i.toDouble(),
+          zIndexOverride: i,
+        ),
+    ]);
 
     // Oldest first: the largest position (least negative/most positive) is
     // the oldest task under new-task-top-insert, so sorting descending by
@@ -219,7 +304,7 @@ class TaskSpatialDataSource extends SpatialDataSource {
     final trayVisible = _trayArranged || _tray.length <= kTaskTrayRenderCap
         ? _tray
         : _tray.sublist(_tray.length - kTaskTrayRenderCap);
-    return [..._placed, ...trayVisible, _amethyst];
+    return [..._placed, ...trayVisible, ..._recentCompleted, _amethyst];
   }
 
   @override
@@ -228,6 +313,17 @@ class TaskSpatialDataSource extends SpatialDataSource {
       _amethyst.position = position;
       notifyListeners();
       unawaited(_persistAmethyst());
+      return;
+    }
+    final stackIndex = _recentCompleted.indexWhere((e) => e.id == id);
+    if (stackIndex >= 0) {
+      // The done pile is read-only: finished cards can't be placed. Re-fan
+      // the pile and notify — the dragged card snaps back — and persist
+      // nothing.
+      for (var i = 0; i < _recentCompleted.length; i++) {
+        _recentCompleted[i].position = completedStackAnchor(canvasSize) + kTaskTrayBaseStep * i.toDouble();
+      }
+      notifyListeners();
       return;
     }
     final trayIndex = _tray.indexWhere((e) => e.id == id);
@@ -256,6 +352,10 @@ class TaskSpatialDataSource extends SpatialDataSource {
   @override
   void onEntityDoubleTapped(String id) {
     if (id == kAmethystDeskId) return; // the stone has no back face
+    // Double-tapping during an override adopts what's on screen as the new
+    // manual state first, then toggles the tapped card — so the rest of
+    // the view doesn't jump back to pre-override faces mid-gesture.
+    if (_flipViewMode != FlipViewMode.manual) _materializeFlipView();
     if (!_flippedIds.remove(id)) {
       _flippedIds.add(id);
     }

@@ -16,10 +16,17 @@ import '../models/task.dart';
 /// snapshot from whatever got persisted, per the plan's accepted
 /// "canvas is a snapshot" POC limitation.
 class TaskSpatialEntity implements SpatialEntity {
-  TaskSpatialEntity({required this.task, required Offset position}) : _position = position;
+  TaskSpatialEntity({required this.task, required Offset position, int? zIndexOverride})
+    : _position = position,
+      _zIndexOverride = zIndexOverride;
 
   /// The wrapped task.
   final Task task;
+
+  /// When set, wins over the position-derived [zIndex]. Used by the
+  /// recently-completed stack, whose pile order follows completion recency,
+  /// not task-list position.
+  final int? _zIndexOverride;
 
   Offset _position;
 
@@ -48,5 +55,5 @@ class TaskSpatialEntity implements SpatialEntity {
   /// it keeps "newest = highest zIndex" true — using `task.position` as-is
   /// would stack new cards at the bottom of any overlap instead.
   @override
-  int get zIndex => -task.position;
+  int get zIndex => _zIndexOverride ?? -task.position;
 }

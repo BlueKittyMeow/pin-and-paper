@@ -99,14 +99,38 @@ class _CanvasScreenState extends State<CanvasScreen> {
       appBar: AppBar(
         title: const Text('Spatial View'),
         actions: [
-          if (dataSource != null)
+          if (dataSource != null) ...[
+            // Quick-scan face overrides: view-only until "kept". Tapping the
+            // active one returns to the manual per-card faces.
+            // setState on all of these: the toggles repaint these AppBar
+            // icons; the canvas itself already rebuilds via the data
+            // source's own listeners.
+            _FlipModeButton(
+              dataSource: dataSource,
+              mode: FlipViewMode.allFronts,
+              icon: Icons.flip_to_front,
+              tooltip: 'Show all fronts',
+              onChanged: () => setState(() {}),
+            ),
+            _FlipModeButton(
+              dataSource: dataSource,
+              mode: FlipViewMode.allBacks,
+              icon: Icons.flip_to_back,
+              tooltip: 'Show all backs',
+              onChanged: () => setState(() {}),
+            ),
+            if (dataSource.flipViewMode != FlipViewMode.manual)
+              IconButton(
+                tooltip: 'Keep these faces',
+                icon: const Icon(Icons.check, color: Color(0xFFC4941A)),
+                onPressed: () => setState(dataSource.commitFlipView),
+              ),
             IconButton(
               tooltip: dataSource.trayArranged ? 'Restack the inbox' : 'Spread the inbox out',
               icon: Icon(dataSource.trayArranged ? Icons.layers : Icons.grid_view),
-              // setState: the toggle repaints this AppBar icon; the canvas
-              // itself already rebuilds via the data source's own listeners.
               onPressed: () => setState(() => dataSource.setTrayArranged(!dataSource.trayArranged)),
             ),
+          ],
         ],
       ),
       body: dataSource == null
@@ -166,6 +190,38 @@ class _CanvasScreenState extends State<CanvasScreen> {
       data: taskToCardData(taskEntity.task, taskProvider.getTagsForTask(taskEntity.id)),
       showBack: dataSource.isFlipped(taskEntity.id),
       isSelected: isSelected,
+    );
+  }
+}
+
+/// One of the two quick-scan face-override AppBar buttons. Active mode
+/// glows accent gold; tapping the active mode returns to manual per-card
+/// faces.
+class _FlipModeButton extends StatelessWidget {
+  const _FlipModeButton({
+    required this.dataSource,
+    required this.mode,
+    required this.icon,
+    required this.tooltip,
+    required this.onChanged,
+  });
+
+  final TaskSpatialDataSource dataSource;
+  final FlipViewMode mode;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = dataSource.flipViewMode == mode;
+    return IconButton(
+      tooltip: active ? 'Back to your flips' : tooltip,
+      icon: Icon(icon, color: active ? const Color(0xFFC4941A) : null),
+      onPressed: () {
+        dataSource.setFlipViewMode(active ? FlipViewMode.manual : mode);
+        onChanged();
+      },
     );
   }
 }

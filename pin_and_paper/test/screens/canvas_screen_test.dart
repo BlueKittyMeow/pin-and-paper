@@ -106,7 +106,7 @@ void main() {
     expect(find.byType(SpatialCanvas), findsOneWidget);
   });
 
-  testWidgets('completed cards never render on the desk, placed or not', (tester) async {
+  testWidgets('completed cards render in the done pile, not at their desk spots', (tester) async {
     SharedPreferences.setMockInitialValues({});
     // Real DB work -- see tester.runAsync() note above.
     await tester.runAsync(() async {
@@ -121,8 +121,46 @@ void main() {
     await tester.pumpWidget(wrap());
     await tester.pump(); // postFrameCallback -> snapshot
 
-    expect(find.byType(SpatialCanvas), findsOneWidget); // desk itself stays
-    expect(find.byType(FlippableTaskCard), findsNothing);
+    expect(find.byType(SpatialCanvas), findsOneWidget);
+    // Both completed cards render -- but in the pile, not on the desk (the
+    // exact pile geometry is covered in the data source suite).
+    expect(find.byType(FlippableTaskCard), findsNWidgets(2));
+  });
+
+  testWidgets('face toggles: all-backs overrides, keep commits, active toggle returns to manual', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    // Real DB work -- see tester.runAsync() note above.
+    await tester.runAsync(() async {
+      await taskService.createTask('Scannable card');
+      await taskProvider.loadTasks();
+    });
+
+    await tester.pumpWidget(wrap());
+    await tester.pump();
+
+    FlippableTaskCard card() => tester.widget<FlippableTaskCard>(find.byType(FlippableTaskCard));
+    expect(card().showBack, isFalse);
+    expect(find.byTooltip('Keep these faces'), findsNothing);
+
+    await tester.tap(find.byTooltip('Show all backs'));
+    await tester.pump();
+    expect(card().showBack, isTrue);
+    expect(find.byTooltip('Keep these faces'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Keep these faces'));
+    await tester.pump();
+    expect(find.byTooltip('Keep these faces'), findsNothing); // back to manual
+    expect(card().showBack, isTrue); // ...with the view committed
+
+    // Entering an override and tapping the same (now-active) toggle
+    // returns to manual with the committed flips intact.
+    await tester.tap(find.byTooltip('Show all fronts'));
+    await tester.pump();
+    expect(card().showBack, isFalse);
+    await tester.tap(find.byTooltip('Back to your flips'));
+    await tester.pump();
+    expect(card().showBack, isTrue);
+    expect(find.byTooltip('Keep these faces'), findsNothing);
   });
 
   testWidgets('an empty-but-loaded task list shows the desk, not the placeholder forever', (tester) async {
