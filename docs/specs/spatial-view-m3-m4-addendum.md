@@ -1,6 +1,6 @@
 # Spatial View (M3/M4) — as-built addendum to the plan of record
 
-**Date:** 2026-08-03 · **Author:** Fable 5 · **Status:** Interrogated (Sonnet, PASS WITH CHANGES — amendments folded in), ready to implement
+**Date:** 2026-08-03 · **Author:** Fable 5 · **Status:** IMPLEMENTED — M3 `bae5bc7`, M4 `f8348e5`+`7b461d7`, all items 1–11 landed and verified; owner manual pass pending
 **Plan of record:** `pin_and_paper_dev_harness/docs/working/DRAG_DROP_CANVAS_MVP_PLAN.md`
 Milestones 3–4 (approved 2026-07-17). This addendum does NOT replace it — it
 records what changed between approval and now, and resolves the small
