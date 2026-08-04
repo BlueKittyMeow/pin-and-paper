@@ -1,13 +1,17 @@
 import 'dart:async' show unawaited;
+import 'dart:convert' show jsonDecode;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/widgets.dart' show Offset, Rect, Size;
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
 import 'package:pin_and_paper_card_renderer/card_renderer.dart' show kCardSize;
+import 'package:pin_and_paper_sketchpad/sketchpad.dart' show LayerStack;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task.dart';
+import '../models/task_drawing.dart';
+import '../services/drawing_service.dart';
 import '../services/task_service.dart';
 import 'amethyst_desk_entity.dart';
 import 'task_spatial_entity.dart';
@@ -107,8 +111,13 @@ Offset taskTrayStackStep(int unplacedCount) {
 /// survive restart, not a crash). The amethyst persists its position/size
 /// via [SharedPreferences] instead — it's decor, not a task.
 class TaskSpatialDataSource extends SpatialDataSource {
-  TaskSpatialDataSource({required List<Task> tasks, required TaskService taskService, required this.canvasSize})
-    : _taskService = taskService,
+  TaskSpatialDataSource({
+    required List<Task> tasks,
+    required TaskService taskService,
+    required this.canvasSize,
+    DrawingService? drawingService,
+  }) : _taskService = taskService,
+      _drawingService = drawingService ?? DrawingService(),
       _amethyst = AmethystDeskEntity(
         // Dead center of the desk by default — the stone must be
         // unmissable on first open (its example-app ancestor tucked itself
@@ -120,10 +129,11 @@ class TaskSpatialDataSource extends SpatialDataSource {
         ),
       ) {
     _layout(tasks);
-    initialized = _restoreAmethyst();
+    initialized = Future.wait([_restoreAmethyst(), _loadDrawings()]);
   }
 
   final TaskService _taskService;
+  final DrawingService _drawingService;
 
   /// Canvas bounds this data source was laid out for.
   final Size canvasSize;
@@ -196,6 +206,129 @@ class TaskSpatialDataSource extends SpatialDataSource {
     FlipViewMode.allFronts => false,
     FlipViewMode.allBacks => true,
   };
+
+  // -- Card drawings (M-D5) ----------------------------------------------
+
+  /// Loaded drawing rows, keyed taskId -> face -> row. Populated once at
+  /// construction by [_loadDrawings] (one bulk query — never per-task);
+  /// kept current by [toggleDrawingVisible] / [refreshDrawingFor].
+  final Map<String, Map<String, TaskDrawing>> _drawings = {};
+
+  /// Parsed [LayerStack]s, lazily built from [_drawings] and keyed
+  /// `taskId/face`. Cached so the canvas can hand `DrawingPreview` the
+  /// SAME stack instance across rebuilds — the preview's picture cache
+  /// keys on stack identity + revision, so a fresh parse per rebuild
+  /// would re-record the picture every frame during pans/drags (the §5
+  /// perf rule: cards never pay per-frame tessellation). A null value
+  /// caches "this JSON failed to parse" so a corrupt row is logged once,
+  /// not per frame.
+  final Map<String, LayerStack?> _drawingStacks = {};
+
+  Future<void> _loadDrawings() async {
+    try {
+      final all = await _drawingService.getAllDrawings();
+      for (final drawing in all) {
+        (_drawings[drawing.taskId] ??= {})[drawing.face] = drawing;
+      }
+      if (all.isNotEmpty) notifyListeners();
+    } catch (e) {
+      // Same contract as the amethyst restore: a failed load means bare
+      // cards, not a crash.
+      debugPrint('TaskSpatialDataSource: drawings load skipped: $e');
+    }
+  }
+
+  /// The stored drawing JSON for [taskId]'s [face], or null when that face
+  /// has no drawing.
+  String? drawingJsonFor(String taskId, {String face = TaskDrawing.faceFront}) =>
+      _drawings[taskId]?[face]?.drawingJson;
+
+  /// The parsed [LayerStack] for [taskId]'s [face], or null when that face
+  /// has no drawing (or its JSON is corrupt). Cached per (task, face) —
+  /// see [_drawingStacks] for why identity stability matters.
+  LayerStack? drawingStackFor(String taskId, {String face = TaskDrawing.faceFront}) {
+    final json = drawingJsonFor(taskId, face: face);
+    if (json == null) return null;
+    final key = '$taskId/$face';
+    if (_drawingStacks.containsKey(key)) return _drawingStacks[key];
+    LayerStack? stack;
+    try {
+      stack = LayerStack.fromJson(jsonDecode(json) as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('TaskSpatialDataSource: unreadable drawing for $key: $e');
+    }
+    _drawingStacks[key] = stack;
+    return stack;
+  }
+
+  /// Whether [taskId]'s [face] drawing is currently shown. False when the
+  /// face has no drawing at all — "visible" describes a drawing, so use
+  /// [drawingJsonFor] to distinguish "hidden" from "none".
+  bool isDrawingVisible(String taskId, {String face = TaskDrawing.faceFront}) =>
+      _drawings[taskId]?[face]?.visible ?? false;
+
+  /// Whether any face of [taskId] has a drawing that is toggled hidden —
+  /// drives the grey pencil tell (owner L10) so hidden ink isn't
+  /// forgotten.
+  bool hasHiddenDrawing(String taskId) {
+    final faces = _drawings[taskId];
+    if (faces == null) return false;
+    return faces.values.any((d) => !d.visible);
+  }
+
+  /// Flips the show/hide toggle for [taskId]'s [face] drawing: in-memory
+  /// update + notify for an immediate repaint, then fire-and-forget
+  /// persistence — the exact [onEntityMoved]/[_persist] pattern. No-op if
+  /// that face has no drawing.
+  void toggleDrawingVisible(String taskId, {String face = TaskDrawing.faceFront}) {
+    final current = _drawings[taskId]?[face];
+    if (current == null) return;
+    final next = !current.visible;
+    _drawings[taskId]![face] = TaskDrawing(
+      id: current.id,
+      taskId: current.taskId,
+      face: current.face,
+      drawingJson: current.drawingJson,
+      visible: next,
+      positionX: current.positionX,
+      positionY: current.positionY,
+      createdAt: current.createdAt,
+      updatedAt: current.updatedAt,
+    );
+    notifyListeners();
+    unawaited(_persistDrawingVisible(taskId, face, next));
+  }
+
+  Future<void> _persistDrawingVisible(String taskId, String face, bool visible) async {
+    try {
+      await _drawingService.setTaskDrawingVisible(taskId, visible, face: face);
+    } catch (e) {
+      debugPrint('TaskSpatialDataSource: failed to persist drawing visibility for $taskId/$face: $e');
+    }
+  }
+
+  /// Re-reads one task's drawing rows (both faces) from the database and
+  /// notifies. The canvas screen calls this after the drawing editor
+  /// saves, so the card's overlay reflects the fresh ink without
+  /// rebuilding the whole data source.
+  Future<void> refreshDrawingFor(String taskId) async {
+    try {
+      final faces = <String, TaskDrawing>{};
+      for (final face in const [TaskDrawing.faceFront, TaskDrawing.faceBack]) {
+        final drawing = await _drawingService.getDrawingForTask(taskId, face: face);
+        if (drawing != null) faces[face] = drawing;
+        _drawingStacks.remove('$taskId/$face');
+      }
+      if (faces.isEmpty) {
+        _drawings.remove(taskId);
+      } else {
+        _drawings[taskId] = faces;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('TaskSpatialDataSource: failed to refresh drawings for $taskId: $e');
+    }
+  }
 
   // -- Amethyst persistence (SharedPreferences — decor, not task data) ----
   static const _kAmethystXKey = 'spatial_amethyst_x';

@@ -1,10 +1,15 @@
-import 'package:flutter/widgets.dart' show Offset, Rect, Size;
+import 'dart:convert' show jsonEncode;
+
+import 'package:flutter/widgets.dart' show Color, Offset, Rect, Size;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pin_and_paper/models/task_drawing.dart';
 import 'package:pin_and_paper/services/database_service.dart';
+import 'package:pin_and_paper/services/drawing_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/spatial/amethyst_desk_entity.dart';
 import 'package:pin_and_paper/spatial/task_spatial_data_source.dart';
 import 'package:pin_and_paper/spatial/task_spatial_entity.dart';
+import 'package:pin_and_paper_sketchpad/sketchpad.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -495,6 +500,187 @@ void main() {
       expect(dataSource.isFlipped(b.id), isFalse);
     });
   });
+
+  group('TaskSpatialDataSource — card drawings (M-D5)', () {
+    late DrawingService drawingService;
+
+    setUp(() {
+      drawingService = DrawingService();
+    });
+
+    test('drawings for every task and both faces load at construction (await initialized)', () async {
+      final drawn = await taskService.createTask('Drawn card');
+      final plain = await taskService.createTask('Plain card');
+      final frontJson = _drawingJson(label: 10);
+      final backJson = _drawingJson(label: 20);
+      await drawingService.saveTaskDrawing(drawn.id, frontJson);
+      await drawingService.saveTaskDrawing(drawn.id, backJson, face: TaskDrawing.faceBack);
+
+      final dataSource = await buildDataSource();
+
+      expect(dataSource.drawingJsonFor(drawn.id), frontJson);
+      expect(dataSource.drawingJsonFor(drawn.id, face: TaskDrawing.faceBack), backJson);
+      expect(dataSource.isDrawingVisible(drawn.id), isTrue);
+      expect(dataSource.isDrawingVisible(drawn.id, face: TaskDrawing.faceBack), isTrue);
+
+      // No drawing: null JSON, and "visible" is false (there is nothing to
+      // show), not an error.
+      expect(dataSource.drawingJsonFor(plain.id), isNull);
+      expect(dataSource.isDrawingVisible(plain.id), isFalse);
+      expect(dataSource.hasHiddenDrawing(plain.id), isFalse);
+    });
+
+    test('drawingStackFor parses format v1 and returns the SAME cached instance across calls', () async {
+      final task = await taskService.createTask('Cached card');
+      await drawingService.saveTaskDrawing(task.id, _drawingJson(label: 30));
+      final dataSource = await buildDataSource();
+
+      final first = dataSource.drawingStackFor(task.id);
+      final second = dataSource.drawingStackFor(task.id);
+
+      expect(first, isNotNull);
+      expect(first!.layers.any((l) => l.strokes.isNotEmpty), isTrue);
+      // Identity, not just equality: DrawingPreview's picture cache keys on
+      // the stack instance, so a fresh parse per canvas rebuild would
+      // re-record every frame.
+      expect(identical(first, second), isTrue);
+
+      // Corrupt JSON parses to null (logged once, no crash).
+      final corrupt = await taskService.createTask('Corrupt card');
+      await drawingService.saveTaskDrawing(corrupt.id, '{"v":99}');
+      final ds2 = await buildDataSource();
+      expect(ds2.drawingStackFor(corrupt.id), isNull);
+    });
+
+    test('toggleDrawingVisible flips in memory, notifies, and persists across a restart', () async {
+      final task = await taskService.createTask('Peekaboo card');
+      await drawingService.saveTaskDrawing(task.id, _drawingJson(label: 40));
+      final dataSource = await buildDataSource();
+
+      var notifyCount = 0;
+      dataSource.addListener(() => notifyCount++);
+
+      dataSource.toggleDrawingVisible(task.id);
+
+      // In-memory state flips synchronously (immediate repaint)...
+      expect(dataSource.isDrawingVisible(task.id), isFalse);
+      expect(dataSource.hasHiddenDrawing(task.id), isTrue);
+      expect(notifyCount, 1);
+
+      // ...and the DB write lands (fire-and-forget — poll, don't race).
+      await _waitForDrawingVisible(drawingService, task.id, TaskDrawing.faceFront, false);
+
+      // Restart proxy: a fresh data source sees the persisted hide.
+      final secondOpen = await buildDataSource();
+      expect(secondOpen.isDrawingVisible(task.id), isFalse);
+      expect(secondOpen.hasHiddenDrawing(task.id), isTrue);
+
+      // Toggle back on.
+      secondOpen.toggleDrawingVisible(task.id);
+      expect(secondOpen.isDrawingVisible(task.id), isTrue);
+      expect(secondOpen.hasHiddenDrawing(task.id), isFalse);
+      await _waitForDrawingVisible(drawingService, task.id, TaskDrawing.faceFront, true);
+    });
+
+    test('toggleDrawingVisible on a face with no drawing is a no-op', () async {
+      final task = await taskService.createTask('Blank card');
+      final dataSource = await buildDataSource();
+
+      var notifyCount = 0;
+      dataSource.addListener(() => notifyCount++);
+
+      dataSource.toggleDrawingVisible(task.id);
+      await pumpEventQueue();
+
+      expect(notifyCount, 0);
+      expect(dataSource.isDrawingVisible(task.id), isFalse);
+    });
+
+    test('hasHiddenDrawing is true when ANY face is hidden', () async {
+      final task = await taskService.createTask('Two-faced card');
+      await drawingService.saveTaskDrawing(task.id, _drawingJson(label: 50));
+      await drawingService.saveTaskDrawing(task.id, _drawingJson(label: 60), face: TaskDrawing.faceBack);
+      final dataSource = await buildDataSource();
+
+      expect(dataSource.hasHiddenDrawing(task.id), isFalse);
+
+      // Hide only the back: front still visible, but the tell shows.
+      dataSource.toggleDrawingVisible(task.id, face: TaskDrawing.faceBack);
+      expect(dataSource.isDrawingVisible(task.id), isTrue);
+      expect(dataSource.isDrawingVisible(task.id, face: TaskDrawing.faceBack), isFalse);
+      expect(dataSource.hasHiddenDrawing(task.id), isTrue);
+
+      dataSource.toggleDrawingVisible(task.id, face: TaskDrawing.faceBack);
+      expect(dataSource.hasHiddenDrawing(task.id), isFalse);
+      // Wait for the fire-and-forget writes to land before teardown closes
+      // the DB (pumpEventQueue alone races real ffi I/O).
+      await _waitForDrawingVisible(drawingService, task.id, TaskDrawing.faceBack, true);
+    });
+
+    test('refreshDrawingFor picks up a drawing saved after construction', () async {
+      final task = await taskService.createTask('Late bloomer');
+      final dataSource = await buildDataSource();
+      expect(dataSource.drawingJsonFor(task.id), isNull);
+
+      // The editor saves behind the data source's back...
+      final json = _drawingJson(label: 70);
+      await drawingService.saveTaskDrawing(task.id, json);
+
+      var notifyCount = 0;
+      dataSource.addListener(() => notifyCount++);
+
+      // ...and refreshDrawingFor re-reads just that task's rows.
+      await dataSource.refreshDrawingFor(task.id);
+
+      expect(dataSource.drawingJsonFor(task.id), json);
+      expect(dataSource.isDrawingVisible(task.id), isTrue);
+      expect(notifyCount, 1);
+
+      // A re-save (new ink) also refreshes the parsed-stack cache.
+      final before = dataSource.drawingStackFor(task.id);
+      final updated = _drawingJson(label: 80);
+      await drawingService.saveTaskDrawing(task.id, updated);
+      await dataSource.refreshDrawingFor(task.id);
+      expect(dataSource.drawingJsonFor(task.id), updated);
+      expect(identical(dataSource.drawingStackFor(task.id), before), isFalse);
+    });
+  });
+}
+
+/// A minimal valid format-v1 drawing (one ink stroke), varied by [label] so
+/// distinct drawings serialize to distinct JSON.
+String _drawingJson({required int label}) {
+  final stack = LayerStack(size: const Size(880, 560));
+  stack.addStrokeToActiveLayer(
+    Stroke(
+      points: [StrokePoint(label.toDouble(), 10, 0.5), StrokePoint(label + 40.0, 60, 0.5)],
+      color: const Color(0xFF2D2D2D),
+      options: StrokeOptions.ink,
+    ),
+  );
+  return jsonEncode(stack.toJson());
+}
+
+/// Polls the DB for a drawing's visible flag — same rationale as
+/// [_waitForCanvasPosition]: toggleDrawingVisible persists fire-and-forget
+/// against real sqflite_common_ffi I/O.
+Future<void> _waitForDrawingVisible(
+  DrawingService drawingService,
+  String taskId,
+  String face,
+  bool expected,
+) async {
+  const timeout = Duration(seconds: 5);
+  final deadline = DateTime.now().add(timeout);
+  while (true) {
+    final drawing = await drawingService.getDrawingForTask(taskId, face: face);
+    if (drawing != null && drawing.visible == expected) return;
+    if (DateTime.now().isAfter(deadline)) {
+      fail('Timed out waiting for $taskId/$face drawing visible == $expected '
+          '(last seen: ${drawing?.visible})');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 /// Polls [taskService] for [taskId]'s stored canvas position to reach
