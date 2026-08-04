@@ -10,7 +10,9 @@ import 'package:pin_and_paper/services/database_service.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
+import 'package:pin_and_paper_card_renderer/card_renderer.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../helpers/test_database_helper.dart';
@@ -102,6 +104,32 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(SpatialCanvas), findsOneWidget);
+  });
+
+  testWidgets('AppBar visibility toggle hides and re-shows placed completed cards', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    // Real DB work -- see tester.runAsync() note above.
+    await tester.runAsync(() async {
+      final done = await taskService.createTask('Done placed');
+      await taskService.updateTaskCanvasPosition(done.id, 300.0, 300.0);
+      await taskService.toggleTaskCompletion(done);
+      await taskProvider.loadTasks();
+    });
+
+    await tester.pumpWidget(wrap());
+    await tester.pump(); // postFrameCallback -> snapshot
+    await tester.pump(); // let _restorePrefs's notifyListeners flow through
+
+    expect(find.byType(FlippableTaskCard), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Hide finished cards'));
+    await tester.pump();
+    expect(find.byType(FlippableTaskCard), findsNothing);
+    expect(find.byType(SpatialCanvas), findsOneWidget); // desk itself stays
+
+    await tester.tap(find.byTooltip('Show finished cards'));
+    await tester.pump();
+    expect(find.byType(FlippableTaskCard), findsOneWidget);
   });
 
   testWidgets('an empty-but-loaded task list shows the desk, not the placeholder forever', (tester) async {

@@ -63,7 +63,8 @@ Offset taskTrayStackStep(int unplacedCount) {
 /// - Completed tasks with no stored position are omitted entirely: the tray
 ///   is an inbox of work waiting to be placed, and a finished task has no
 ///   business queuing in it. (A completed task the user has placed on the
-///   desk still renders at its stored position — deliberate placement wins.)
+///   desk still renders at its stored position — deliberate placement wins —
+///   unless the persisted [hideCompletedPlaced] pref tucks it away.)
 /// - Remaining tasks with no stored position ("unplaced") stack in the
 ///   landing tray (see [taskTrayAnchor]/[taskTrayStackStep]) instead of the
 ///   plan's original deterministic grid — M3/M4 addendum item 11. This
@@ -99,7 +100,7 @@ class TaskSpatialDataSource extends SpatialDataSource {
         ),
       ) {
     _layout(tasks);
-    initialized = _restoreAmethyst();
+    initialized = _restorePrefs();
   }
 
   final TaskService _taskService;
@@ -122,9 +123,27 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// in the landing tray (false). Toggled by [setTrayArranged].
   bool get trayArranged => _trayArranged;
 
-  /// Completes when the amethyst's persisted position/size (if any) has
-  /// been applied. Awaited by tests; the app lets it land whenever it lands
-  /// (a frame or two after first paint, via notifyListeners).
+  bool _hideCompletedPlaced = false;
+
+  /// Whether placed completed cards are hidden from the desk. Unlike the
+  /// tray's unconditional completed-task exclusion, placed cards were put
+  /// there deliberately, so hiding them is the user's call — persisted
+  /// across sessions under [kHideCompletedPlacedKey] (default: shown).
+  bool get hideCompletedPlaced => _hideCompletedPlaced;
+
+  /// Toggle [hideCompletedPlaced]. View-state only: the hidden cards keep
+  /// their stored canvas positions and reappear exactly where they were.
+  void setHideCompletedPlaced(bool hide) {
+    if (hide == _hideCompletedPlaced) return;
+    _hideCompletedPlaced = hide;
+    notifyListeners();
+    unawaited(_persistHideCompletedPlaced());
+  }
+
+  /// Completes when persisted view prefs have been applied: the amethyst's
+  /// position/size and [hideCompletedPlaced]. Awaited by tests; the app
+  /// lets it land whenever it lands (a frame or two after first paint, via
+  /// notifyListeners).
   late final Future<void> initialized;
 
   /// Ids currently showing their `TaskCardBack` face. View-state, not task
@@ -134,10 +153,14 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// Whether [id]'s card is currently showing its back face.
   bool isFlipped(String id) => _flippedIds.contains(id);
 
-  // -- Amethyst persistence (SharedPreferences — decor, not task data) ----
+  // -- View prefs (SharedPreferences — view-state, not task data) ---------
   static const _kAmethystXKey = 'spatial_amethyst_x';
   static const _kAmethystYKey = 'spatial_amethyst_y';
   static const _kAmethystWidthKey = 'spatial_amethyst_width';
+
+  /// SharedPreferences key backing [hideCompletedPlaced]. Public so tests
+  /// can seed/inspect it.
+  static const kHideCompletedPlacedKey = 'spatial_hide_completed_placed';
 
   void _layout(List<Task> tasks) {
     final unplaced = <Task>[];
@@ -216,7 +239,8 @@ class TaskSpatialDataSource extends SpatialDataSource {
     final trayVisible = _trayArranged || _tray.length <= kTaskTrayRenderCap
         ? _tray
         : _tray.sublist(_tray.length - kTaskTrayRenderCap);
-    return [..._placed, ...trayVisible, _amethyst];
+    final placedVisible = _hideCompletedPlaced ? _placed.where((e) => !e.task.completed) : _placed;
+    return [...placedVisible, ...trayVisible, _amethyst];
   }
 
   @override
@@ -274,9 +298,10 @@ class TaskSpatialDataSource extends SpatialDataSource {
     unawaited(_persistAmethyst());
   }
 
-  Future<void> _restoreAmethyst() async {
+  Future<void> _restorePrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _hideCompletedPlaced = prefs.getBool(kHideCompletedPlacedKey) ?? false;
       final x = prefs.getDouble(_kAmethystXKey);
       final y = prefs.getDouble(_kAmethystYKey);
       if (x != null && y != null) {
@@ -289,7 +314,16 @@ class TaskSpatialDataSource extends SpatialDataSource {
       notifyListeners();
     } catch (e) {
       // No preferences backend (e.g. bare unit tests): the defaults stand.
-      debugPrint('TaskSpatialDataSource: amethyst restore skipped: $e');
+      debugPrint('TaskSpatialDataSource: view-pref restore skipped: $e');
+    }
+  }
+
+  Future<void> _persistHideCompletedPlaced() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(kHideCompletedPlacedKey, _hideCompletedPlaced);
+    } catch (e) {
+      debugPrint('TaskSpatialDataSource: failed to persist hide-completed pref: $e');
     }
   }
 

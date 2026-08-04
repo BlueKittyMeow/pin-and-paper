@@ -187,6 +187,68 @@ void main() {
     });
   });
 
+  group('TaskSpatialDataSource — hide completed placed pref', () {
+    test('defaults to shown; setHideCompletedPlaced(true) hides only placed completed cards', () async {
+      final activePlaced = await taskService.createTask('Active placed');
+      await taskService.updateTaskCanvasPosition(activePlaced.id, 100.0, 100.0);
+      final donePlaced = await taskService.createTask('Done placed');
+      await taskService.updateTaskCanvasPosition(donePlaced.id, 300.0, 300.0);
+      await taskService.toggleTaskCompletion(donePlaced);
+      final inbox = await taskService.createTask('Inbox card');
+
+      final dataSource = await buildDataSource();
+      expect(dataSource.hideCompletedPlaced, isFalse);
+      expect(_cards(dataSource).map((e) => e.id), containsAll([activePlaced.id, donePlaced.id, inbox.id]));
+
+      var notified = 0;
+      dataSource.addListener(() => notified++);
+      dataSource.setHideCompletedPlaced(true);
+
+      expect(notified, 1);
+      final visibleIds = _cards(dataSource).map((e) => e.id).toList();
+      expect(visibleIds, isNot(contains(donePlaced.id)));
+      // Active placed card and tray card are untouched; the stone stays too.
+      expect(visibleIds, containsAll([activePlaced.id, inbox.id]));
+      expect(_stone(dataSource), isNotNull);
+
+      // Toggling back reveals the card exactly where it was — view-state
+      // only, no position writes.
+      dataSource.setHideCompletedPlaced(false);
+      final revealed = _cards(dataSource).singleWhere((e) => e.id == donePlaced.id);
+      expect(revealed.position, const Offset(300.0, 300.0));
+    });
+
+    test('persists: a fresh data source restores the hidden state from prefs', () async {
+      final done = await taskService.createTask('Done placed');
+      await taskService.updateTaskCanvasPosition(done.id, 300.0, 300.0);
+      await taskService.toggleTaskCompletion(done);
+
+      final first = await buildDataSource();
+      first.setHideCompletedPlaced(true);
+      // The persist is fire-and-forget; drain the event queue so it lands
+      // before rebuilding (in-memory mock prefs — no real I/O to race).
+      await pumpEventQueue();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(TaskSpatialDataSource.kHideCompletedPlacedKey), isTrue);
+
+      final second = await buildDataSource();
+      expect(second.hideCompletedPlaced, isTrue);
+      expect(_cards(second).map((e) => e.id), isNot(contains(done.id)));
+    });
+
+    test('setting the same value twice does not re-notify or re-persist', () async {
+      final dataSource = await buildDataSource();
+      var notified = 0;
+      dataSource.addListener(() => notified++);
+
+      dataSource.setHideCompletedPlaced(false); // already the default
+      expect(notified, 0);
+      dataSource.setHideCompletedPlaced(true);
+      dataSource.setHideCompletedPlaced(true);
+      expect(notified, 1);
+    });
+  });
+
   group('TaskSpatialDataSource — arrange toggle', () {
     test('setTrayArranged(true) spreads the tray into a newest-first grid; false restacks', () async {
       final oldest = await taskService.createTask('Oldest');
