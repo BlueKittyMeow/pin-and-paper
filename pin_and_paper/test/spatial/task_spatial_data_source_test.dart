@@ -109,6 +109,64 @@ void main() {
     });
   });
 
+  group('TaskSpatialDataSource layout — completed tasks', () {
+    test('a completed unplaced task is omitted from the tray stack entirely', () async {
+      final done = await taskService.createTask('Finished chore');
+      await taskService.toggleTaskCompletion(done);
+      final active = await taskService.createTask('Still to do');
+      final tasks = await taskService.getAllTasks();
+
+      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+      final entities = dataSource.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+
+      expect(entities, hasLength(1));
+      expect(entities.single.id, active.id);
+      // The sole remaining tray card sits at the anchor: the completed task
+      // doesn't occupy a tray slot, it's simply gone.
+      expect(entities.single.position, taskTrayAnchor(_kCanvasSize));
+    });
+
+    test('a completed task with a stored canvas position still renders there', () async {
+      final placed = await taskService.createTask('Placed then finished');
+      await taskService.updateTaskCanvasPosition(placed.id, 600.0, 450.0);
+      // Reload before toggling: toggleTaskCompletion writes the passed
+      // task's full map, so a stale object (like `placed`, from before the
+      // position update) would clobber canvas_x/canvas_y back to null.
+      final withPosition = (await taskService.getAllTasks()).firstWhere((t) => t.id == placed.id);
+      await taskService.toggleTaskCompletion(withPosition);
+      final tasks = await taskService.getAllTasks();
+
+      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+      final entities = dataSource.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+
+      expect(entities, hasLength(1));
+      expect(entities.single.id, placed.id);
+      expect(entities.single.position, const Offset(600.0, 450.0));
+    });
+
+    test('completed unplaced tasks do not count toward the tray tighten threshold', () async {
+      // 10 active + 10 completed unplaced = 20 total, but only the 10 active
+      // stack in the tray — well under the threshold, so no tightening.
+      for (var i = 0; i < 10; i++) {
+        await taskService.createTask('Active $i');
+      }
+      for (var i = 0; i < 10; i++) {
+        final t = await taskService.createTask('Done $i');
+        await taskService.toggleTaskCompletion(t);
+      }
+      final tasks = await taskService.getAllTasks();
+
+      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+      final entities = dataSource.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+
+      expect(entities, hasLength(10));
+      // Untightened base step: the furthest card sits at anchor + step*9.
+      final anchor = taskTrayAnchor(_kCanvasSize);
+      final positions = entities.map((e) => e.position).toSet();
+      expect(positions, contains(anchor + kTaskTrayBaseStep * 9.0));
+    });
+  });
+
   group('TaskSpatialDataSource.onEntityMoved', () {
     test('persists the dragged position via TaskService (headless proxy for "survives restart")', () async {
       final task = await taskService.createTask('Draggable card');

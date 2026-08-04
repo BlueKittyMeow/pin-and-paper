@@ -42,7 +42,11 @@ Offset taskTrayStackStep(int unplacedCount) {
 ///
 /// Layout ([_layout], run once at construction):
 /// - Tasks with a stored [Task.canvasX]/[Task.canvasY] render there.
-/// - Tasks with no stored position ("unplaced") stack in the landing tray
+/// - Completed tasks with no stored position are omitted entirely: the tray
+///   is an inbox of work waiting to be placed, and a finished task has no
+///   business queuing in it. (A completed task the user has placed on the
+///   desk still renders at its stored position — deliberate placement wins.)
+/// - Remaining tasks with no stored position ("unplaced") stack in the landing tray
 ///   (see [taskTrayAnchor]/[taskTrayStackStep]) instead of the plan's
 ///   original deterministic grid — M3/M4 addendum item 11. This stacking is
 ///   in-memory only: nothing is written to the database until the user
@@ -83,7 +87,7 @@ class TaskSpatialDataSource extends SpatialDataSource {
       final y = task.canvasY;
       if (x != null && y != null) {
         entities.add(TaskSpatialEntity(task: task, position: Offset(x, y)));
-      } else {
+      } else if (!task.completed) {
         unplaced.add(task);
       }
     }
