@@ -106,30 +106,23 @@ void main() {
     expect(find.byType(SpatialCanvas), findsOneWidget);
   });
 
-  testWidgets('AppBar visibility toggle hides and re-shows placed completed cards', (tester) async {
+  testWidgets('completed cards never render on the desk, placed or not', (tester) async {
     SharedPreferences.setMockInitialValues({});
     // Real DB work -- see tester.runAsync() note above.
     await tester.runAsync(() async {
-      final done = await taskService.createTask('Done placed');
-      await taskService.updateTaskCanvasPosition(done.id, 300.0, 300.0);
-      await taskService.toggleTaskCompletion(done);
+      final placed = await taskService.createTask('Done placed');
+      await taskService.updateTaskCanvasPosition(placed.id, 300.0, 300.0);
+      await taskService.toggleTaskCompletion(placed);
+      final unplaced = await taskService.createTask('Done unplaced');
+      await taskService.toggleTaskCompletion(unplaced);
       await taskProvider.loadTasks();
     });
 
     await tester.pumpWidget(wrap());
     await tester.pump(); // postFrameCallback -> snapshot
-    await tester.pump(); // let _restorePrefs's notifyListeners flow through
 
-    expect(find.byType(FlippableTaskCard), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Hide finished cards'));
-    await tester.pump();
-    expect(find.byType(FlippableTaskCard), findsNothing);
     expect(find.byType(SpatialCanvas), findsOneWidget); // desk itself stays
-
-    await tester.tap(find.byTooltip('Show finished cards'));
-    await tester.pump();
-    expect(find.byType(FlippableTaskCard), findsOneWidget);
+    expect(find.byType(FlippableTaskCard), findsNothing);
   });
 
   testWidgets('an empty-but-loaded task list shows the desk, not the placeholder forever', (tester) async {

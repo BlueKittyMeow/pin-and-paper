@@ -99,20 +99,14 @@ class _CanvasScreenState extends State<CanvasScreen> {
       appBar: AppBar(
         title: const Text('Spatial View'),
         actions: [
-          if (dataSource != null) ...[
-            IconButton(
-              tooltip: dataSource.hideCompletedPlaced ? 'Show finished cards' : 'Hide finished cards',
-              icon: Icon(dataSource.hideCompletedPlaced ? Icons.visibility_off : Icons.visibility),
-              // setState: the toggle repaints this AppBar icon; the canvas
-              // itself already rebuilds via the data source's own listeners.
-              onPressed: () => setState(() => dataSource.setHideCompletedPlaced(!dataSource.hideCompletedPlaced)),
-            ),
+          if (dataSource != null)
             IconButton(
               tooltip: dataSource.trayArranged ? 'Restack the inbox' : 'Spread the inbox out',
               icon: Icon(dataSource.trayArranged ? Icons.layers : Icons.grid_view),
+              // setState: the toggle repaints this AppBar icon; the canvas
+              // itself already rebuilds via the data source's own listeners.
               onPressed: () => setState(() => dataSource.setTrayArranged(!dataSource.trayArranged)),
             ),
-          ],
         ],
       ),
       body: dataSource == null
