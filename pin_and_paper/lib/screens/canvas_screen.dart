@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
 import 'package:pin_and_paper_card_renderer/card_renderer.dart';
+import 'package:pin_and_paper_sketchpad/sketchpad.dart' show DrawingPreview;
 import 'package:provider/provider.dart';
 
 import '../models/task.dart';
+import '../models/task_drawing.dart';
 import '../providers/task_provider.dart';
 import '../services/task_service.dart';
+import '../theme/desk_colors.dart';
+import 'drawing_editor_screen.dart';
 import '../spatial/amethyst_desk_entity.dart';
 import '../spatial/spatial_desk_background.dart';
 import '../spatial/task_card_adapter.dart';
@@ -16,6 +20,10 @@ import '../spatial/task_spatial_entity.dart';
 /// `example/` app (DRAG_DROP_CANVAS_MVP_PLAN.md Milestone 4) so gesture feel
 /// carries over 1:1 from the module's manual verification pass.
 const Size kCanvasScreenSize = Size(2000, 1500);
+
+/// Key on the grey "this card has hidden ink" pencil glyph (owner L10).
+/// Stable for tests.
+const Key kHiddenDrawingGlyphKey = Key('canvas_screen.hidden_drawing_glyph');
 
 /// The "Spatial View": real tasks as draggable index cards on a pannable,
 /// zoomable desk (DRAG_DROP_CANVAS_MVP_PLAN.md Milestone 4).
@@ -122,7 +130,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
             if (dataSource.flipViewMode != FlipViewMode.manual)
               IconButton(
                 tooltip: 'Keep these faces',
-                icon: const Icon(Icons.check, color: Color(0xFFC4941A)),
+                icon: const Icon(Icons.check, color: DeskColors.accentGold),
                 onPressed: () => setState(dataSource.commitFlipView),
               ),
             IconButton(
@@ -138,7 +146,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
           : Container(
               // Beyond the canvas edge is the "void" past the desk — same
               // treatment as the canvas module's own example app.
-              color: const Color(0xFF0F0F17),
+              color: DeskColors.voidBackground,
               child: SpatialCanvas(
                 dataSource: dataSource,
                 entityBuilder: (entity, isSelected) => _buildCard(context, dataSource, entity, isSelected),
@@ -177,20 +185,116 @@ class _CanvasScreenState extends State<CanvasScreen> {
           top: 2,
           right: 2,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _ResizeChip(icon: Icons.add, tooltip: 'Bigger', onTap: () => dataSource.resizeAmethyst(1.15)),
+            _EntityChip(icon: Icons.add, tooltip: 'Bigger', onTap: () => dataSource.resizeAmethyst(1.15)),
             const SizedBox(height: 4),
-            _ResizeChip(icon: Icons.remove, tooltip: 'Smaller', onTap: () => dataSource.resizeAmethyst(1 / 1.15)),
+            _EntityChip(icon: Icons.remove, tooltip: 'Smaller', onTap: () => dataSource.resizeAmethyst(1 / 1.15)),
           ]),
         ),
       ]);
     }
     final taskEntity = entity as TaskSpatialEntity;
     final taskProvider = context.read<TaskProvider>();
-    return FlippableTaskCard(
-      data: taskToCardData(taskEntity.task, taskProvider.getTagsForTask(taskEntity.id)),
-      showBack: dataSource.isFlipped(taskEntity.id),
+    final id = taskEntity.id;
+    final showBack = dataSource.isFlipped(id);
+    final data = taskToCardData(taskEntity.task, taskProvider.getTagsForTask(id));
+
+    // Card drawings (M-D5): a face's ink renders as a DrawingPreview
+    // overlay when that face has a drawing AND it isn't toggled hidden.
+    // The data source hands back a CACHED LayerStack instance per face, so
+    // the preview's recorded picture survives rebuilds (pans/drags) instead
+    // of re-tessellating per frame.
+    Widget? overlayFor(String face) {
+      if (!dataSource.isDrawingVisible(id, face: face)) return null;
+      final stack = dataSource.drawingStackFor(id, face: face);
+      if (stack == null) return null;
+      return DrawingPreview(layerStack: stack, size: kCardSize);
+    }
+
+    final card = FlippableTaskCard(
+      data: data,
+      showBack: showBack,
       isSelected: isSelected,
+      frontOverlay: overlayFor(TaskDrawing.faceFront),
+      backOverlay: overlayFor(TaskDrawing.faceBack),
     );
+
+    final hasHidden = dataSource.hasHiddenDrawing(id);
+    if (!isSelected && !hasHidden) return card;
+
+    // Chips act on the face currently showing: draw on (or show/hide) the
+    // front normally, the back when the card is flipped (owner L1).
+    final face = showBack ? TaskDrawing.faceBack : TaskDrawing.faceFront;
+    final hasDrawing = dataSource.drawingJsonFor(id, face: face) != null;
+    final drawingVisible = dataSource.isDrawingVisible(id, face: face);
+    return Stack(children: [
+      Positioned.fill(child: card),
+      // Owner L10 tell: hidden ink gets a small grey pencil glyph.
+      // Bottom-right corner — the chips live top-right, the due date
+      // bottom-left, so nothing collides.
+      if (hasHidden)
+        const Positioned(
+          right: 5,
+          bottom: 5,
+          child: IgnorePointer(
+            child: Icon(
+              Icons.edit,
+              key: kHiddenDrawingGlyphKey,
+              size: 12,
+              color: DeskColors.hiddenDrawingGlyph,
+            ),
+          ),
+        ),
+      // Selected-card controls, INSIDE the card bounds (same arena rules
+      // as the amethyst's chips above): pencil opens the editor for the
+      // showing face; the eye — only when that face has a drawing —
+      // toggles its visibility.
+      if (isSelected)
+        Positioned(
+          top: 8,
+          right: 4,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _EntityChip(
+              icon: Icons.edit,
+              tooltip: 'Draw on this card',
+              onTap: () => _openDrawingEditor(dataSource, id, face, data),
+            ),
+            if (hasDrawing) ...[
+              const SizedBox(height: 4),
+              _EntityChip(
+                icon: drawingVisible ? Icons.visibility : Icons.visibility_off,
+                tooltip: drawingVisible ? 'Hide drawing' : 'Show drawing',
+                onTap: () => dataSource.toggleDrawingVisible(id, face: face),
+              ),
+            ],
+          ]),
+        ),
+    ]);
+  }
+
+  /// Pushes the full-screen drawing editor for [face] of task [taskId];
+  /// on a saved change, re-reads that task's drawing rows so the card's
+  /// overlay (and chips) reflect the fresh ink.
+  Future<void> _openDrawingEditor(
+    TaskSpatialDataSource dataSource,
+    String taskId,
+    String face,
+    TaskCardData data,
+  ) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => DrawingEditorScreen(
+          taskId: taskId,
+          cardData: data,
+          face: face,
+          existingDrawingJson: dataSource.drawingJsonFor(taskId, face: face),
+        ),
+      ),
+    );
+    if (changed == true) {
+      await dataSource.refreshDrawingFor(taskId); // notifies the canvas
+      if (mounted) setState(() {});
+    }
   }
 }
 
@@ -217,7 +321,7 @@ class _FlipModeButton extends StatelessWidget {
     final active = dataSource.flipViewMode == mode;
     return IconButton(
       tooltip: active ? 'Back to your flips' : tooltip,
-      icon: Icon(icon, color: active ? const Color(0xFFC4941A) : null),
+      icon: Icon(icon, color: active ? DeskColors.accentGold : null),
       onPressed: () {
         dataSource.setFlipViewMode(active ? FlipViewMode.manual : mode);
         onChanged();
@@ -226,12 +330,14 @@ class _FlipModeButton extends StatelessWidget {
   }
 }
 
-/// Small circular resize control shown on the selected amethyst. Amber on
-/// dark, matching the app's accent language; deliberately tiny so it reads
-/// as a handle, not a toolbar. (Ported with the stone from the canvas
-/// example app.)
-class _ResizeChip extends StatelessWidget {
-  const _ResizeChip({required this.icon, required this.tooltip, required this.onTap});
+/// Small circular control shown on a selected entity (amethyst resize,
+/// card draw/eye). Amber on dark, matching the app's accent language;
+/// deliberately tiny so it reads as a handle, not a toolbar. Placed INSIDE
+/// the entity's bounds; its inner tap recognizer wins the arena over the
+/// canvas's per-entity detector. (Ported with the stone from the canvas
+/// example app as _ResizeChip; generalized for the M-D5 card chips.)
+class _EntityChip extends StatelessWidget {
+  const _EntityChip({required this.icon, required this.tooltip, required this.onTap});
 
   final IconData icon;
   final String tooltip;
@@ -247,11 +353,11 @@ class _ResizeChip extends StatelessWidget {
           width: 22,
           height: 22,
           decoration: BoxDecoration(
-            color: const Color(0xCC16161F),
+            color: DeskColors.chipBackground,
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFC4941A), width: 1),
+            border: Border.all(color: DeskColors.accentGold, width: 1),
           ),
-          child: Icon(icon, size: 14, color: const Color(0xFFC4941A)),
+          child: Icon(icon, size: 14, color: DeskColors.accentGold),
         ),
       ),
     );

@@ -1,6 +1,10 @@
+import 'dart:convert' show jsonEncode;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/providers/tag_provider.dart';
+import 'package:pin_and_paper/screens/drawing_editor_screen.dart';
+import 'package:pin_and_paper/services/drawing_service.dart';
 import 'package:pin_and_paper/providers/task_filter_provider.dart';
 import 'package:pin_and_paper/providers/task_hierarchy_provider.dart';
 import 'package:pin_and_paper/providers/task_provider.dart';
@@ -11,6 +15,7 @@ import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
 import 'package:pin_and_paper_card_renderer/card_renderer.dart';
+import 'package:pin_and_paper_sketchpad/sketchpad.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -174,5 +179,139 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(SpatialCanvas), findsOneWidget);
+  });
+
+  group('card drawing chips + overlays (M-D5)', () {
+    /// A minimal valid format-v1 drawing (one visible ink stroke).
+    String drawingJson() {
+      final stack = LayerStack(size: kDrawingEditorCaptureSize);
+      stack.addStrokeToActiveLayer(
+        const Stroke(
+          points: [StrokePoint(100, 100, 0.5), StrokePoint(300, 200, 0.5)],
+          color: Color(0xFF2D2D2D),
+          options: StrokeOptions.ink,
+        ),
+      );
+      return jsonEncode(stack.toJson());
+    }
+
+    /// Pumps the desk, then gives the data source's bulk drawings query
+    /// (real sqflite ffi I/O at construction) real-async time to land and
+    /// flushes its notifyListeners.
+    Future<void> pumpDesk(WidgetTester tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(); // postFrameCallback -> snapshot
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(); // drawings-loaded notifyListeners
+    }
+
+    /// Selects [target] by tapping it and waiting out the tap/double-tap
+    /// disambiguation window in the canvas's gesture arena.
+    Future<void> select(WidgetTester tester, Finder target) async {
+      await tester.tap(target, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('pencil chip appears only while a task card is selected; no eye without a drawing', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() async {
+        final t = await taskService.createTask('Sketchable card');
+        await taskService.updateTaskCanvasPosition(t.id, 150.0, 150.0);
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+
+      expect(find.byTooltip('Draw on this card'), findsNothing); // unselected: no chips
+
+      await select(tester, find.byType(FlippableTaskCard));
+
+      expect(find.byTooltip('Draw on this card'), findsOneWidget);
+      // No drawing on this face yet: the eye chip stays away.
+      expect(find.byTooltip('Hide drawing'), findsNothing);
+      expect(find.byTooltip('Show drawing'), findsNothing);
+      expect(find.byKey(kHiddenDrawingGlyphKey), findsNothing);
+    });
+
+    testWidgets('the selected amethyst gets resize chips, never the pencil', (tester) async {
+      // Park the stone somewhere visible in the test viewport (it defaults
+      // to the canvas center, off-screen at zoom 1).
+      SharedPreferences.setMockInitialValues({
+        'spatial_amethyst_x': 350.0,
+        'spatial_amethyst_y': 120.0,
+      });
+      await tester.runAsync(() => taskProvider.loadTasks()); // zero tasks
+      await pumpDesk(tester);
+      await tester.pump(); // amethyst prefs restore notifyListeners
+
+      await select(tester, find.byType(AmethystChunk));
+
+      expect(find.byTooltip('Bigger'), findsOneWidget);
+      expect(find.byTooltip('Draw on this card'), findsNothing);
+      expect(find.byTooltip('Hide drawing'), findsNothing);
+    });
+
+    testWidgets('visible drawing renders an overlay; hiding swaps it for the grey glyph', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() async {
+        final t = await taskService.createTask('Inked card');
+        await taskService.updateTaskCanvasPosition(t.id, 150.0, 150.0);
+        await DrawingService().saveTaskDrawing(t.id, drawingJson());
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+
+      // Overlay present without any selection; no hidden-ink tell.
+      expect(find.byType(DrawingPreview), findsOneWidget);
+      expect(find.byKey(kHiddenDrawingGlyphKey), findsNothing);
+
+      await select(tester, find.byType(FlippableTaskCard));
+      expect(find.byTooltip('Hide drawing'), findsOneWidget); // eye chip: face HAS a drawing
+
+      // Chip taps sit in the same arena as the card's double-tap
+      // recognizer, so they too resolve only after the disambiguation
+      // window — pump past it, same as select().
+      await tester.tap(find.byTooltip('Hide drawing'));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Hidden: overlay gone, grey pencil tell on, eye now offers "show".
+      expect(find.byType(DrawingPreview), findsNothing);
+      expect(find.byKey(kHiddenDrawingGlyphKey), findsOneWidget);
+      expect(find.byTooltip('Show drawing'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Show drawing'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(DrawingPreview), findsOneWidget);
+      expect(find.byKey(kHiddenDrawingGlyphKey), findsNothing);
+
+      // Let the fire-and-forget visibility writes land before teardown
+      // closes the DB.
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    });
+
+    testWidgets('the pencil chip opens the drawing editor for the showing face', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() async {
+        final t = await taskService.createTask('Editable card');
+        await taskService.updateTaskCanvasPosition(t.id, 150.0, 150.0);
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+
+      await select(tester, find.byType(FlippableTaskCard));
+      // Chip tap resolves after the double-tap disambiguation window (see
+      // above); pumpAndSettle alone would return before the timer fires.
+      await tester.tap(find.byTooltip('Draw on this card'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DrawingEditorScreen), findsOneWidget);
+
+      // Close (no ink -> no write) and land back on the desk.
+      await tester.tap(find.byKey(kDrawingEditorDoneKey));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(find.byType(DrawingEditorScreen), findsNothing);
+      expect(find.byType(SpatialCanvas), findsOneWidget);
+    });
   });
 }
