@@ -2,13 +2,23 @@ import 'package:flutter/widgets.dart' show Offset, Rect, Size;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/services/database_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
+import 'package:pin_and_paper/spatial/amethyst_desk_entity.dart';
 import 'package:pin_and_paper/spatial/task_spatial_data_source.dart';
 import 'package:pin_and_paper/spatial/task_spatial_entity.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../helpers/test_database_helper.dart';
 
 const _kCanvasSize = Size(2000, 1500);
+
+/// The task-card entities only (every data source also hosts the one
+/// [AmethystDeskEntity] desk object, which most layout tests ignore).
+List<TaskSpatialEntity> _cards(TaskSpatialDataSource dataSource) =>
+    dataSource.getVisibleEntities(Rect.zero).whereType<TaskSpatialEntity>().toList();
+
+AmethystDeskEntity _stone(TaskSpatialDataSource dataSource) =>
+    dataSource.getVisibleEntities(Rect.zero).whereType<AmethystDeskEntity>().single;
 
 void main() {
   setUpAll(() {
@@ -19,6 +29,9 @@ void main() {
   late TaskService taskService;
 
   setUp(() async {
+    // Fresh, empty prefs per test so amethyst position/size never leaks
+    // between tests.
+    SharedPreferences.setMockInitialValues({});
     testDb = await TestDatabaseHelper.createTestDatabase();
     DatabaseService.setTestDatabase(testDb);
     taskService = TaskService();
@@ -30,14 +43,19 @@ void main() {
     }
   });
 
+  Future<TaskSpatialDataSource> buildDataSource() async {
+    final tasks = await taskService.getAllTasks();
+    final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+    await dataSource.initialized;
+    return dataSource;
+  }
+
   group('TaskSpatialDataSource layout — placed tasks', () {
     test('a task with stored canvas_x/canvas_y renders exactly there', () async {
       final task = await taskService.createTask('Placed card');
       await taskService.updateTaskCanvasPosition(task.id, 400.0, 250.0);
-      final tasks = await taskService.getAllTasks();
 
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
-      final entities = dataSource.getVisibleEntities(Rect.zero);
+      final entities = _cards(await buildDataSource());
 
       expect(entities, hasLength(1));
       expect(entities.single.position, const Offset(400.0, 250.0));
@@ -52,13 +70,8 @@ void main() {
       final oldest = await taskService.createTask('Oldest');
       final middle = await taskService.createTask('Middle');
       final newest = await taskService.createTask('Newest');
-      final tasks = await taskService.getAllTasks();
 
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
-      final entities = dataSource
-          .getVisibleEntities(Rect.zero)
-          .cast<TaskSpatialEntity>()
-          .toList();
+      final entities = _cards(await buildDataSource());
 
       expect(entities, hasLength(3));
 
@@ -83,12 +96,7 @@ void main() {
       for (var i = 0; i < 20; i++) {
         await taskService.createTask('Card $i');
       }
-      final tasks = await taskService.getAllTasks();
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
-      final entities = dataSource
-          .getVisibleEntities(Rect.zero)
-          .cast<TaskSpatialEntity>()
-          .toList();
+      final entities = _cards(await buildDataSource());
 
       expect(entities, hasLength(20));
       final tightStep = taskTrayStackStep(20);
@@ -107,6 +115,26 @@ void main() {
       expect(taskTrayStackStep(15), kTaskTrayBaseStep);
       expect(taskTrayStackStep(1), kTaskTrayBaseStep);
     });
+
+    test('a stacked tray past kTaskTrayRenderCap emits only the topmost (newest) cards', () async {
+      for (var i = 0; i < kTaskTrayRenderCap + 10; i++) {
+        await taskService.createTask('Card $i');
+      }
+      final dataSource = await buildDataSource();
+      final entities = _cards(dataSource);
+
+      // The cap trims widgets, not data: exactly the cap's worth render,
+      // and they're the newest ones (highest zIndex = top of the stack) --
+      // the buried oldest cards are the invisible/ungrabbable ones.
+      expect(entities, hasLength(kTaskTrayRenderCap));
+      final titles = entities.map((e) => e.task.title).toSet();
+      expect(titles, contains('Card ${kTaskTrayRenderCap + 9}')); // newest
+      expect(titles, isNot(contains('Card 0'))); // buried oldest
+
+      // Spreading the tray surfaces every card, cap not applied.
+      dataSource.setTrayArranged(true);
+      expect(_cards(dataSource), hasLength(kTaskTrayRenderCap + 10));
+    });
   });
 
   group('TaskSpatialDataSource layout — completed tasks', () {
@@ -114,10 +142,8 @@ void main() {
       final done = await taskService.createTask('Finished chore');
       await taskService.toggleTaskCompletion(done);
       final active = await taskService.createTask('Still to do');
-      final tasks = await taskService.getAllTasks();
 
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
-      final entities = dataSource.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+      final entities = _cards(await buildDataSource());
 
       expect(entities, hasLength(1));
       expect(entities.single.id, active.id);
@@ -129,15 +155,12 @@ void main() {
     test('a completed task with a stored canvas position still renders there', () async {
       final placed = await taskService.createTask('Placed then finished');
       await taskService.updateTaskCanvasPosition(placed.id, 600.0, 450.0);
-      // Reload before toggling: toggleTaskCompletion writes the passed
-      // task's full map, so a stale object (like `placed`, from before the
-      // position update) would clobber canvas_x/canvas_y back to null.
-      final withPosition = (await taskService.getAllTasks()).firstWhere((t) => t.id == placed.id);
-      await taskService.toggleTaskCompletion(withPosition);
-      final tasks = await taskService.getAllTasks();
+      // `placed` predates the position update — toggleTaskCompletion only
+      // writes the columns it changes, so the stale object must not clobber
+      // canvas_x/canvas_y (regression guard alongside task_service_canvas_test).
+      await taskService.toggleTaskCompletion(placed);
 
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
-      final entities = dataSource.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+      final entities = _cards(await buildDataSource());
 
       expect(entities, hasLength(1));
       expect(entities.single.id, placed.id);
@@ -154,10 +177,7 @@ void main() {
         final t = await taskService.createTask('Done $i');
         await taskService.toggleTaskCompletion(t);
       }
-      final tasks = await taskService.getAllTasks();
-
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
-      final entities = dataSource.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+      final entities = _cards(await buildDataSource());
 
       expect(entities, hasLength(10));
       // Untightened base step: the furthest card sits at anchor + step*9.
@@ -167,11 +187,112 @@ void main() {
     });
   });
 
+  group('TaskSpatialDataSource — arrange toggle', () {
+    test('setTrayArranged(true) spreads the tray into a newest-first grid; false restacks', () async {
+      final oldest = await taskService.createTask('Oldest');
+      final newest = await taskService.createTask('Newest');
+      final dataSource = await buildDataSource();
+
+      expect(dataSource.trayArranged, isFalse);
+      dataSource.setTrayArranged(true);
+      expect(dataSource.trayArranged, isTrue);
+
+      final byId = {for (final e in _cards(dataSource)) e.id: e};
+      // Newest takes the top-left slot; oldest sits one cell to its right.
+      const margin = kTrayArrangeMargin;
+      expect(byId[newest.id]!.position, const Offset(margin, margin));
+      expect(byId[oldest.id]!.position.dy, margin);
+      expect(byId[oldest.id]!.position.dx, greaterThan(margin));
+
+      dataSource.setTrayArranged(false);
+      final restacked = {for (final e in _cards(dataSource)) e.id: e};
+      final anchor = taskTrayAnchor(_kCanvasSize);
+      expect(restacked[oldest.id]!.position, anchor);
+      expect(restacked[newest.id]!.position, anchor + kTaskTrayBaseStep);
+    });
+
+    test('arranged positions are in-memory only; dragging a grid card is what places it', () async {
+      final task = await taskService.createTask('Inbox card');
+      final dataSource = await buildDataSource();
+      dataSource.setTrayArranged(true);
+
+      // Arranging persisted nothing.
+      var reloaded = (await taskService.getAllTasks()).firstWhere((t) => t.id == task.id);
+      expect(reloaded.canvasX, isNull);
+
+      // Dragging the arranged card places it for real.
+      dataSource.onEntityMoved(task.id, const Offset(500.0, 500.0), 0);
+      await _waitForCanvasPosition(taskService, task.id, const Offset(500.0, 500.0));
+      reloaded = (await taskService.getAllTasks()).firstWhere((t) => t.id == task.id);
+      expect(reloaded.canvasX, 500.0);
+
+      // And restacking no longer touches it -- it left the tray.
+      dataSource.setTrayArranged(false);
+      final entity = _cards(dataSource).singleWhere((e) => e.id == task.id);
+      expect(entity.position, const Offset(500.0, 500.0));
+    });
+  });
+
+  group('TaskSpatialDataSource — amethyst desk object', () {
+    test('every desk hosts the amethyst, centered by default, above all cards', () async {
+      await taskService.createTask('A card');
+      final dataSource = await buildDataSource();
+      final stone = _stone(dataSource);
+
+      expect(stone.position, const Offset((2000 - 150) / 2, (1500 - 120) / 2));
+      expect(stone.size, kAmethystDefaultSize);
+      for (final card in _cards(dataSource)) {
+        expect(stone.zIndex, greaterThan(card.zIndex),
+            reason: 'the stone is a paperweight: never buried under cards');
+      }
+    });
+
+    test('moving the amethyst persists via prefs, not the tasks table, and survives reopen', () async {
+      final dataSource = await buildDataSource();
+      dataSource.onEntityMoved(kAmethystDeskId, const Offset(111.0, 222.0), 0);
+      await pumpEventQueue();
+
+      final reopened = await buildDataSource();
+      expect(_stone(reopened).position, const Offset(111.0, 222.0));
+    });
+
+    test('resizeAmethyst scales from center, clamps width to [90, 280], and survives reopen', () async {
+      final dataSource = await buildDataSource();
+      final stone = _stone(dataSource);
+      final centerBefore = stone.position + Offset(stone.size.width / 2, stone.size.height / 2);
+
+      dataSource.resizeAmethyst(1.15);
+      expect(stone.size.width, closeTo(150 * 1.15, 0.001));
+      expect(stone.size.height / stone.size.width, closeTo(120 / 150, 0.001));
+      final centerAfter = stone.position + Offset(stone.size.width / 2, stone.size.height / 2);
+      expect(centerAfter.dx, closeTo(centerBefore.dx, 0.001));
+      expect(centerAfter.dy, closeTo(centerBefore.dy, 0.001));
+
+      for (var i = 0; i < 20; i++) {
+        dataSource.resizeAmethyst(1.15);
+      }
+      expect(stone.size.width, 280.0, reason: 'growth clamps at 280');
+      for (var i = 0; i < 20; i++) {
+        dataSource.resizeAmethyst(1 / 1.15);
+      }
+      expect(stone.size.width, 90.0, reason: 'shrink clamps at 90');
+      await pumpEventQueue();
+
+      final reopened = await buildDataSource();
+      expect(_stone(reopened).size.width, 90.0);
+    });
+
+    test('double-tapping the amethyst never flips it', () async {
+      final dataSource = await buildDataSource();
+      dataSource.onEntityDoubleTapped(kAmethystDeskId);
+      expect(dataSource.isFlipped(kAmethystDeskId), isFalse);
+    });
+  });
+
   group('TaskSpatialDataSource.onEntityMoved', () {
     test('persists the dragged position via TaskService (headless proxy for "survives restart")', () async {
       final task = await taskService.createTask('Draggable card');
-      final tasks = await taskService.getAllTasks();
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+      final dataSource = await buildDataSource();
 
       dataSource.onEntityMoved(task.id, const Offset(777.0, 333.0), 0);
 
@@ -188,11 +309,10 @@ void main() {
 
     test('updates the entity in place immediately (before the persist settles)', () async {
       final task = await taskService.createTask('Card');
-      final tasks = await taskService.getAllTasks();
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+      final dataSource = await buildDataSource();
 
       dataSource.onEntityMoved(task.id, const Offset(1.0, 2.0), 0);
-      final entity = dataSource.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().single;
+      final entity = _cards(dataSource).single;
       expect(entity.position, const Offset(1.0, 2.0));
 
       await pumpEventQueue();
@@ -201,30 +321,24 @@ void main() {
     test('dragging the top tray card out: reopening (fresh data source) promotes the next card to the top', () async {
       final oldest = await taskService.createTask('Oldest');
       final newest = await taskService.createTask('Newest');
-      final tasksBefore = await taskService.getAllTasks();
 
-      final firstOpen = TaskSpatialDataSource(tasks: tasksBefore, taskService: taskService, canvasSize: _kCanvasSize);
-      final entitiesBefore = firstOpen.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+      final firstOpen = await buildDataSource();
+      final entitiesBefore = _cards(firstOpen);
       final topBefore = entitiesBefore.reduce((a, b) => a.zIndex >= b.zIndex ? a : b);
       expect(topBefore.id, newest.id); // newest is the top of the tray
 
       // Drag the top card out of the tray onto the open desk.
       firstOpen.onEntityMoved(newest.id, const Offset(900.0, 900.0), 0);
 
-      // onEntityMoved's persist is fire-and-forget (unawaited) -- a single
-      // pumpEventQueue() drains a fixed number of event-loop turns, which
-      // is not a guarantee that the real sqflite_common_ffi write has
-      // actually landed under load (observed flaky: the write occasionally
-      // hadn't landed yet, so the reopened data source below still saw the
-      // task as unplaced). Poll for the persisted position instead of
-      // racing a single fixed-size drain.
+      // onEntityMoved's persist is fire-and-forget (unawaited) -- poll for
+      // the persisted position instead of racing a fixed-size drain (see
+      // _waitForCanvasPosition doc).
       await _waitForCanvasPosition(taskService, newest.id, const Offset(900.0, 900.0));
 
       // Reopening (fresh snapshot + fresh data source) is this milestone's
       // headless proxy for "close and reopen the Spatial View".
-      final tasksAfter = await taskService.getAllTasks();
-      final secondOpen = TaskSpatialDataSource(tasks: tasksAfter, taskService: taskService, canvasSize: _kCanvasSize);
-      final entitiesAfter = secondOpen.getVisibleEntities(Rect.zero).cast<TaskSpatialEntity>().toList();
+      final secondOpen = await buildDataSource();
+      final entitiesAfter = _cards(secondOpen);
 
       final placedNewest = entitiesAfter.firstWhere((e) => e.id == newest.id);
       expect(placedNewest.position, const Offset(900.0, 900.0));
@@ -239,8 +353,7 @@ void main() {
   group('TaskSpatialDataSource flip state (M3/M4 addendum item 1)', () {
     test('onEntityDoubleTapped toggles the flipped set and notifies listeners', () async {
       final task = await taskService.createTask('Flippable card');
-      final tasks = await taskService.getAllTasks();
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+      final dataSource = await buildDataSource();
 
       var notifyCount = 0;
       dataSource.addListener(() => notifyCount++);
@@ -259,8 +372,7 @@ void main() {
     test('flip state is per-id -- flipping one card does not affect another', () async {
       final a = await taskService.createTask('Card A');
       final b = await taskService.createTask('Card B');
-      final tasks = await taskService.getAllTasks();
-      final dataSource = TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: _kCanvasSize);
+      final dataSource = await buildDataSource();
 
       dataSource.onEntityDoubleTapped(a.id);
       expect(dataSource.isFlipped(a.id), isTrue);
