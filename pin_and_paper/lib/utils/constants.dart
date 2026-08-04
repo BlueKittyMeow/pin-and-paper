@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 13; // Phase 4.4-MVP: Spatial canvas positions (canvas_x, canvas_y)
+  static const int databaseVersion = 14; // Card drawings M-D4: task_drawings table
 
   // Table names
   static const String tasksTable = 'tasks';
@@ -17,6 +17,7 @@ class AppConstants {
   static const String taskTagsTable = 'task_tags';
   static const String taskRemindersTable = 'task_reminders'; // Phase 3.8
   static const String quizResponsesTable = 'quiz_responses'; // Phase 3.9
+  static const String taskDrawingsTable = 'task_drawings'; // Card drawings M-D4 (DB v14)
 
   // Phase 3.8: Notification constants
   static const String notificationChannelId = 'pin_paper_task_reminders';

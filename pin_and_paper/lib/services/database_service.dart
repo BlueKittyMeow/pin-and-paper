@@ -201,6 +201,23 @@ class DatabaseService {
       )
     ''');
 
+    // Card drawings (DB v14): stroke JSON per task face.
+    // Parity rule: must match _migrateToV14 exactly.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.taskDrawingsTable} (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        face TEXT NOT NULL DEFAULT 'front',
+        drawing_json TEXT NOT NULL,
+        visible INTEGER NOT NULL DEFAULT 1,
+        position_x REAL NOT NULL DEFAULT 0,
+        position_y REAL NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER,
+        FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+      )
+    ''');
+
     // Entities for @mentions (Phase 5 - future-proofing)
     await db.execute('''
       CREATE TABLE ${AppConstants.entitiesTable} (
@@ -306,6 +323,11 @@ class DatabaseService {
 
     await db.execute('''
       CREATE INDEX idx_task_images_hero ON ${AppConstants.taskImagesTable}(task_id) WHERE is_hero = 1
+    ''');
+
+    // Card drawings index (DB v14)
+    await db.execute('''
+      CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)
     ''');
 
     // Entity and tag indexes
@@ -512,6 +534,11 @@ class DatabaseService {
     // Migrate from version 12 to 13: Phase 4.4-MVP - Spatial canvas positions
     if (oldVersion < 13) {
       await _migrateToV13(db);
+    }
+
+    // Migrate from version 13 to 14: Card drawings M-D4 - task_drawings table
+    if (oldVersion < 14) {
+      await _migrateToV14(db);
     }
   }
 
@@ -1288,6 +1315,46 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v13 successfully');
+  }
+
+  /// Card Drawings M-D4 Migration: v13 → v14
+  ///
+  /// Adds:
+  /// - task_drawings table: per-task, per-face stroke JSON
+  ///   (LayerStack serialization format v1) with a per-card visibility
+  ///   toggle and future multi-drawing placement columns (position_x/y)
+  /// - idx_task_drawings_task index
+  ///
+  /// One row per (task_id, face) in v1 — enforced in the service layer,
+  /// not the schema, so the schema is already multi-drawing-ready.
+  /// face is 'front' | 'back' (owner decision: backs get drawings too).
+  ///
+  /// CRITICAL: Must match the task_drawings block in _createDB exactly
+  /// (fresh-install parity rule).
+  Future<void> _migrateToV14(Database db) async {
+    debugPrint('Migrating database from v13 to v14: Card drawings (task_drawings)');
+
+    await db.transaction((txn) async {
+      await txn.execute('''
+        CREATE TABLE ${AppConstants.taskDrawingsTable} (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          face TEXT NOT NULL DEFAULT 'front',
+          drawing_json TEXT NOT NULL,
+          visible INTEGER NOT NULL DEFAULT 1,
+          position_x REAL NOT NULL DEFAULT 0,
+          position_y REAL NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER,
+          FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+        )
+      ''');
+
+      await txn.execute(
+          'CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)');
+    });
+
+    debugPrint('✅ Database migrated to v14 successfully');
   }
 
   Future<void> close() async {

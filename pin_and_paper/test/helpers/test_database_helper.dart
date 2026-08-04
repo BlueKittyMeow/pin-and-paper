@@ -134,6 +134,25 @@ class TestDatabaseHelper {
       )
     ''');
 
+    // Card drawings M-D4 (DB v14): task_drawings table
+    // Parity rule: must match DatabaseService._createDB / _migrateToV14.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.taskDrawingsTable} (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        face TEXT NOT NULL DEFAULT 'front',
+        drawing_json TEXT NOT NULL,
+        visible INTEGER NOT NULL DEFAULT 1,
+        position_x REAL NOT NULL DEFAULT 0,
+        position_y REAL NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER,
+        FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)');
+
     // Phase 4.0: Sync layer — updated_at on tasks and tags
     await db.execute('ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN updated_at INTEGER');
     await db.execute('UPDATE ${AppConstants.tasksTable} SET updated_at = created_at WHERE updated_at IS NULL');
@@ -223,6 +242,7 @@ class TestDatabaseHelper {
   static Future<void> clearAllData(Database db) async {
     // Clear junction table first (foreign key constraints)
     await db.delete(AppConstants.taskTagsTable);
+    await db.delete(AppConstants.taskDrawingsTable);
     await db.delete(AppConstants.tagsTable);
     await db.delete(AppConstants.tasksTable);
     await db.delete(AppConstants.brainDumpDraftsTable);
