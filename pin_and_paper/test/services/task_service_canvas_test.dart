@@ -115,6 +115,23 @@ void main() {
       expect(found.canvasY, 84.0);
     });
 
+    test('survives toggleTaskCompletion called with a stale Task object', () async {
+      // Regression: toggleTaskCompletion used to persist the full task map,
+      // so completing from a Task loaded BEFORE a canvas drag (list view holds
+      // stale objects) wrote the stale null canvas_x/canvas_y back over the
+      // just-saved position.
+      final task = await taskService.createTask('Dragged then completed');
+      await taskService.updateTaskCanvasPosition(task.id, 600.0, 450.0);
+
+      // `task` predates the position update — deliberately stale.
+      await taskService.toggleTaskCompletion(task);
+
+      final rows = await testDb.query('tasks', where: 'id = ?', whereArgs: [task.id]);
+      expect(rows.first['completed'], 1);
+      expect(rows.first['canvas_x'], 600.0);
+      expect(rows.first['canvas_y'], 450.0);
+    });
+
     test('writes a sync_log row with the canvas payload', () async {
       // logChange() is a no-op when sync is disabled (the test DB's default
       // sync_meta state) — enable it so this test can observe the write.

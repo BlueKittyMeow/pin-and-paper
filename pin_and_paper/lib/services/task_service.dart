@@ -440,19 +440,20 @@ class TaskService {
     final db = await _dbService.database;
 
     if (!task.completed) {
-      // Completing: Save current position for potential restore
+      // Completing: Save current position for potential restore.
+      // Update only the columns this operation owns — writing the full task
+      // map would clobber columns changed since the caller's Task was loaded
+      // (e.g. canvas_x/canvas_y persisted by updateTaskCanvasPosition).
       final now = DateTime.now();
-      final updatedTask = task.copyWith(
-        completed: true,
-        completedAt: now,
-        positionBeforeCompletion: task.position,
-        updatedAt: now,
-      );
-
-      final taskMap = updatedTask.toMap();
+      final updateMap = <String, dynamic>{
+        'completed': 1,
+        'completed_at': now.millisecondsSinceEpoch,
+        'position_before_completion': task.position,
+        'updated_at': now.millisecondsSinceEpoch,
+      };
       await db.update(
         AppConstants.tasksTable,
-        taskMap,
+        updateMap,
         where: 'id = ?',
         whereArgs: [task.id],
       );
@@ -461,10 +462,15 @@ class TaskService {
         tableName: 'tasks',
         recordId: task.id,
         operation: 'UPDATE',
-        payload: taskMap,
+        payload: updateMap,
       );
 
-      return updatedTask;
+      return task.copyWith(
+        completed: true,
+        completedAt: now,
+        positionBeforeCompletion: task.position,
+        updatedAt: now,
+      );
     } else {
       // Uncompleting: Use restoreTaskToPosition for proper handling
       return await uncompleteTask(task.id);
