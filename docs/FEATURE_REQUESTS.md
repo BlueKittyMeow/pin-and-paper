@@ -57,6 +57,17 @@
 
 ### UX Polish
 
+#### Sketchpad Refinements (owner phone-test batch, 2026-08-05)
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Batch of drawing-editor refinements from owner device testing:
+  - **BUG:** in ink mode, the purple marker draws thinner than the other marker colors — should match.
+  - **Stroke size control for every implement**: adjustable size plus a "reset to tool default" affordance.
+  - **Pinch-to-zoom inside the drawing widget** (canvas-style zoom while editing).
+  - **Layer chip + eye unification:** layer visibility toggle should sit adjacent to its go-to-layer chip — eyeball next to "sketch"; tapping "sketch" switches to that layer, tapping its eyeball toggles visibility. Add a grouping element (light-opacity ring or similar) binding each layer chip to its own eyeball so ownership is obvious.
+  - **Layer blend-mode option:** choice between draw/ink layers blending additively with the paper AND each other (current behavior) vs blending with the paper but NOT with each other — enables touch-ups that color-match across layers in edge cases the current compositing fights.
+  - **Consider (stretch):** further stroke refinement; color picker.
+- **Source:** Owner request (2026-08-05, first full-suite mobile session)
+
 #### Easter Egg: The Old Guard Stones
 - **Priority:** LOW | **Complexity:** LOW
 - **Description:** When the painted 2.5D crystal chunks (AmethystChunkPainter + hue-shift variants — the original amethyst "shadow saga" stone and its citrine/rose-quartz/fluorite siblings) are retired from the drawer in favor of the Blender-modeled habit gems, keep them recoverable as a hidden easter egg — some secret interaction someday pulls the old guard back onto the desk. The painter code stays in the canvas module regardless.
