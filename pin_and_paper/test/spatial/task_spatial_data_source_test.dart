@@ -7,8 +7,10 @@ import 'package:pin_and_paper/services/database_service.dart';
 import 'package:pin_and_paper/services/drawing_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper/spatial/amethyst_desk_entity.dart';
+import 'package:pin_and_paper/spatial/dachshund_desk_entity.dart';
 import 'package:pin_and_paper/spatial/task_spatial_data_source.dart';
 import 'package:pin_and_paper/spatial/task_spatial_entity.dart';
+import 'package:pin_and_paper_canvas/spatial_canvas.dart' show DachshundStop;
 import 'package:pin_and_paper_sketchpad/sketchpad.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -24,6 +26,9 @@ List<TaskSpatialEntity> _cards(TaskSpatialDataSource dataSource) =>
 
 AmethystDeskEntity _stone(TaskSpatialDataSource dataSource) =>
     dataSource.getVisibleEntities(Rect.zero).whereType<AmethystDeskEntity>().single;
+
+DachshundDeskEntity _dog(TaskSpatialDataSource dataSource) =>
+    dataSource.getVisibleEntities(Rect.zero).whereType<DachshundDeskEntity>().single;
 
 void main() {
   setUpAll(() {
@@ -368,7 +373,7 @@ void main() {
       }
     });
 
-    test('moving the amethyst persists via prefs, not the tasks table, and survives reopen', () async {
+    test('moving the amethyst persists as decor (desk_objects, not the tasks table) and survives reopen', () async {
       final dataSource = await buildDataSource();
       dataSource.onEntityMoved(kAmethystDeskId, const Offset(111.0, 222.0), 0);
       await pumpEventQueue();
@@ -407,6 +412,153 @@ void main() {
       final dataSource = await buildDataSource();
       dataSource.onEntityDoubleTapped(kAmethystDeskId);
       expect(dataSource.isFlipped(kAmethystDeskId), isFalse);
+    });
+  });
+
+  group('TaskSpatialDataSource — desk-objects drawer', () {
+    test('the dachshund starts in the drawer: unplaced, absent from the desk', () async {
+      final dataSource = await buildDataSource();
+      expect(dataSource.isDeskObjectPlaced(kDachshundDeskId), isFalse);
+      expect(
+        dataSource.getVisibleEntities(Rect.zero).whereType<DachshundDeskEntity>(),
+        isEmpty,
+      );
+      // The stone predates the drawer and stays placed by default.
+      expect(dataSource.isDeskObjectPlaced(kAmethystDeskId), isTrue);
+    });
+
+    test('placeDeskObject centers him on the view center and survives reopen', () async {
+      final dataSource = await buildDataSource();
+      dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(500, 400));
+
+      final dog = _dog(dataSource);
+      expect(dataSource.isDeskObjectPlaced(kDachshundDeskId), isTrue);
+      expect(dog.size, kDachshundDefaultSize);
+      expect(dog.position, const Offset(500 - 128 / 2, 400 - 128 / 2));
+      await pumpEventQueue();
+
+      final reopened = await buildDataSource();
+      expect(reopened.isDeskObjectPlaced(kDachshundDeskId), isTrue);
+      expect(_dog(reopened).position, const Offset(500 - 128 / 2, 400 - 128 / 2));
+    });
+
+    test('placement clamps into the canvas bounds', () async {
+      final dataSource = await buildDataSource();
+      dataSource.placeDeskObject(kDachshundDeskId, viewCenter: Offset.zero);
+      expect(_dog(dataSource).position, Offset.zero);
+    });
+
+    test('removeDeskObject puts him away but keeps his spot for re-placing', () async {
+      final dataSource = await buildDataSource();
+      dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(600, 700));
+      dataSource.removeDeskObject(kDachshundDeskId);
+
+      expect(dataSource.isDeskObjectPlaced(kDachshundDeskId), isFalse);
+      expect(
+        dataSource.getVisibleEntities(Rect.zero).whereType<DachshundDeskEntity>(),
+        isEmpty,
+      );
+      await pumpEventQueue();
+
+      // Still in the drawer after a reopen...
+      final reopened = await buildDataSource();
+      expect(reopened.isDeskObjectPlaced(kDachshundDeskId), isFalse);
+
+      // ...and re-placing WITHOUT a view center restores the exact spot.
+      reopened.placeDeskObject(kDachshundDeskId);
+      expect(_dog(reopened).position, const Offset(600 - 64, 700 - 64));
+    });
+
+    test('the amethyst can be put away too, and stays away across reopen', () async {
+      final dataSource = await buildDataSource();
+      dataSource.removeDeskObject(kAmethystDeskId);
+      expect(
+        dataSource.getVisibleEntities(Rect.zero).whereType<AmethystDeskEntity>(),
+        isEmpty,
+      );
+      await pumpEventQueue();
+
+      final reopened = await buildDataSource();
+      expect(reopened.isDeskObjectPlaced(kAmethystDeskId), isFalse);
+    });
+
+    test('double-tap turns the figurine to the next rotation stop and it survives reopen', () async {
+      final dataSource = await buildDataSource();
+      dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(500, 400));
+      expect(_dog(dataSource).stop, DachshundStop.threeQLeft);
+
+      dataSource.onEntityDoubleTapped(kDachshundDeskId);
+      expect(_dog(dataSource).stop, DachshundStop.threeQLeft.next);
+      // Turning is a pose change, never a card flip.
+      expect(dataSource.isFlipped(kDachshundDeskId), isFalse);
+      await pumpEventQueue();
+
+      final reopened = await buildDataSource();
+      expect(_dog(reopened).stop, DachshundStop.threeQLeft.next);
+    });
+
+    test('resizeDeskObject keeps the dachshund square and clamps width to [64, 384]', () async {
+      final dataSource = await buildDataSource();
+      dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(500, 400));
+      final dog = _dog(dataSource);
+      final centerBefore = dog.position + Offset(dog.size.width / 2, dog.size.height / 2);
+
+      dataSource.resizeDeskObject(kDachshundDeskId, 1.15);
+      expect(dog.size.width, closeTo(128 * 1.15, 0.001));
+      expect(dog.size.height, closeTo(dog.size.width, 0.001));
+      final centerAfter = dog.position + Offset(dog.size.width / 2, dog.size.height / 2);
+      expect(centerAfter.dx, closeTo(centerBefore.dx, 0.001));
+      expect(centerAfter.dy, closeTo(centerBefore.dy, 0.001));
+
+      for (var i = 0; i < 20; i++) {
+        dataSource.resizeDeskObject(kDachshundDeskId, 1.15);
+      }
+      expect(dog.size.width, 384.0, reason: 'growth clamps at 384');
+      for (var i = 0; i < 30; i++) {
+        dataSource.resizeDeskObject(kDachshundDeskId, 1 / 1.15);
+      }
+      expect(dog.size.width, 64.0, reason: 'shrink clamps at 64');
+    });
+
+    test('legacy amethyst prefs restore when no desk_objects row exists yet', () async {
+      SharedPreferences.setMockInitialValues({
+        'spatial_amethyst_x': 321.0,
+        'spatial_amethyst_y': 123.0,
+        'spatial_amethyst_width': 200.0,
+      });
+      final dataSource = await buildDataSource();
+      final stone = _stone(dataSource);
+      expect(stone.position, const Offset(321.0, 123.0));
+      expect(stone.size.width, 200.0);
+    });
+
+    test('a desk_objects row wins over stale legacy prefs', () async {
+      // First run writes a row...
+      final first = await buildDataSource();
+      first.onEntityMoved(kAmethystDeskId, const Offset(50.0, 60.0), 0);
+      await pumpEventQueue();
+
+      // ...so even if the old prefs keys linger with different values, the
+      // row speaks for the stone.
+      SharedPreferences.setMockInitialValues({
+        'spatial_amethyst_x': 999.0,
+        'spatial_amethyst_y': 999.0,
+      });
+      final reopened = await buildDataSource();
+      expect(_stone(reopened).position, const Offset(50.0, 60.0));
+    });
+
+    test('the dachshund sits above the stone, both above every card', () async {
+      await taskService.createTask('A card');
+      final dataSource = await buildDataSource();
+      dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(500, 400));
+
+      final dog = _dog(dataSource);
+      final stone = _stone(dataSource);
+      expect(dog.zIndex, greaterThan(stone.zIndex));
+      for (final card in _cards(dataSource)) {
+        expect(stone.zIndex, greaterThan(card.zIndex));
+      }
     });
   });
 

@@ -694,6 +694,100 @@ void main() {
       expect(drawings, isEmpty);
     });
   });
+
+  group('Database Migration v14 → v15', () {
+    late Database db;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    tearDown(() async {
+      if (db.isOpen) {
+        await db.close();
+      }
+    });
+
+    /// A v14-shaped database is a v13 one (only the tables the v15
+    /// migration touches matter for this group — none) — desk_objects is
+    /// purely additive.
+    Future<Database> createV14Database() async {
+      final v14 = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 14,
+          onCreate: (db, version) async {
+            // Minimal: v15 touches nothing pre-existing.
+            await db.execute('CREATE TABLE ${AppConstants.tasksTable} ('
+                'id TEXT PRIMARY KEY, title TEXT NOT NULL, '
+                'created_at INTEGER NOT NULL)');
+          },
+        ),
+      );
+      return v14;
+    }
+
+    test('migrates from v14 to v15: adds desk_objects, starts empty', () async {
+      db = await createV14Database();
+      await _migrateV14ToV15(db);
+
+      final columns =
+          await db.rawQuery('PRAGMA table_info(${AppConstants.deskObjectsTable})');
+      expect(
+        columns.map((col) => col['name'] as String).toSet(),
+        equals({'id', 'placed', 'x', 'y', 'width', 'variant', 'created_at', 'updated_at'}),
+      );
+
+      expect(await db.query(AppConstants.deskObjectsTable), isEmpty);
+    });
+
+    test('desk_objects defaults apply (placed 0, variant 0, nullable geometry)', () async {
+      db = await createV14Database();
+      await _migrateV14ToV15(db);
+
+      await db.insert(AppConstants.deskObjectsTable, {
+        'id': 'desk-object-dachshund',
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      final rows = await db.query(AppConstants.deskObjectsTable);
+      expect(rows.length, equals(1));
+      expect(rows.first['placed'], equals(0));
+      expect(rows.first['variant'], equals(0));
+      expect(rows.first['x'], isNull);
+      expect(rows.first['y'], isNull);
+      expect(rows.first['width'], isNull);
+      expect(rows.first['updated_at'], isNull);
+    });
+
+    test('fresh v15 install schema matches the migrated schema (parity)', () async {
+      db = await createV14Database();
+      await _migrateV14ToV15(db);
+
+      final freshDb = await TestDatabaseHelper.createTestDatabase();
+
+      List<Map<String, Object?>> normalize(List<Map<String, Object?>> info) =>
+          info
+              .map((col) => {
+                    'name': col['name'],
+                    'type': col['type'],
+                    'notnull': col['notnull'],
+                    'dflt_value': col['dflt_value'],
+                    'pk': col['pk'],
+                  })
+              .toList();
+
+      final migratedInfo = normalize(await db
+          .rawQuery('PRAGMA table_info(${AppConstants.deskObjectsTable})'));
+      final freshInfo = normalize(await freshDb
+          .rawQuery('PRAGMA table_info(${AppConstants.deskObjectsTable})'));
+
+      expect(freshInfo, equals(migratedInfo));
+
+      await freshDb.close();
+    });
+  });
 }
 
 /// Manual implementation of v12→v13 migration for testing
@@ -733,6 +827,25 @@ Future<void> _migrateV13ToV14(Database db) async {
     await txn.execute(
         'CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)');
   });
+}
+
+/// Manual implementation of v14→v15 migration for testing
+///
+/// This replicates the logic from DatabaseService._migrateToV15
+/// so we can test it without making the method public.
+Future<void> _migrateV14ToV15(Database db) async {
+  await db.execute('''
+    CREATE TABLE ${AppConstants.deskObjectsTable} (
+      id TEXT PRIMARY KEY,
+      placed INTEGER NOT NULL DEFAULT 0,
+      x REAL,
+      y REAL,
+      width REAL,
+      variant INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER
+    )
+  ''');
 }
 
 /// Manual implementation of v5→v6 migration for testing

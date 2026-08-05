@@ -11,9 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task.dart';
 import '../models/task_drawing.dart';
+import '../services/desk_object_service.dart';
 import '../services/drawing_service.dart';
 import '../services/task_service.dart';
 import 'amethyst_desk_entity.dart';
+import 'dachshund_desk_entity.dart';
+import 'desk_object_entity.dart';
 import 'task_spatial_entity.dart';
 
 /// Tray zone footprint, for the desk background's outline (see
@@ -77,7 +80,8 @@ Offset taskTrayStackStep(int unplacedCount) {
 
 /// Builds and owns the entities behind the Spatial View's [SpatialCanvas]
 /// (DRAG_DROP_CANVAS_MVP_PLAN.md Milestone 4), from a one-time [Task]
-/// snapshot, plus the one [AmethystDeskEntity] desk object.
+/// snapshot, plus whichever desk objects ([AmethystDeskEntity],
+/// [DachshundDeskEntity]) are placed rather than in the drawer.
 ///
 /// Layout (run once at construction):
 /// - Completed tasks never mix with live work on the desk (owner decision
@@ -108,16 +112,18 @@ Offset taskTrayStackStep(int unplacedCount) {
 /// place, notifies listeners for an immediate re-render, and fires
 /// [TaskService.updateTaskCanvasPosition] without awaiting it (errors are
 /// logged, not surfaced — a failed persist just means the position doesn't
-/// survive restart, not a crash). The amethyst persists its position/size
-/// via [SharedPreferences] instead — it's decor, not a task.
+/// survive restart, not a crash). Desk objects persist via the
+/// desk_objects table ([DeskObjectService]) instead — decor, not tasks.
 class TaskSpatialDataSource extends SpatialDataSource {
   TaskSpatialDataSource({
     required List<Task> tasks,
     required TaskService taskService,
     required this.canvasSize,
     DrawingService? drawingService,
+    DeskObjectService? deskObjectService,
   }) : _taskService = taskService,
       _drawingService = drawingService ?? DrawingService(),
+      _deskObjectService = deskObjectService ?? DeskObjectService(),
       _amethyst = AmethystDeskEntity(
         // Dead center of the desk by default — the stone must be
         // unmissable on first open (its example-app ancestor tucked itself
@@ -127,13 +133,23 @@ class TaskSpatialDataSource extends SpatialDataSource {
           (canvasSize.width - kAmethystDefaultSize.width) / 2,
           (canvasSize.height - kAmethystDefaultSize.height) / 2,
         ),
+      ),
+      _dachshund = DachshundDeskEntity(
+        // Default spot only matters the first time he's placed without a
+        // stored position: just right of the stone's default, companions
+        // not overlapping.
+        position: Offset(
+          (canvasSize.width - kDachshundDefaultSize.width) / 2 + 170,
+          (canvasSize.height - kDachshundDefaultSize.height) / 2,
+        ),
       ) {
     _layout(tasks);
-    initialized = Future.wait([_restoreAmethyst(), _loadDrawings()]);
+    initialized = Future.wait([_restoreDeskObjects(), _loadDrawings()]);
   }
 
   final TaskService _taskService;
   final DrawingService _drawingService;
+  final DeskObjectService _deskObjectService;
 
   /// Canvas bounds this data source was laid out for.
   final Size canvasSize;
@@ -150,8 +166,25 @@ class TaskSpatialDataSource extends SpatialDataSource {
   final List<TaskSpatialEntity> _recentCompleted = [];
 
   final AmethystDeskEntity _amethyst;
+  final DachshundDeskEntity _dachshund;
+
+  /// Which desk objects are on the desk (vs. in the drawer). The amethyst
+  /// starts placed — it predates the drawer, and a v14→v15 upgrade must not
+  /// make the stone vanish. The dachshund starts in the drawer.
+  final Set<String> _placedDeskObjectIds = {kAmethystDeskId};
 
   bool _trayArranged = false;
+
+  /// Set by [dispose]; the async restore paths check it so a restore that
+  /// lands after disposal (screen closed immediately, common in tests)
+  /// doesn't notify a dead ChangeNotifier.
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   /// Whether the tray is currently spread out as a grid (true) or stacked
   /// in the landing tray (false). Toggled by [setTrayArranged].
@@ -230,7 +263,7 @@ class TaskSpatialDataSource extends SpatialDataSource {
       for (final drawing in all) {
         (_drawings[drawing.taskId] ??= {})[drawing.face] = drawing;
       }
-      if (all.isNotEmpty) notifyListeners();
+      if (all.isNotEmpty && !_disposed) notifyListeners();
     } catch (e) {
       // Same contract as the amethyst restore: a failed load means bare
       // cards, not a crash.
@@ -330,10 +363,61 @@ class TaskSpatialDataSource extends SpatialDataSource {
     }
   }
 
-  // -- Amethyst persistence (SharedPreferences — decor, not task data) ----
+  // -- Desk objects (desk_objects table, DB v15 — decor, not task data) ---
+
+  /// Legacy amethyst persistence: the three SharedPreferences keys that
+  /// held the stone's spot before the desk_objects table existed. Read as
+  /// a fallback when the stone has no row yet (one-time upgrade path);
+  /// never written anymore.
   static const _kAmethystXKey = 'spatial_amethyst_x';
   static const _kAmethystYKey = 'spatial_amethyst_y';
   static const _kAmethystWidthKey = 'spatial_amethyst_width';
+
+  /// Drawer catalog order: every desk-object kind the app knows, whether
+  /// placed or not.
+  static const List<String> deskObjectIds = [kAmethystDeskId, kDachshundDeskId];
+
+  DeskObjectEntity _deskObjectById(String id) => switch (id) {
+    kAmethystDeskId => _amethyst,
+    kDachshundDeskId => _dachshund,
+    _ => throw ArgumentError('unknown desk object: $id'),
+  };
+
+  /// Whether [id] is currently on the desk (drawer shows it ghosted) as
+  /// opposed to available in the drawer.
+  bool isDeskObjectPlaced(String id) => _placedDeskObjectIds.contains(id);
+
+  /// Takes [id] out of the drawer and sets it on the desk. With a
+  /// [viewCenter] (canvas coords — pass the controller's visibleRect
+  /// center), the object lands centered in the user's current view; without
+  /// one, it returns to wherever it last sat (its restored/default
+  /// position). No-op if already placed.
+  void placeDeskObject(String id, {Offset? viewCenter}) {
+    if (!_placedDeskObjectIds.add(id)) return;
+    final entity = _deskObjectById(id);
+    if (viewCenter != null) {
+      entity.position = _clampToCanvas(
+        viewCenter - Offset(entity.size.width / 2, entity.size.height / 2),
+        entity.size,
+      );
+    }
+    notifyListeners();
+    unawaited(_persistDeskObject(id));
+  }
+
+  /// Puts [id] back in the drawer. Its position/size/pose are kept, so
+  /// re-placing without a view center restores it exactly. No-op if not
+  /// placed.
+  void removeDeskObject(String id) {
+    if (!_placedDeskObjectIds.remove(id)) return;
+    notifyListeners();
+    unawaited(_persistDeskObject(id));
+  }
+
+  Offset _clampToCanvas(Offset topLeft, Size size) => Offset(
+    topLeft.dx.clamp(0.0, math.max(0.0, canvasSize.width - size.width)),
+    topLeft.dy.clamp(0.0, math.max(0.0, canvasSize.height - size.height)),
+  );
 
   void _layout(List<Task> tasks) {
     final unplaced = <Task>[];
@@ -437,15 +521,21 @@ class TaskSpatialDataSource extends SpatialDataSource {
     final trayVisible = _trayArranged || _tray.length <= kTaskTrayRenderCap
         ? _tray
         : _tray.sublist(_tray.length - kTaskTrayRenderCap);
-    return [..._placed, ...trayVisible, ..._recentCompleted, _amethyst];
+    return [
+      ..._placed,
+      ...trayVisible,
+      ..._recentCompleted,
+      for (final id in deskObjectIds)
+        if (_placedDeskObjectIds.contains(id)) _deskObjectById(id),
+    ];
   }
 
   @override
   void onEntityMoved(String id, Offset position, double rotation) {
-    if (id == kAmethystDeskId) {
-      _amethyst.position = position;
+    if (deskObjectIds.contains(id)) {
+      _deskObjectById(id).position = position;
       notifyListeners();
-      unawaited(_persistAmethyst());
+      unawaited(_persistDeskObject(id));
       return;
     }
     final stackIndex = _recentCompleted.indexWhere((e) => e.id == id);
@@ -485,6 +575,14 @@ class TaskSpatialDataSource extends SpatialDataSource {
   @override
   void onEntityDoubleTapped(String id) {
     if (id == kAmethystDeskId) return; // the stone has no back face
+    if (id == kDachshundDeskId) {
+      // Double-tap turns the figurine to its next prerendered rotation
+      // stop — the sprite-bundle counterpart of flipping a card.
+      _dachshund.stop = _dachshund.stop.next;
+      notifyListeners();
+      unawaited(_persistDeskObject(id));
+      return;
+    }
     // Double-tapping during an override adopts what's on screen as the new
     // manual state first, then toggles the tapped card — so the rest of
     // the view doesn't jump back to pre-override faces mid-gesture.
@@ -495,22 +593,73 @@ class TaskSpatialDataSource extends SpatialDataSource {
     notifyListeners();
   }
 
-  /// Uniformly scales the amethyst by [factor], growing/shrinking from its
-  /// center (position compensates by half the size delta) so it doesn't
-  /// appear to slide toward its own top-left corner. Width clamped to
-  /// [90, 280] with the 150:120 aspect preserved — same rules as the canvas
-  /// example it was ported from.
-  void resizeAmethyst(double factor) {
-    final oldSize = _amethyst.size;
-    final newWidth = (oldSize.width * factor).clamp(90.0, 280.0);
-    final newSize = Size(newWidth, newWidth * (kAmethystDefaultSize.height / kAmethystDefaultSize.width));
-    _amethyst.position += Offset((oldSize.width - newSize.width) / 2, (oldSize.height - newSize.height) / 2);
-    _amethyst.size = newSize;
+  /// Uniformly scales desk object [id] by [factor], growing/shrinking from
+  /// its center (position compensates by half the size delta) so it doesn't
+  /// appear to slide toward its own top-left corner. Width clamps and
+  /// aspect are per kind: the stone keeps its example-app rules (90–280,
+  /// 150:120), the dachshund's square sprite frame gets 64–384 (128 is the
+  /// manifest's true 9 cm scale; the ceiling leaves room for "sparks joy").
+  void resizeDeskObject(String id, double factor) {
+    final entity = _deskObjectById(id);
+    final (minWidth, maxWidth, aspect) = switch (id) {
+      kAmethystDeskId => (90.0, 280.0, kAmethystDefaultSize.height / kAmethystDefaultSize.width),
+      _ => (64.0, 384.0, 1.0),
+    };
+    final oldSize = entity.size;
+    final newWidth = (oldSize.width * factor).clamp(minWidth, maxWidth);
+    final newSize = Size(newWidth, newWidth * aspect);
+    entity.position += Offset((oldSize.width - newSize.width) / 2, (oldSize.height - newSize.height) / 2);
+    entity.size = newSize;
     notifyListeners();
-    unawaited(_persistAmethyst());
+    unawaited(_persistDeskObject(id));
   }
 
-  Future<void> _restoreAmethyst() async {
+  /// Legacy name for the stone's resize — kept because the chips and
+  /// existing tests grew up with it; new code should call
+  /// [resizeDeskObject].
+  void resizeAmethyst(double factor) => resizeDeskObject(kAmethystDeskId, factor);
+
+  Future<void> _restoreDeskObjects() async {
+    var amethystRestored = false;
+    try {
+      final rows = await _deskObjectService.getAll();
+      for (final row in rows) {
+        if (!deskObjectIds.contains(row.id)) continue; // future kinds: ignore
+        final entity = _deskObjectById(row.id);
+        if (row.placed) {
+          _placedDeskObjectIds.add(row.id);
+        } else {
+          _placedDeskObjectIds.remove(row.id);
+        }
+        final x = row.x, y = row.y;
+        if (x != null && y != null) entity.position = Offset(x, y);
+        final width = row.width;
+        if (width != null) {
+          final aspect = row.id == kAmethystDeskId
+              ? kAmethystDefaultSize.height / kAmethystDefaultSize.width
+              : 1.0;
+          entity.size = Size(width, width * aspect);
+        }
+        if (row.id == kAmethystDeskId) amethystRestored = true;
+        if (row.id == kDachshundDeskId) {
+          _dachshund.stop = DachshundStop
+              .values[row.variant.clamp(0, DachshundStop.values.length - 1)];
+        }
+      }
+    } catch (e) {
+      // Same contract as the drawings load: a failed read means default
+      // placement, not a crash.
+      debugPrint('TaskSpatialDataSource: desk objects restore skipped: $e');
+    }
+    if (!amethystRestored) await _restoreAmethystFromLegacyPrefs();
+    if (!_disposed) notifyListeners();
+  }
+
+  /// One-time upgrade path: no desk_objects row for the stone yet, so its
+  /// pre-v15 SharedPreferences spot (if any) still speaks for it. No row is
+  /// written here — the next move/resize/place writes one, and until then
+  /// the prefs keep working.
+  Future<void> _restoreAmethystFromLegacyPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final x = prefs.getDouble(_kAmethystXKey);
@@ -522,21 +671,25 @@ class TaskSpatialDataSource extends SpatialDataSource {
       if (width != null) {
         _amethyst.size = Size(width, width * (kAmethystDefaultSize.height / kAmethystDefaultSize.width));
       }
-      notifyListeners();
     } catch (e) {
       // No preferences backend (e.g. bare unit tests): the defaults stand.
       debugPrint('TaskSpatialDataSource: amethyst restore skipped: $e');
     }
   }
 
-  Future<void> _persistAmethyst() async {
+  Future<void> _persistDeskObject(String id) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_kAmethystXKey, _amethyst.position.dx);
-      await prefs.setDouble(_kAmethystYKey, _amethyst.position.dy);
-      await prefs.setDouble(_kAmethystWidthKey, _amethyst.size.width);
+      final entity = _deskObjectById(id);
+      await _deskObjectService.save(
+        id: id,
+        placed: _placedDeskObjectIds.contains(id),
+        x: entity.position.dx,
+        y: entity.position.dy,
+        width: entity.size.width,
+        variant: id == kDachshundDeskId ? _dachshund.stop.index : 0,
+      );
     } catch (e) {
-      debugPrint('TaskSpatialDataSource: failed to persist amethyst: $e');
+      debugPrint('TaskSpatialDataSource: failed to persist desk object $id: $e');
     }
   }
 }

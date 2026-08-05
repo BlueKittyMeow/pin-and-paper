@@ -11,6 +11,8 @@ import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/providers/task_sort_provider.dart';
 import 'package:pin_and_paper/screens/canvas_screen.dart';
 import 'package:pin_and_paper/services/database_service.dart';
+import 'package:pin_and_paper/spatial/amethyst_desk_entity.dart';
+import 'package:pin_and_paper/spatial/dachshund_desk_entity.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
@@ -68,6 +70,15 @@ void main() {
     );
   }
 
+  /// The data source kicks off real sqflite-ffi restores at construction
+  /// (drawings, desk objects). Give them real-async time to land before the
+  /// test ends, or their in-flight I/O trips the binding's pending-timer
+  /// invariant at teardown.
+  Future<void> drainRestores(WidgetTester tester) async {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+  }
+
   testWidgets('shows a loading placeholder while TaskProvider.isLoading, then the desk once it settles', (
     tester,
   ) async {
@@ -94,6 +105,7 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(SpatialCanvas), findsOneWidget);
+    await drainRestores(tester);
   });
 
   testWidgets('builds the desk immediately when TaskProvider already finished loading before mount', (tester) async {
@@ -109,6 +121,7 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(SpatialCanvas), findsOneWidget);
+    await drainRestores(tester);
   });
 
   testWidgets('completed cards render in the done pile, not at their desk spots', (tester) async {
@@ -130,6 +143,7 @@ void main() {
     // Both completed cards render -- but in the pile, not on the desk (the
     // exact pile geometry is covered in the data source suite).
     expect(find.byType(FlippableTaskCard), findsNWidgets(2));
+    await drainRestores(tester);
   });
 
   testWidgets('face toggles: all-backs overrides, keep commits, active toggle returns to manual', (tester) async {
@@ -166,6 +180,7 @@ void main() {
     await tester.pump();
     expect(card().showBack, isTrue);
     expect(find.byTooltip('Keep these faces'), findsNothing);
+    await drainRestores(tester);
   });
 
   testWidgets('an empty-but-loaded task list shows the desk, not the placeholder forever', (tester) async {
@@ -179,6 +194,7 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(SpatialCanvas), findsOneWidget);
+    await drainRestores(tester);
   });
 
   group('card drawing chips + overlays (M-D5)', () {
@@ -243,7 +259,12 @@ void main() {
       await pumpDesk(tester);
       await tester.pump(); // amethyst prefs restore notifyListeners
 
-      await select(tester, find.byType(AmethystChunk));
+      // Scoped to the canvas: the desk-objects drawer hosts an AmethystChunk
+      // thumbnail too.
+      await select(
+        tester,
+        find.descendant(of: find.byType(SpatialCanvas), matching: find.byType(AmethystChunk)),
+      );
 
       expect(find.byTooltip('Bigger'), findsOneWidget);
       expect(find.byTooltip('Draw on this card'), findsNothing);
@@ -312,6 +333,76 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(DrawingEditorScreen), findsNothing);
       expect(find.byType(SpatialCanvas), findsOneWidget);
+    });
+  });
+
+  group('desk-objects drawer', () {
+    Finder onDesk(Type type) =>
+        find.descendant(of: find.byType(SpatialCanvas), matching: find.byType(type));
+
+    /// Pumps the desk, gives the data source's restore queries (real
+    /// sqflite ffi I/O) real-async time to land, and flushes the notify.
+    Future<void> pumpDesk(WidgetTester tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(); // postFrameCallback -> snapshot
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(); // restore notifyListeners
+    }
+
+    // .first: the tile's ghosting Opacity is the outermost — the dachshund
+    // thumbnail contains its own Opacity widgets (its 40% shadow layers).
+    double tileOpacity(WidgetTester tester, String id) => tester
+        .widget<Opacity>(
+          find
+              .descendant(of: find.byKey(deskDrawerTileKey(id)), matching: find.byType(Opacity))
+              .first,
+        )
+        .opacity;
+
+    testWidgets('tab slides the panel out; tiles show ghosted-if-placed', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() => taskProvider.loadTasks()); // zero tasks
+      await pumpDesk(tester);
+
+      expect(find.byKey(kDeskDrawerTabKey), findsOneWidget);
+
+      await tester.tap(find.byKey(kDeskDrawerTabKey));
+      await tester.pumpAndSettle();
+
+      // The stone starts on the desk (ghosted tile); the dachshund starts
+      // in the drawer (full opacity), not on the desk.
+      expect(tileOpacity(tester, kAmethystDeskId), 0.35);
+      expect(tileOpacity(tester, kDachshundDeskId), 1.0);
+      expect(onDesk(DachshundFigurine), findsNothing);
+    });
+
+    testWidgets('tapping his tile sets the dachshund on the desk; his chip puts him away', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() => taskProvider.loadTasks()); // zero tasks
+      await pumpDesk(tester);
+
+      await tester.tap(find.byKey(kDeskDrawerTabKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(deskDrawerTileKey(kDachshundDeskId)));
+      await tester.pump();
+
+      // On the desk (selected on arrival — the put-away chip is showing),
+      // and ghosted in the drawer.
+      expect(onDesk(DachshundFigurine), findsOneWidget);
+      expect(tileOpacity(tester, kDachshundDeskId), 0.35);
+      expect(find.byTooltip('Put away in the drawer'), findsOneWidget);
+
+      // Chip taps resolve after the canvas's double-tap disambiguation
+      // window, same as the card chips.
+      await tester.tap(find.byTooltip('Put away in the drawer'));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(onDesk(DachshundFigurine), findsNothing);
+      expect(tileOpacity(tester, kDachshundDeskId), 1.0);
+
+      // Let the fire-and-forget desk_objects writes land before teardown
+      // closes the DB.
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     });
   });
 }

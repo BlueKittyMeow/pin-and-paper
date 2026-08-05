@@ -11,6 +11,8 @@ import '../services/task_service.dart';
 import '../theme/desk_colors.dart';
 import 'drawing_editor_screen.dart';
 import '../spatial/amethyst_desk_entity.dart';
+import '../spatial/dachshund_desk_entity.dart';
+import '../spatial/desk_object_entity.dart';
 import '../spatial/spatial_desk_background.dart';
 import '../spatial/task_card_adapter.dart';
 import '../spatial/task_spatial_data_source.dart';
@@ -24,6 +26,12 @@ const Size kCanvasScreenSize = Size(2000, 1500);
 /// Key on the grey "this card has hidden ink" pencil glyph (owner L10).
 /// Stable for tests.
 const Key kHiddenDrawingGlyphKey = Key('canvas_screen.hidden_drawing_glyph');
+
+/// Key on the desk-objects drawer's edge tab. Stable for tests.
+const Key kDeskDrawerTabKey = Key('canvas_screen.desk_drawer_tab');
+
+/// Key for a desk-objects drawer tile. Stable for tests.
+Key deskDrawerTileKey(String id) => Key('canvas_screen.desk_drawer_tile.$id');
 
 /// The "Spatial View": real tasks as draggable index cards on a pannable,
 /// zoomable desk (DRAG_DROP_CANVAS_MVP_PLAN.md Milestone 4).
@@ -41,6 +49,13 @@ class CanvasScreen extends StatefulWidget {
 
 class _CanvasScreenState extends State<CanvasScreen> {
   TaskSpatialDataSource? _dataSource;
+
+  /// Programmatic canvas access for the desk-objects drawer: placing an
+  /// object needs the current view center; tapping a ghosted tile pans to
+  /// the placed object.
+  final SpatialCanvasController _canvasController = SpatialCanvasController();
+
+  bool _drawerOpen = false;
 
   TaskProvider? _watchedProvider;
   VoidCallback? _isLoadingListener;
@@ -96,6 +111,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
     if (listener != null) {
       _watchedProvider?.removeListener(listener);
     }
+    _canvasController.dispose();
     _dataSource?.dispose();
     super.dispose();
   }
@@ -143,21 +159,37 @@ class _CanvasScreenState extends State<CanvasScreen> {
       ),
       body: dataSource == null
           ? const Center(child: CircularProgressIndicator())
-          : Container(
-              // Beyond the canvas edge is the "void" past the desk — same
-              // treatment as the canvas module's own example app.
-              color: DeskColors.voidBackground,
-              child: SpatialCanvas(
-                dataSource: dataSource,
-                entityBuilder: (entity, isSelected) => _buildCard(context, dataSource, entity, isSelected),
-                canvasSize: kCanvasScreenSize,
-                background: SpatialDeskBackground(canvasSize: kCanvasScreenSize),
-                // The default drag-lift shadow is a rounded rect — right for
-                // cards, wrong under the amethyst, which paints its own
-                // grounding pool (same suppression as the canvas example).
-                liftDecorationBuilder: (entity) => entity is AmethystDeskEntity ? const BoxDecoration() : null,
+          : Stack(children: [
+              Positioned.fill(
+                child: Container(
+                  // Beyond the canvas edge is the "void" past the desk — same
+                  // treatment as the canvas module's own example app.
+                  color: DeskColors.voidBackground,
+                  child: SpatialCanvas(
+                    dataSource: dataSource,
+                    controller: _canvasController,
+                    entityBuilder: (entity, isSelected) => _buildCard(context, dataSource, entity, isSelected),
+                    canvasSize: kCanvasScreenSize,
+                    background: SpatialDeskBackground(canvasSize: kCanvasScreenSize),
+                    // The default drag-lift shadow is a rounded rect — right
+                    // for cards, wrong under desk objects, which paint their
+                    // own grounding shadows (same suppression as the canvas
+                    // example).
+                    liftDecorationBuilder: (entity) => entity is DeskObjectEntity ? const BoxDecoration() : null,
+                  ),
+                ),
               ),
-            ),
+              // The desk-objects drawer: screen-space chrome — it sits OVER
+              // the desk plane and never inherits its transforms (the
+              // world-vs-chrome split from DESK_OBJECTS.md's perspective
+              // constraint).
+              _DeskObjectDrawer(
+                dataSource: dataSource,
+                controller: _canvasController,
+                open: _drawerOpen,
+                onToggle: () => setState(() => _drawerOpen = !_drawerOpen),
+              ),
+            ]),
     );
   }
 
@@ -167,30 +199,8 @@ class _CanvasScreenState extends State<CanvasScreen> {
   // default (const TaskCardBackFields()) per M3/M4 addendum item 1; a
   // settings-backed preference is a follow-up, not this milestone.
   Widget _buildCard(BuildContext context, TaskSpatialDataSource dataSource, SpatialEntity entity, bool isSelected) {
-    if (entity is AmethystDeskEntity) {
-      final chunk = AmethystChunk(
-        size: entity.size,
-        rotationY: entity.rotationY,
-        isSelected: isSelected,
-        lightAzimuthDegrees: kDeskLightAzimuth,
-      );
-      if (!isSelected) return chunk;
-      // Selected: resize chips, INSIDE the entity's bounds (anything
-      // outside a Positioned entity's box is unhittable). Their inner tap
-      // recognizers win the arena over the canvas's per-card detector, so
-      // tapping a chip resizes without moving/deselecting.
-      return Stack(children: [
-        Positioned.fill(child: chunk),
-        Positioned(
-          top: 2,
-          right: 2,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _EntityChip(icon: Icons.add, tooltip: 'Bigger', onTap: () => dataSource.resizeAmethyst(1.15)),
-            const SizedBox(height: 4),
-            _EntityChip(icon: Icons.remove, tooltip: 'Smaller', onTap: () => dataSource.resizeAmethyst(1 / 1.15)),
-          ]),
-        ),
-      ]);
+    if (entity is DeskObjectEntity) {
+      return _buildDeskObject(dataSource, entity, isSelected);
     }
     final taskEntity = entity as TaskSpatialEntity;
     final taskProvider = context.read<TaskProvider>();
@@ -271,6 +281,50 @@ class _CanvasScreenState extends State<CanvasScreen> {
     ]);
   }
 
+  /// A desk object (knick-knack) on the canvas. Selected: resize + put-away
+  /// chips, INSIDE the entity's bounds (anything outside a Positioned
+  /// entity's box is unhittable). Their inner tap recognizers win the arena
+  /// over the canvas's per-card detector, so tapping a chip acts without
+  /// moving/deselecting.
+  Widget _buildDeskObject(TaskSpatialDataSource dataSource, DeskObjectEntity entity, bool isSelected) {
+    final Widget visual = switch (entity) {
+      AmethystDeskEntity() => AmethystChunk(
+          size: entity.size,
+          rotationY: entity.rotationY,
+          isSelected: isSelected,
+          lightAzimuthDegrees: kDeskLightAzimuth,
+        ),
+      DachshundDeskEntity() => DachshundFigurine(
+          size: entity.size,
+          stop: entity.stop,
+          isSelected: isSelected,
+        ),
+      _ => throw ArgumentError('unknown desk object: ${entity.id}'),
+    };
+    if (!isSelected) return visual;
+    return Stack(children: [
+      Positioned.fill(child: visual),
+      Positioned(
+        top: 2,
+        right: 2,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          _EntityChip(icon: Icons.add, tooltip: 'Bigger', onTap: () => dataSource.resizeDeskObject(entity.id, 1.15)),
+          const SizedBox(height: 4),
+          _EntityChip(icon: Icons.remove, tooltip: 'Smaller', onTap: () => dataSource.resizeDeskObject(entity.id, 1 / 1.15)),
+          const SizedBox(height: 4),
+          _EntityChip(
+            icon: Icons.archive_outlined,
+            tooltip: 'Put away in the drawer',
+            onTap: () {
+              _canvasController.clearSelection();
+              dataSource.removeDeskObject(entity.id);
+            },
+          ),
+        ]),
+      ),
+    ]);
+  }
+
   /// Pushes the full-screen drawing editor for [face] of task [taskId];
   /// on a saved change, re-reads that task's drawing rows so the card's
   /// overlay (and chips) reflect the fresh ink.
@@ -326,6 +380,168 @@ class _FlipModeButton extends StatelessWidget {
         dataSource.setFlipViewMode(active ? FlipViewMode.manual : mode);
         onChanged();
       },
+    );
+  }
+}
+
+/// The desk-objects drawer (owner spec 2026-08-03, form chosen 2026-08-04:
+/// side tab panel, right edge): a slim gold-accented tab that slides out a
+/// dark panel listing every knick-knack the app owns — ghosted if it's
+/// already on the desk, full opacity if it's available to place.
+///
+/// Screen-space chrome, deliberately OUTSIDE the canvas transform: the
+/// perspective hard-constraint (DESK_OBJECTS.md) keeps UI over the desk
+/// perfectly flat whatever the desk plane ends up doing.
+///
+/// Tap an available tile → it lands centered in the current view and gets
+/// selected. Tap a ghosted tile → the canvas pans to it (find-my-figurine).
+/// Putting an object away happens on the object itself (its put-away chip).
+class _DeskObjectDrawer extends StatelessWidget {
+  const _DeskObjectDrawer({
+    required this.dataSource,
+    required this.controller,
+    required this.open,
+    required this.onToggle,
+  });
+
+  final TaskSpatialDataSource dataSource;
+  final SpatialCanvasController controller;
+  final bool open;
+  final VoidCallback onToggle;
+
+  static const double _panelWidth = 128;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      right: 0,
+      top: 0,
+      bottom: 0,
+      child: Center(
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          _tab(),
+          // ClipRect + AnimatedContainer: the panel slides out from the
+          // edge without ever painting past its animating width.
+          ClipRect(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              width: open ? _panelWidth : 0,
+              child: OverflowBox(
+                minWidth: _panelWidth,
+                maxWidth: _panelWidth,
+                alignment: Alignment.centerLeft,
+                child: _panel(),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _tab() {
+    return Tooltip(
+      message: open ? 'Close the drawer' : 'Desk objects',
+      child: GestureDetector(
+        key: kDeskDrawerTabKey,
+        onTap: onToggle,
+        child: Container(
+          width: 26,
+          height: 92,
+          decoration: const BoxDecoration(
+            color: DeskColors.chipBackground,
+            border: Border(
+              left: BorderSide(color: DeskColors.accentGold),
+              top: BorderSide(color: DeskColors.accentGold),
+              bottom: BorderSide(color: DeskColors.accentGold),
+            ),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(10),
+              bottomLeft: Radius.circular(10),
+            ),
+          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(
+              open ? Icons.chevron_right : Icons.chevron_left,
+              size: 16,
+              color: DeskColors.accentGold,
+            ),
+            const SizedBox(height: 6),
+            const Icon(Icons.inventory_2_outlined, size: 16, color: DeskColors.accentGold),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _panel() {
+    // ListenableBuilder on the data source: placing/removing re-renders the
+    // ghosting immediately, same channel the canvas itself listens on.
+    return ListenableBuilder(
+      listenable: dataSource,
+      builder: (context, _) => Container(
+        width: _panelWidth,
+        decoration: const BoxDecoration(
+          color: DeskColors.chipBackground,
+          border: Border(
+            left: BorderSide(color: DeskColors.accentGold, width: 0.5),
+            top: BorderSide(color: DeskColors.accentGold),
+            bottom: BorderSide(color: DeskColors.accentGold),
+          ),
+          borderRadius: BorderRadius.only(bottomLeft: Radius.circular(10)),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final id in TaskSpatialDataSource.deskObjectIds) _tile(id),
+        ]),
+      ),
+    );
+  }
+
+  Widget _tile(String id) {
+    final placed = dataSource.isDeskObjectPlaced(id);
+    final (name, thumb) = switch (id) {
+      kAmethystDeskId => (
+          'Amethyst',
+          // Not const: baseAlignedYaw is a computed static final.
+          AmethystChunk(size: const Size(72, 58), rotationY: AmethystChunkMesh.baseAlignedYaw),
+        ),
+      kDachshundDeskId => (
+          'Dachshund',
+          const DachshundFigurine(size: Size(72, 72)),
+        ),
+      _ => throw ArgumentError('unknown desk object: $id'),
+    };
+    return Tooltip(
+      message: placed ? 'On the desk — tap to find it' : 'Set it on the desk',
+      child: GestureDetector(
+        key: deskDrawerTileKey(id),
+        onTap: () {
+          if (placed) {
+            controller.focusOnEntity(id);
+            controller.selectEntity(id);
+          } else {
+            dataSource.placeDeskObject(id, viewCenter: controller.visibleRect.center);
+            controller.selectEntity(id);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Opacity(
+            // Ghosted-if-placed, full-opacity-if-available (owner spec).
+            opacity: placed ? 0.35 : 1.0,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              thumb,
+              const SizedBox(height: 4),
+              Text(
+                name,
+                style: const TextStyle(fontSize: 11, color: DeskColors.drawerLabel),
+              ),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }

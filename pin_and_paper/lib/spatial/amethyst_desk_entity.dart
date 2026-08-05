@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart' show Offset, Size;
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
 
+import 'desk_object_entity.dart';
+
 /// The one amethyst desk object's fixed id.
 const String kAmethystDeskId = 'desk-object-amethyst';
 
@@ -25,7 +27,7 @@ const Size kAmethystDefaultSize = Size(150, 120);
 /// crystal mesh's 3D yaw consumed by `AmethystChunkPainter` — fixed at the
 /// base-aligned pose forever; the 2D layout [rotation] stays 0 like every
 /// entity in this MVP.
-class AmethystDeskEntity implements SpatialEntity {
+class AmethystDeskEntity implements DeskObjectEntity {
   AmethystDeskEntity({required this.position, this.size = kAmethystDefaultSize});
 
   @override

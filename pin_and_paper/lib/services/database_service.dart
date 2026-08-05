@@ -218,6 +218,21 @@ class DatabaseService {
       )
     ''');
 
+    // Desk objects (DB v15): knick-knack placement for the drawer.
+    // Parity rule: must match _migrateToV15 exactly.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.deskObjectsTable} (
+        id TEXT PRIMARY KEY,
+        placed INTEGER NOT NULL DEFAULT 0,
+        x REAL,
+        y REAL,
+        width REAL,
+        variant INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER
+      )
+    ''');
+
     // Entities for @mentions (Phase 5 - future-proofing)
     await db.execute('''
       CREATE TABLE ${AppConstants.entitiesTable} (
@@ -539,6 +554,11 @@ class DatabaseService {
     // Migrate from version 13 to 14: Card drawings M-D4 - task_drawings table
     if (oldVersion < 14) {
       await _migrateToV14(db);
+    }
+
+    // Migrate from version 14 to 15: Desk-objects drawer - desk_objects table
+    if (oldVersion < 15) {
+      await _migrateToV15(db);
     }
   }
 
@@ -1355,6 +1375,38 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v14 successfully');
+  }
+
+  /// Desk-objects drawer: v14 → v15
+  ///
+  /// One row per knick-knack KIND (fixed ids like 'desk-object-amethyst'),
+  /// holding placement (placed flag + canvas x/y), display width, and a
+  /// small integer `variant` (the dachshund's rotation-stop index; unused
+  /// by the amethyst). Replaces the amethyst's three SharedPreferences keys
+  /// — TaskSpatialDataSource seeds this table from them on first load, so a
+  /// placed stone keeps its spot across the upgrade.
+  ///
+  /// Sync-silent like task_drawings: no SyncService.logChange (the push
+  /// path maps only tasks/tags/task_tags; logging rows now would mark them
+  /// synced-and-dropped). Decor placement is per-device until a remote
+  /// table ships.
+  Future<void> _migrateToV15(Database db) async {
+    debugPrint('Migrating database from v14 to v15: Desk objects (desk_objects)');
+
+    await db.execute('''
+      CREATE TABLE ${AppConstants.deskObjectsTable} (
+        id TEXT PRIMARY KEY,
+        placed INTEGER NOT NULL DEFAULT 0,
+        x REAL,
+        y REAL,
+        width REAL,
+        variant INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER
+      )
+    ''');
+
+    debugPrint('✅ Database migrated to v15 successfully');
   }
 
   Future<void> close() async {

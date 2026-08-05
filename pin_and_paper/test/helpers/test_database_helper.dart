@@ -153,6 +153,21 @@ class TestDatabaseHelper {
     await db.execute(
         'CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)');
 
+    // Desk-objects drawer (DB v15): desk_objects table
+    // Parity rule: must match DatabaseService._createDB / _migrateToV15.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.deskObjectsTable} (
+        id TEXT PRIMARY KEY,
+        placed INTEGER NOT NULL DEFAULT 0,
+        x REAL,
+        y REAL,
+        width REAL,
+        variant INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER
+      )
+    ''');
+
     // Phase 4.0: Sync layer — updated_at on tasks and tags
     await db.execute('ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN updated_at INTEGER');
     await db.execute('UPDATE ${AppConstants.tasksTable} SET updated_at = created_at WHERE updated_at IS NULL');

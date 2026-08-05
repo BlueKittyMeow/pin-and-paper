@@ -25,4 +25,9 @@ abstract final class DeskColors {
   /// drawing (owner L10: hidden ink shouldn't be forgotten). Muted on
   /// purpose — a tell, not a control.
   static const Color hiddenDrawingGlyph = Color(0xFF8A8A93);
+
+  /// Warm cream for small labels on dark chrome (desk-objects drawer tile
+  /// names) — readable on [chipBackground] without competing with the
+  /// gold accents.
+  static const Color drawerLabel = Color(0xFFD8D3C8);
 }
