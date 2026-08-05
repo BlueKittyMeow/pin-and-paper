@@ -365,7 +365,10 @@ void main() {
       final dataSource = await buildDataSource();
       final stone = _stone(dataSource);
 
-      expect(stone.position, const Offset((2000 - 150) / 2, (1500 - 120) / 2));
+      expect(
+        stone.position,
+        Offset((2000 - kAmethystDefaultSize.width) / 2, (1500 - kAmethystDefaultSize.height) / 2),
+      );
       expect(stone.size, kAmethystDefaultSize);
       for (final card in _cards(dataSource)) {
         expect(stone.zIndex, greaterThan(card.zIndex),
@@ -382,14 +385,14 @@ void main() {
       expect(_stone(reopened).position, const Offset(111.0, 222.0));
     });
 
-    test('resizeAmethyst scales from center, clamps width to [90, 280], and survives reopen', () async {
+    test('resizeAmethyst scales from center, clamps width to [90, 490], and survives reopen', () async {
       final dataSource = await buildDataSource();
       final stone = _stone(dataSource);
       final centerBefore = stone.position + Offset(stone.size.width / 2, stone.size.height / 2);
 
       dataSource.resizeAmethyst(1.15);
-      expect(stone.size.width, closeTo(150 * 1.15, 0.001));
-      expect(stone.size.height / stone.size.width, closeTo(120 / 150, 0.001));
+      expect(stone.size.width, closeTo(kAmethystDefaultSize.width * 1.15, 0.001));
+      expect(stone.size.height / stone.size.width, closeTo(0.8, 0.001));
       final centerAfter = stone.position + Offset(stone.size.width / 2, stone.size.height / 2);
       expect(centerAfter.dx, closeTo(centerBefore.dx, 0.001));
       expect(centerAfter.dy, closeTo(centerBefore.dy, 0.001));
@@ -397,7 +400,7 @@ void main() {
       for (var i = 0; i < 20; i++) {
         dataSource.resizeAmethyst(1.15);
       }
-      expect(stone.size.width, 280.0, reason: 'growth clamps at 280');
+      expect(stone.size.width, 490.0, reason: 'growth clamps at 490');
       for (var i = 0; i < 20; i++) {
         dataSource.resizeAmethyst(1 / 1.15);
       }
@@ -432,14 +435,15 @@ void main() {
       dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(500, 400));
 
       final dog = _dog(dataSource);
+      final half = kDachshundDefaultSize.width / 2;
       expect(dataSource.isDeskObjectPlaced(kDachshundDeskId), isTrue);
       expect(dog.size, kDachshundDefaultSize);
-      expect(dog.position, const Offset(500 - 128 / 2, 400 - 128 / 2));
+      expect(dog.position, Offset(500 - half, 400 - half));
       await pumpEventQueue();
 
       final reopened = await buildDataSource();
       expect(reopened.isDeskObjectPlaced(kDachshundDeskId), isTrue);
-      expect(_dog(reopened).position, const Offset(500 - 128 / 2, 400 - 128 / 2));
+      expect(_dog(reopened).position, Offset(500 - half, 400 - half));
     });
 
     test('placement clamps into the canvas bounds', () async {
@@ -466,7 +470,8 @@ void main() {
 
       // ...and re-placing WITHOUT a view center restores the exact spot.
       reopened.placeDeskObject(kDachshundDeskId);
-      expect(_dog(reopened).position, const Offset(600 - 64, 700 - 64));
+      final half = kDachshundDefaultSize.width / 2;
+      expect(_dog(reopened).position, Offset(600 - half, 700 - half));
     });
 
     test('the amethyst can be put away too, and stays away across reopen', () async {
@@ -497,14 +502,14 @@ void main() {
       expect(_dog(reopened).stop, DachshundStop.threeQLeft.next);
     });
 
-    test('resizeDeskObject keeps the dachshund square and clamps width to [64, 384]', () async {
+    test('resizeDeskObject keeps the dachshund square and clamps width to [64, 672]', () async {
       final dataSource = await buildDataSource();
       dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(500, 400));
       final dog = _dog(dataSource);
       final centerBefore = dog.position + Offset(dog.size.width / 2, dog.size.height / 2);
 
       dataSource.resizeDeskObject(kDachshundDeskId, 1.15);
-      expect(dog.size.width, closeTo(128 * 1.15, 0.001));
+      expect(dog.size.width, closeTo(kDachshundDefaultSize.width * 1.15, 0.001));
       expect(dog.size.height, closeTo(dog.size.width, 0.001));
       final centerAfter = dog.position + Offset(dog.size.width / 2, dog.size.height / 2);
       expect(centerAfter.dx, closeTo(centerBefore.dx, 0.001));
@@ -513,7 +518,7 @@ void main() {
       for (var i = 0; i < 20; i++) {
         dataSource.resizeDeskObject(kDachshundDeskId, 1.15);
       }
-      expect(dog.size.width, 384.0, reason: 'growth clamps at 384');
+      expect(dog.size.width, 672.0, reason: 'growth clamps at 672');
       for (var i = 0; i < 30; i++) {
         dataSource.resizeDeskObject(kDachshundDeskId, 1 / 1.15);
       }

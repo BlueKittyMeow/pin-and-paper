@@ -14,9 +14,11 @@ const String kAmethystDeskId = 'desk-object-amethyst';
 /// constant is the standing answer: it can't be.
 const int kAmethystZIndex = 1 << 20;
 
-/// Default footprint, matching the canvas example's stone (150:120 aspect,
-/// preserved by [TaskSpatialDataSource.resizeAmethyst]).
-const Size kAmethystDefaultSize = Size(150, 120);
+/// Default footprint: the canvas example's 150:120 stone scaled up four
+/// resize-chip clicks (× 1.15⁴ ≈ 262; owner call 2026-08-04 — desk-object
+/// defaults were reading too small). Aspect stays 5:4, preserved by
+/// [TaskSpatialDataSource.resizeDeskObject].
+const Size kAmethystDefaultSize = Size(262, 209.6);
 
 /// The amethyst chunk on the real Spatial View desk — the canvas module's
 /// `AmethystChunk` desk object hosted in the main app (ported from the

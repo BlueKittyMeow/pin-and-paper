@@ -16,9 +16,11 @@ const int kDachshundZIndex = kAmethystZIndex + 1;
 /// Default footprint. The sprite frames are square; 128 logical px is the
 /// bundle manifest's true-scale display size (768px render at effective
 /// 6000 px/m, `ppm_multiplier: 2` → half scale on the desk's global
-/// 3000 px/m). That's honest for a 9 cm figurine but genuinely small next
-/// to the cards — the resize chips exist so the owner can size him by eye.
-const Size kDachshundDefaultSize = Size(128, 128);
+/// 3000 px/m) — honest for a 9 cm figurine but genuinely small next to the
+/// cards. The default ships four resize-chip clicks bigger (128 × 1.15⁴ ≈
+/// 224; owner call 2026-08-04); the chips take him back to true scale or
+/// beyond.
+const Size kDachshundDefaultSize = Size(224, 224);
 
 /// The marble longhaired dachshund figurine on the Spatial View desk — the
 /// canvas module's [DachshundFigurine] sprite bundle hosted in the app.

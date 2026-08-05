@@ -137,9 +137,9 @@ class TaskSpatialDataSource extends SpatialDataSource {
       _dachshund = DachshundDeskEntity(
         // Default spot only matters the first time he's placed without a
         // stored position: just right of the stone's default, companions
-        // not overlapping.
+        // not overlapping (stone half-width 131 + dog half-width 112 < 260).
         position: Offset(
-          (canvasSize.width - kDachshundDefaultSize.width) / 2 + 170,
+          (canvasSize.width - kDachshundDefaultSize.width) / 2 + 260,
           (canvasSize.height - kDachshundDefaultSize.height) / 2,
         ),
       ) {
@@ -596,14 +596,15 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// Uniformly scales desk object [id] by [factor], growing/shrinking from
   /// its center (position compensates by half the size delta) so it doesn't
   /// appear to slide toward its own top-left corner. Width clamps and
-  /// aspect are per kind: the stone keeps its example-app rules (90–280,
-  /// 150:120), the dachshund's square sprite frame gets 64–384 (128 is the
-  /// manifest's true 9 cm scale; the ceiling leaves room for "sparks joy").
+  /// aspect are per kind. Mins keep their original "small enough to tuck
+  /// anywhere" values; maxes scaled with the 4-click default bump (owner
+  /// 2026-08-04) so each object keeps the same growth headroom above its
+  /// default (stone ~1.87×, pup 3× — his floor of 64 is half true scale).
   void resizeDeskObject(String id, double factor) {
     final entity = _deskObjectById(id);
     final (minWidth, maxWidth, aspect) = switch (id) {
-      kAmethystDeskId => (90.0, 280.0, kAmethystDefaultSize.height / kAmethystDefaultSize.width),
-      _ => (64.0, 384.0, 1.0),
+      kAmethystDeskId => (90.0, 490.0, kAmethystDefaultSize.height / kAmethystDefaultSize.width),
+      _ => (64.0, 672.0, 1.0),
     };
     final oldSize = entity.size;
     final newWidth = (oldSize.width * factor).clamp(minWidth, maxWidth);
