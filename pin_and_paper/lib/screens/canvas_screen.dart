@@ -165,9 +165,19 @@ class _CanvasScreenState extends State<CanvasScreen> {
           : Stack(children: [
               Positioned.fill(
                 child: Container(
-                  // Beyond the canvas edge is the "void" past the desk — same
-                  // treatment as the canvas module's own example app.
-                  color: DeskColors.voidBackground,
+                  // Beyond the canvas edge is the "void" past the desk. A
+                  // soft-focus candlelit-study backdrop (owner-sourced
+                  // 2026-08-05, testing the DESK_VIEWPORT_RESEARCH void
+                  // treatment) replaces flat black: screen-space (doesn't
+                  // pan with the desk), cover-cropped to any window shape.
+                  // The dark base color stays underneath as the fallback.
+                  decoration: const BoxDecoration(
+                    color: DeskColors.voidBackground,
+                    image: DecorationImage(
+                      image: AssetImage('assets/images/spatial/desk_void_backdrop.jpg'),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                   child: SpatialCanvas(
                     dataSource: dataSource,
                     controller: _canvasController,
