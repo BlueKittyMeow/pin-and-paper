@@ -518,7 +518,21 @@ class _DeskObjectDrawer extends StatelessWidget {
     final (String name, Widget thumb) = switch (id) {
       kDachshundDeskId => (
           'Dachshund',
-          const DachshundFigurine(size: Size(72, 72)),
+          // The widened sprite frame is mostly shadow margin — center-crop
+          // the thumbnail (1.75× overscan) so the tile shows dog, not air.
+          const ClipRect(
+            child: SizedBox(
+              width: 72,
+              height: 72,
+              child: OverflowBox(
+                minWidth: 126,
+                maxWidth: 126,
+                minHeight: 126,
+                maxHeight: 126,
+                child: DachshundFigurine(size: Size(126, 126)),
+              ),
+            ),
+          ),
         ),
       _ => (
           _crystalNames[id] ?? (throw ArgumentError('unknown desk object: $id')),

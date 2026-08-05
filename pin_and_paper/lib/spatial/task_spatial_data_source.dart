@@ -144,8 +144,9 @@ class TaskSpatialDataSource extends SpatialDataSource {
       },
       _dachshund = DachshundDeskEntity(
         // Default spot only matters the first time he's placed without a
-        // stored position: just right of the stone's default, companions
-        // not overlapping (stone half-width 131 + dog half-width 112 < 260).
+        // stored position: just right of the stone's default. His widened
+        // FRAME overlaps the stone's box, but the visible dog (central ~40%
+        // of the frame, visual half-width ~78) clears the stone's 131.
         position: Offset(
           (canvasSize.width - kDachshundDefaultSize.width) / 2 + 260,
           (canvasSize.height - kDachshundDefaultSize.height) / 2,
@@ -611,7 +612,10 @@ class TaskSpatialDataSource extends SpatialDataSource {
   void resizeDeskObject(String id, double factor) {
     final entity = _deskObjectById(id);
     final (minWidth, maxWidth, aspect) = switch (id) {
-      kDachshundDeskId => (64.0, 672.0, 1.0),
+      // Dachshund bounds are BOX widths; the widened frame (1.75×) scaled
+      // them with the default, so the visible dog's range is unchanged
+      // (half true scale up to 3× true scale).
+      kDachshundDeskId => (112.0, 1176.0, 1.0),
       _ => (90.0, 490.0, kAmethystDefaultSize.height / kAmethystDefaultSize.width),
     };
     final oldSize = entity.size;

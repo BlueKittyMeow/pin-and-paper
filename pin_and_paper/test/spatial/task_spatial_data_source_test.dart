@@ -502,7 +502,7 @@ void main() {
       expect(_dog(reopened).stop, DachshundStop.threeQLeft.next);
     });
 
-    test('resizeDeskObject keeps the dachshund square and clamps width to [64, 672]', () async {
+    test('resizeDeskObject keeps the dachshund square and clamps width to [112, 1176]', () async {
       final dataSource = await buildDataSource();
       dataSource.placeDeskObject(kDachshundDeskId, viewCenter: const Offset(500, 400));
       final dog = _dog(dataSource);
@@ -518,11 +518,11 @@ void main() {
       for (var i = 0; i < 20; i++) {
         dataSource.resizeDeskObject(kDachshundDeskId, 1.15);
       }
-      expect(dog.size.width, 672.0, reason: 'growth clamps at 672');
+      expect(dog.size.width, 1176.0, reason: 'growth clamps at 1176');
       for (var i = 0; i < 30; i++) {
         dataSource.resizeDeskObject(kDachshundDeskId, 1 / 1.15);
       }
-      expect(dog.size.width, 64.0, reason: 'shrink clamps at 64');
+      expect(dog.size.width, 112.0, reason: 'shrink clamps at 112');
     });
 
     test('legacy amethyst prefs restore when no desk_objects row exists yet', () async {
