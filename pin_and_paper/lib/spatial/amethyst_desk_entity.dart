@@ -3,65 +3,64 @@ import 'package:pin_and_paper_canvas/spatial_canvas.dart';
 
 import 'desk_object_entity.dart';
 
-/// The one amethyst desk object's fixed id.
+/// Fixed desk-object ids for the mineral shelf. The first four predate the
+/// modeled gems (they were painted `AmethystChunk` hue-shift variants
+/// until 2026-08-05) and KEEP their ids so existing desk_objects rows —
+/// placement, size, drawer state — carry across the upgrade untouched.
 const String kAmethystDeskId = 'desk-object-amethyst';
-
-// The amethyst's recolored siblings (2026-08-04: drawer roster variants for
-// behavior testing — same painter, hue-rotated).
 const String kCitrineDeskId = 'desk-object-citrine';
 const String kRoseQuartzDeskId = 'desk-object-rose-quartz';
 const String kFluoriteDeskId = 'desk-object-fluorite';
 
-/// Painter hue rotation per crystal kind, in degrees. The reference painter
-/// lives around ~272° purple; the shifts land citrine at golden ~46°, rose
-/// quartz at pink ~340°, and fluorite at green ~142°. Iteration order is
-/// also the drawer's crystal listing order.
-const Map<String, double> kCrystalHueShifts = {
-  kAmethystDeskId: 0,
-  kCitrineDeskId: 134,
-  kRoseQuartzDeskId: 68,
-  kFluoriteDeskId: -130,
+/// The drawer's fifth mineral, new with the habit_v1 bundle.
+const String kObsidianDeskId = 'desk-object-obsidian';
+
+/// Which modeled habit-bundle variant renders for each gem id. Iteration
+/// order is also the drawer's mineral-shelf listing order.
+const Map<String, GemVariant> kGemVariantsById = {
+  kAmethystDeskId: GemVariant.amethyst,
+  kCitrineDeskId: GemVariant.citrine,
+  kRoseQuartzDeskId: GemVariant.roseQuartz,
+  kFluoriteDeskId: GemVariant.fluorite,
+  kObsidianDeskId: GemVariant.snowflakeObsidian,
 };
 
-/// Paint order for the amethyst: far above any card's zIndex (cards use
-/// `-Task.position`, whose magnitude grows one per created task — nowhere
-/// near this), so the stone reads as a paperweight sitting ON the desk's
-/// papers, never buried under them. The owner's first question after the
-/// stone didn't appear was "was it buried under the other cards?" — this
-/// constant is the standing answer: it can't be.
+/// Paint order for the mineral shelf's base: far above any card's zIndex
+/// (cards use `-Task.position`) so stones read as paperweights sitting ON
+/// the papers, never buried under them. (Name kept from the painted-stone
+/// era; the dachshund's zIndex derives from it.)
 const int kAmethystZIndex = 1 << 20;
 
-/// Default footprint: the canvas example's 150:120 stone scaled up four
-/// resize-chip clicks (× 1.15⁴ ≈ 262; owner call 2026-08-04 — desk-object
-/// defaults were reading too small). Aspect stays 5:4, preserved by
-/// [TaskSpatialDataSource.resizeDeskObject].
-const Size kAmethystDefaultSize = Size(262, 209.6);
+/// Default footprint (square — the sprite frames are square). Carried
+/// over from the painted stone's owner-approved 4-click width; manifest
+/// true desk scale would be a 160px box (0.16 m frame, ppm_multiplier 2),
+/// so this default shows the stones comfortably larger than life, and the
+/// resize chips go both ways.
+const Size kAmethystDefaultSize = Size(262, 262);
 
-/// A crystal chunk on the real Spatial View desk — the canvas module's
-/// `AmethystChunk` painter hosted in the main app (ported from the canvas
-/// example per the M4 follow-up "amethyst → real app"). One class serves
-/// the whole mineral shelf: [id] selects the kind and [hueShift] (looked up
-/// from [kCrystalHueShifts]) recolors the same painted stone into citrine,
-/// rose quartz, or fluorite.
+/// A modeled gem/mineral on the Spatial View desk — the canvas module's
+/// [GemFigurine] habit_v1 sprites hosted in the app. One class serves the
+/// whole shelf: [id] selects the kind, [variant] the sprite set. Replaces
+/// the painted `AmethystChunk` stones (2026-08-05); the painter survives
+/// in the canvas module, earmarked for an easter-egg return.
 ///
-/// Not a task: placement persists in the desk_objects table (see
-/// `TaskSpatialDataSource`), never the tasks table. [rotationY] is the
-/// crystal mesh's 3D yaw consumed by `AmethystChunkPainter` — fixed at the
-/// base-aligned pose forever; the 2D layout [rotation] stays 0 like every
-/// entity in this MVP.
-class AmethystDeskEntity implements DeskObjectEntity {
-  AmethystDeskEntity({
+/// Not a task: placement persists in the desk_objects table; [stop] (the
+/// prerendered rotation pose, cycled by double-tap like the dachshund's)
+/// persists in the row's `variant` column. The 2D layout [rotation] stays
+/// 0 like every entity in this MVP.
+class GemDeskEntity implements DeskObjectEntity {
+  GemDeskEntity({
     required this.position,
+    required this.id,
     this.size = kAmethystDefaultSize,
-    this.id = kAmethystDeskId,
     this.zIndex = kAmethystZIndex,
   });
 
   @override
   final String id;
 
-  /// Painter hue rotation for this kind (0 = amethyst).
-  double get hueShift => kCrystalHueShifts[id] ?? 0;
+  /// The habit-bundle sprite set for this kind.
+  GemVariant get variant => kGemVariantsById[id]!;
 
   @override
   Offset position;
@@ -69,9 +68,8 @@ class AmethystDeskEntity implements DeskObjectEntity {
   @override
   double get rotation => 0;
 
-  /// The crystal mesh's fixed yaw: bottom edge projects flat, so the stone
-  /// rests flush on the flat-lay desk.
-  final double rotationY = AmethystChunkMesh.baseAlignedYaw;
+  /// Which of the seven prerendered rotation stops is showing.
+  SpriteStop stop = SpriteStop.threeQLeft;
 
   /// Mutable: resized via the selection chips. Decor gets to be whatever
   /// size sparks joy; cards stay fixed-size.

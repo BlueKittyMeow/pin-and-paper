@@ -11,7 +11,7 @@ import 'package:pin_and_paper/spatial/amethyst_desk_entity.dart';
 import 'package:pin_and_paper/spatial/dachshund_desk_entity.dart';
 import 'package:pin_and_paper/spatial/task_spatial_data_source.dart';
 import 'package:pin_and_paper/spatial/task_spatial_entity.dart';
-import 'package:pin_and_paper_canvas/spatial_canvas.dart' show DachshundStop;
+import 'package:pin_and_paper_canvas/spatial_canvas.dart' show DachshundStop, GemVariant;
 import 'package:pin_and_paper_card_renderer/card_renderer.dart' show kCardSize;
 import 'package:pin_and_paper_sketchpad/sketchpad.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,12 +22,12 @@ import '../helpers/test_database_helper.dart';
 const _kCanvasSize = Size(2000, 1500);
 
 /// The task-card entities only (every data source also hosts the one
-/// [AmethystDeskEntity] desk object, which most layout tests ignore).
+/// [GemDeskEntity] desk objects, which most layout tests ignore).
 List<TaskSpatialEntity> _cards(TaskSpatialDataSource dataSource) =>
     dataSource.getVisibleEntities(Rect.zero).whereType<TaskSpatialEntity>().toList();
 
-AmethystDeskEntity _stone(TaskSpatialDataSource dataSource) =>
-    dataSource.getVisibleEntities(Rect.zero).whereType<AmethystDeskEntity>().single;
+GemDeskEntity _stone(TaskSpatialDataSource dataSource) =>
+    dataSource.getVisibleEntities(Rect.zero).whereType<GemDeskEntity>().single;
 
 DachshundDeskEntity _dog(TaskSpatialDataSource dataSource) =>
     dataSource.getVisibleEntities(Rect.zero).whereType<DachshundDeskEntity>().single;
@@ -402,7 +402,7 @@ void main() {
 
       dataSource.resizeAmethyst(1.15);
       expect(stone.size.width, closeTo(kAmethystDefaultSize.width * 1.15, 0.001));
-      expect(stone.size.height / stone.size.width, closeTo(0.8, 0.001));
+      expect(stone.size.height / stone.size.width, closeTo(1.0, 0.001)); // square sprite frames
       final centerAfter = stone.position + Offset(stone.size.width / 2, stone.size.height / 2);
       expect(centerAfter.dx, closeTo(centerBefore.dx, 0.001));
       expect(centerAfter.dy, closeTo(centerBefore.dy, 0.001));
@@ -488,7 +488,7 @@ void main() {
       final dataSource = await buildDataSource();
       dataSource.removeDeskObject(kAmethystDeskId);
       expect(
-        dataSource.getVisibleEntities(Rect.zero).whereType<AmethystDeskEntity>(),
+        dataSource.getVisibleEntities(Rect.zero).whereType<GemDeskEntity>().where((e) => e.id == kAmethystDeskId),
         isEmpty,
       );
       await pumpEventQueue();
@@ -581,6 +581,7 @@ void main() {
         kCitrineDeskId,
         kRoseQuartzDeskId,
         kFluoriteDeskId,
+        kObsidianDeskId,
         kDachshundDeskId,
       ]);
       for (final id in const [kCitrineDeskId, kRoseQuartzDeskId, kFluoriteDeskId]) {
@@ -589,13 +590,13 @@ void main() {
 
       dataSource.placeDeskObject(kCitrineDeskId, viewCenter: const Offset(500, 400));
       final stones =
-          dataSource.getVisibleEntities(Rect.zero).whereType<AmethystDeskEntity>().toList();
+          dataSource.getVisibleEntities(Rect.zero).whereType<GemDeskEntity>().toList();
       expect(stones, hasLength(2));
       expect(stones.map((s) => s.id), containsAll([kAmethystDeskId, kCitrineDeskId]));
 
-      // Each variant recolors, not reuses, the reference stone...
+      // Each id renders its own modeled habit variant (separate meshes)...
       final citrine = stones.singleWhere((s) => s.id == kCitrineDeskId);
-      expect(citrine.hueShift, isNot(0));
+      expect(citrine.variant, GemVariant.citrine);
       // ...and every desk object keeps a unique paint order.
       final zIndexes = [
         for (final id in TaskSpatialDataSource.deskObjectIds)

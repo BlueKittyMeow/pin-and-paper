@@ -259,11 +259,16 @@ void main() {
       await pumpDesk(tester);
       await tester.pump(); // amethyst prefs restore notifyListeners
 
-      // Scoped to the canvas: the desk-objects drawer hosts an AmethystChunk
-      // thumbnail too.
+      // Scoped to the canvas AND to the amethyst: the drawer hosts gem
+      // thumbnails too, and other gems may be placed.
       await select(
         tester,
-        find.descendant(of: find.byType(SpatialCanvas), matching: find.byType(AmethystChunk)),
+        find.descendant(
+          of: find.byType(SpatialCanvas),
+          matching: find.byWidgetPredicate(
+            (w) => w is GemFigurine && w.variant == GemVariant.amethyst,
+          ),
+        ),
       );
 
       expect(find.byTooltip('Bigger'), findsOneWidget);
@@ -382,6 +387,10 @@ void main() {
       await pumpDesk(tester);
 
       await tester.tap(find.byKey(kDeskDrawerTabKey));
+      await tester.pumpAndSettle();
+      // Six residents now: his tile sits at the bottom of the (scrollable)
+      // panel — bring it on screen before tapping.
+      await tester.ensureVisible(find.byKey(deskDrawerTileKey(kDachshundDeskId)));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(deskDrawerTileKey(kDachshundDeskId)));
       // Placement pans the canvas to him (place-back-at-last-spot + focus);

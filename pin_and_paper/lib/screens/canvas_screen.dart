@@ -71,6 +71,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
     // Async-decodes the figurine's silhouette masks; until they land his
     // hit target is the whole box (never untappable).
     DachshundHitMask.ensureLoading();
+    GemHitMask.ensureLoading();
     WidgetsBinding.instance.addPostFrameCallback((_) => _armSnapshot());
   }
 
@@ -209,11 +210,12 @@ class _CanvasScreenState extends State<CanvasScreen> {
                           local.dy / entity.size.height,
                         );
                       }
-                      if (entity is AmethystDeskEntity) {
-                        return amethystChunkContainsPoint(
-                          size: entity.size,
-                          rotationY: entity.rotationY,
-                          point: local,
+                      if (entity is GemDeskEntity) {
+                        return GemHitMask.contains(
+                          entity.variant,
+                          entity.stop,
+                          local.dx / entity.size.width,
+                          local.dy / entity.size.height,
                         );
                       }
                       return true;
@@ -330,12 +332,11 @@ class _CanvasScreenState extends State<CanvasScreen> {
   /// moving/deselecting.
   Widget _buildDeskObject(TaskSpatialDataSource dataSource, DeskObjectEntity entity, bool isSelected) {
     final Widget visual = switch (entity) {
-      AmethystDeskEntity() => AmethystChunk(
+      GemDeskEntity() => GemFigurine(
+          variant: entity.variant,
           size: entity.size,
-          rotationY: entity.rotationY,
+          stop: entity.stop,
           isSelected: isSelected,
-          lightAzimuthDegrees: kDeskLightAzimuth,
-          hueShift: entity.hueShift,
         ),
       DachshundDeskEntity() => DachshundFigurine(
           size: entity.size,
@@ -455,15 +456,6 @@ class _DeskObjectDrawer extends StatelessWidget {
   final VoidCallback onToggle;
 
   static const double _panelWidth = 128;
-
-  /// Display names for the drawer tiles (crystal kinds; the dachshund is
-  /// handled separately in [_tile]).
-  static const Map<String, String> _crystalNames = {
-    kAmethystDeskId: 'Amethyst',
-    kCitrineDeskId: 'Citrine',
-    kRoseQuartzDeskId: 'Rose Quartz',
-    kFluoriteDeskId: 'Fluorite',
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -585,13 +577,10 @@ class _DeskObjectDrawer extends StatelessWidget {
           ),
         ),
       _ => (
-          _crystalNames[id] ?? (throw ArgumentError('unknown desk object: $id')),
-          // Not const: baseAlignedYaw is a computed static final.
-          AmethystChunk(
-            size: const Size(72, 58),
-            rotationY: AmethystChunkMesh.baseAlignedYaw,
-            hueShift: kCrystalHueShifts[id]!,
-          ),
+          // Modeled habit gems fill most of their frame (padding 1.25) —
+          // no overscan crop needed, unlike the dachshund.
+          (kGemVariantsById[id] ?? (throw ArgumentError('unknown desk object: $id'))).label,
+          GemFigurine(variant: kGemVariantsById[id]!, size: const Size(72, 72)),
         ),
     };
     return Tooltip(
