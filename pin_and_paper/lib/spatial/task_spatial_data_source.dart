@@ -124,16 +124,24 @@ class TaskSpatialDataSource extends SpatialDataSource {
   }) : _taskService = taskService,
       _drawingService = drawingService ?? DrawingService(),
       _deskObjectService = deskObjectService ?? DeskObjectService(),
-      _amethyst = AmethystDeskEntity(
-        // Dead center of the desk by default — the stone must be
+      _crystals = {
+        // Amethyst dead center of the desk by default — the stone must be
         // unmissable on first open (its example-app ancestor tucked itself
-        // into a corner and the owner assumed it was buried). Dragging it
-        // persists wherever it lands.
-        position: Offset(
-          (canvasSize.width - kAmethystDefaultSize.width) / 2,
-          (canvasSize.height - kAmethystDefaultSize.height) / 2,
-        ),
-      ),
+        // into a corner and the owner assumed it was buried). Its recolored
+        // siblings stagger diagonally from there (their default spot only
+        // matters when placed without a view center). zIndexes: amethyst
+        // keeps the base, the dachshund owns base+1, crystals take +2/+3/+4
+        // — unique paint order for every desk object.
+        for (final (i, id) in kCrystalHueShifts.keys.indexed)
+          id: AmethystDeskEntity(
+            id: id,
+            zIndex: kAmethystZIndex + (i == 0 ? 0 : i + 1),
+            position: Offset(
+              (canvasSize.width - kAmethystDefaultSize.width) / 2 + 46.0 * i,
+              (canvasSize.height - kAmethystDefaultSize.height) / 2 + 34.0 * i,
+            ),
+          ),
+      },
       _dachshund = DachshundDeskEntity(
         // Default spot only matters the first time he's placed without a
         // stored position: just right of the stone's default, companions
@@ -165,7 +173,7 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// [completedStackAnchor]. Read-only: never draggable, never persisted.
   final List<TaskSpatialEntity> _recentCompleted = [];
 
-  final AmethystDeskEntity _amethyst;
+  final Map<String, AmethystDeskEntity> _crystals;
   final DachshundDeskEntity _dachshund;
 
   /// Which desk objects are on the desk (vs. in the drawer). The amethyst
@@ -374,14 +382,14 @@ class TaskSpatialDataSource extends SpatialDataSource {
   static const _kAmethystWidthKey = 'spatial_amethyst_width';
 
   /// Drawer catalog order: every desk-object kind the app knows, whether
-  /// placed or not.
-  static const List<String> deskObjectIds = [kAmethystDeskId, kDachshundDeskId];
+  /// placed or not — the mineral shelf first, then the pup.
+  static final List<String> deskObjectIds =
+      List.unmodifiable([...kCrystalHueShifts.keys, kDachshundDeskId]);
 
-  DeskObjectEntity _deskObjectById(String id) => switch (id) {
-    kAmethystDeskId => _amethyst,
-    kDachshundDeskId => _dachshund,
-    _ => throw ArgumentError('unknown desk object: $id'),
-  };
+  DeskObjectEntity _deskObjectById(String id) {
+    if (id == kDachshundDeskId) return _dachshund;
+    return _crystals[id] ?? (throw ArgumentError('unknown desk object: $id'));
+  }
 
   /// Whether [id] is currently on the desk (drawer shows it ghosted) as
   /// opposed to available in the drawer.
@@ -603,8 +611,8 @@ class TaskSpatialDataSource extends SpatialDataSource {
   void resizeDeskObject(String id, double factor) {
     final entity = _deskObjectById(id);
     final (minWidth, maxWidth, aspect) = switch (id) {
-      kAmethystDeskId => (90.0, 490.0, kAmethystDefaultSize.height / kAmethystDefaultSize.width),
-      _ => (64.0, 672.0, 1.0),
+      kDachshundDeskId => (64.0, 672.0, 1.0),
+      _ => (90.0, 490.0, kAmethystDefaultSize.height / kAmethystDefaultSize.width),
     };
     final oldSize = entity.size;
     final newWidth = (oldSize.width * factor).clamp(minWidth, maxWidth);
@@ -636,9 +644,9 @@ class TaskSpatialDataSource extends SpatialDataSource {
         if (x != null && y != null) entity.position = Offset(x, y);
         final width = row.width;
         if (width != null) {
-          final aspect = row.id == kAmethystDeskId
-              ? kAmethystDefaultSize.height / kAmethystDefaultSize.width
-              : 1.0;
+          final aspect = row.id == kDachshundDeskId
+              ? 1.0
+              : kAmethystDefaultSize.height / kAmethystDefaultSize.width;
           entity.size = Size(width, width * aspect);
         }
         if (row.id == kAmethystDeskId) amethystRestored = true;
@@ -662,15 +670,16 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// the prefs keep working.
   Future<void> _restoreAmethystFromLegacyPrefs() async {
     try {
+      final amethyst = _crystals[kAmethystDeskId]!;
       final prefs = await SharedPreferences.getInstance();
       final x = prefs.getDouble(_kAmethystXKey);
       final y = prefs.getDouble(_kAmethystYKey);
       if (x != null && y != null) {
-        _amethyst.position = Offset(x, y);
+        amethyst.position = Offset(x, y);
       }
       final width = prefs.getDouble(_kAmethystWidthKey);
       if (width != null) {
-        _amethyst.size = Size(width, width * (kAmethystDefaultSize.height / kAmethystDefaultSize.width));
+        amethyst.size = Size(width, width * (kAmethystDefaultSize.height / kAmethystDefaultSize.width));
       }
     } catch (e) {
       // No preferences backend (e.g. bare unit tests): the defaults stand.

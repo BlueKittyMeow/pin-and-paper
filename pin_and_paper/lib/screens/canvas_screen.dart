@@ -293,6 +293,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
           rotationY: entity.rotationY,
           isSelected: isSelected,
           lightAzimuthDegrees: kDeskLightAzimuth,
+          hueShift: entity.hueShift,
         ),
       DachshundDeskEntity() => DachshundFigurine(
           size: entity.size,
@@ -411,6 +412,15 @@ class _DeskObjectDrawer extends StatelessWidget {
 
   static const double _panelWidth = 128;
 
+  /// Display names for the drawer tiles (crystal kinds; the dachshund is
+  /// handled separately in [_tile]).
+  static const Map<String, String> _crystalNames = {
+    kAmethystDeskId: 'Amethyst',
+    kCitrineDeskId: 'Citrine',
+    kRoseQuartzDeskId: 'Rose Quartz',
+    kFluoriteDeskId: 'Fluorite',
+  };
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -492,26 +502,33 @@ class _DeskObjectDrawer extends StatelessWidget {
           borderRadius: BorderRadius.only(bottomLeft: Radius.circular(10)),
         ),
         padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          for (final id in TaskSpatialDataSource.deskObjectIds) _tile(id),
-        ]),
+        // Scrollable: five-and-growing tiles can outgrow a landscape-phone
+        // viewport height.
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            for (final id in TaskSpatialDataSource.deskObjectIds) _tile(id),
+          ]),
+        ),
       ),
     );
   }
 
   Widget _tile(String id) {
     final placed = dataSource.isDeskObjectPlaced(id);
-    final (name, thumb) = switch (id) {
-      kAmethystDeskId => (
-          'Amethyst',
-          // Not const: baseAlignedYaw is a computed static final.
-          AmethystChunk(size: const Size(72, 58), rotationY: AmethystChunkMesh.baseAlignedYaw),
-        ),
+    final (String name, Widget thumb) = switch (id) {
       kDachshundDeskId => (
           'Dachshund',
           const DachshundFigurine(size: Size(72, 72)),
         ),
-      _ => throw ArgumentError('unknown desk object: $id'),
+      _ => (
+          _crystalNames[id] ?? (throw ArgumentError('unknown desk object: $id')),
+          // Not const: baseAlignedYaw is a computed static final.
+          AmethystChunk(
+            size: const Size(72, 58),
+            rotationY: AmethystChunkMesh.baseAlignedYaw,
+            hueShift: kCrystalHueShifts[id]!,
+          ),
+        ),
     };
     return Tooltip(
       message: placed ? 'On the desk — tap to find it' : 'Set it on the desk',

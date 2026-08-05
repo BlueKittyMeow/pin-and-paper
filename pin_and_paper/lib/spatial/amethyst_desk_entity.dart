@@ -6,6 +6,23 @@ import 'desk_object_entity.dart';
 /// The one amethyst desk object's fixed id.
 const String kAmethystDeskId = 'desk-object-amethyst';
 
+// The amethyst's recolored siblings (2026-08-04: drawer roster variants for
+// behavior testing — same painter, hue-rotated).
+const String kCitrineDeskId = 'desk-object-citrine';
+const String kRoseQuartzDeskId = 'desk-object-rose-quartz';
+const String kFluoriteDeskId = 'desk-object-fluorite';
+
+/// Painter hue rotation per crystal kind, in degrees. The reference painter
+/// lives around ~272° purple; the shifts land citrine at golden ~46°, rose
+/// quartz at pink ~340°, and fluorite at green ~142°. Iteration order is
+/// also the drawer's crystal listing order.
+const Map<String, double> kCrystalHueShifts = {
+  kAmethystDeskId: 0,
+  kCitrineDeskId: 134,
+  kRoseQuartzDeskId: 68,
+  kFluoriteDeskId: -130,
+};
+
 /// Paint order for the amethyst: far above any card's zIndex (cards use
 /// `-Task.position`, whose magnitude grows one per created task — nowhere
 /// near this), so the stone reads as a paperweight sitting ON the desk's
@@ -20,20 +37,31 @@ const int kAmethystZIndex = 1 << 20;
 /// [TaskSpatialDataSource.resizeDeskObject].
 const Size kAmethystDefaultSize = Size(262, 209.6);
 
-/// The amethyst chunk on the real Spatial View desk — the canvas module's
-/// `AmethystChunk` desk object hosted in the main app (ported from the
-/// canvas example per the M4 follow-up "amethyst → real app").
+/// A crystal chunk on the real Spatial View desk — the canvas module's
+/// `AmethystChunk` painter hosted in the main app (ported from the canvas
+/// example per the M4 follow-up "amethyst → real app"). One class serves
+/// the whole mineral shelf: [id] selects the kind and [hueShift] (looked up
+/// from [kCrystalHueShifts]) recolors the same painted stone into citrine,
+/// rose quartz, or fluorite.
 ///
-/// Not a task: position and size persist via `SharedPreferences` (see
+/// Not a task: placement persists in the desk_objects table (see
 /// `TaskSpatialDataSource`), never the tasks table. [rotationY] is the
 /// crystal mesh's 3D yaw consumed by `AmethystChunkPainter` — fixed at the
 /// base-aligned pose forever; the 2D layout [rotation] stays 0 like every
 /// entity in this MVP.
 class AmethystDeskEntity implements DeskObjectEntity {
-  AmethystDeskEntity({required this.position, this.size = kAmethystDefaultSize});
+  AmethystDeskEntity({
+    required this.position,
+    this.size = kAmethystDefaultSize,
+    this.id = kAmethystDeskId,
+    this.zIndex = kAmethystZIndex,
+  });
 
   @override
-  final String id = kAmethystDeskId;
+  final String id;
+
+  /// Painter hue rotation for this kind (0 = amethyst).
+  double get hueShift => kCrystalHueShifts[id] ?? 0;
 
   @override
   Offset position;
@@ -51,5 +79,5 @@ class AmethystDeskEntity implements DeskObjectEntity {
   Size size;
 
   @override
-  int get zIndex => kAmethystZIndex;
+  final int zIndex;
 }

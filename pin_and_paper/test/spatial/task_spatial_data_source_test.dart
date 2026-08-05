@@ -553,6 +553,42 @@ void main() {
       expect(_stone(reopened).position, const Offset(50.0, 60.0));
     });
 
+    test('crystal variants start in the drawer, place independently, and survive reopen', () async {
+      final dataSource = await buildDataSource();
+
+      expect(TaskSpatialDataSource.deskObjectIds, [
+        kAmethystDeskId,
+        kCitrineDeskId,
+        kRoseQuartzDeskId,
+        kFluoriteDeskId,
+        kDachshundDeskId,
+      ]);
+      for (final id in const [kCitrineDeskId, kRoseQuartzDeskId, kFluoriteDeskId]) {
+        expect(dataSource.isDeskObjectPlaced(id), isFalse, reason: '$id starts in the drawer');
+      }
+
+      dataSource.placeDeskObject(kCitrineDeskId, viewCenter: const Offset(500, 400));
+      final stones =
+          dataSource.getVisibleEntities(Rect.zero).whereType<AmethystDeskEntity>().toList();
+      expect(stones, hasLength(2));
+      expect(stones.map((s) => s.id), containsAll([kAmethystDeskId, kCitrineDeskId]));
+
+      // Each variant recolors, not reuses, the reference stone...
+      final citrine = stones.singleWhere((s) => s.id == kCitrineDeskId);
+      expect(citrine.hueShift, isNot(0));
+      // ...and every desk object keeps a unique paint order.
+      final zIndexes = [
+        for (final id in TaskSpatialDataSource.deskObjectIds)
+          dataSource.getVisibleEntities(Rect.zero).where((e) => e.id == id),
+      ].expand((e) => e).map((e) => e.zIndex).toList();
+      expect(zIndexes.toSet().length, zIndexes.length);
+      await pumpEventQueue();
+
+      final reopened = await buildDataSource();
+      expect(reopened.isDeskObjectPlaced(kCitrineDeskId), isTrue);
+      expect(reopened.isDeskObjectPlaced(kRoseQuartzDeskId), isFalse);
+    });
+
     test('the dachshund sits above the stone, both above every card', () async {
       await taskService.createTask('A card');
       final dataSource = await buildDataSource();
