@@ -57,6 +57,11 @@
 
 ### UX Polish
 
+#### Recall All Cards (Spatial View)
+- **Priority:** MEDIUM | **Complexity:** LOW
+- **Description:** A "recall all cards" action that brings every placed card back into the visible/usable desk area (e.g., re-stack or grid within bounds), guarded by an "are you sure" confirmation and undoable. Motivated by cards stranded outside canvas bounds after the canvas rebind to the desk panel (2026-08-05) — off-bounds cards can't be grabbed at all.
+- **Source:** Owner request (2026-08-05)
+
 #### Spatial View Sound Design
 - **Priority:** MEDIUM | **Complexity:** MEDIUM
 - **Description:** Sounds for the desk's tactile experience (owner: "Sounds will help with tactile experience"). Candidates: card pickup/drop (paper slide), card flip, drawer open/close, desk-object placement thunk (per-material: stone clink vs figurine tap), done-pile fan/restack shuffle, completion sound. Should respect a global mute and follow the same reduce-stimulation philosophy as reduce-motion (see DEFAULTS_TO_REVISIT).
