@@ -57,6 +57,11 @@
 
 ### UX Polish
 
+#### Easter Egg: The Old Guard Stones
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** When the painted 2.5D crystal chunks (AmethystChunkPainter + hue-shift variants — the original amethyst "shadow saga" stone and its citrine/rose-quartz/fluorite siblings) are retired from the drawer in favor of the Blender-modeled habit gems, keep them recoverable as a hidden easter egg — some secret interaction someday pulls the old guard back onto the desk. The painter code stays in the canvas module regardless.
+- **Source:** Owner request (2026-08-05, gem habit round)
+
 #### Recall All Cards (Spatial View)
 - **Priority:** MEDIUM | **Complexity:** LOW
 - **Description:** A "recall all cards" action that brings every placed card back into the visible/usable desk area (e.g., re-stack or grid within bounds), guarded by an "are you sure" confirmation and undoable. Motivated by cards stranded outside canvas bounds after the canvas rebind to the desk panel (2026-08-05) — off-bounds cards can't be grabbed at all.
