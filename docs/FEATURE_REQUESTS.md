@@ -57,6 +57,11 @@
 
 ### UX Polish
 
+#### Spatial View Sound Design
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Sounds for the desk's tactile experience (owner: "Sounds will help with tactile experience"). Candidates: card pickup/drop (paper slide), card flip, drawer open/close, desk-object placement thunk (per-material: stone clink vs figurine tap), done-pile fan/restack shuffle, completion sound. Should respect a global mute and follow the same reduce-stimulation philosophy as reduce-motion (see DEFAULTS_TO_REVISIT).
+- **Source:** Owner request (2026-08-05, Spatial View desk-objects session)
+
 #### Tag Color Palette Review
 - **Priority:** LOW | **Complexity:** LOW
 - **Description:** Several tag colors need adjustment: red appears too pink, two blue shades are too similar, brown doesn't clearly read as brown.
