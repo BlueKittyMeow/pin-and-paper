@@ -9,17 +9,30 @@ const Color _kAccentGold = Color(0xFFC4941A);
 
 /// The Spatial View's desk backdrop, passed as `SpatialCanvas.background`.
 ///
-/// Two things live here (M3/M4 addendum item 3 and item 11):
-/// - The desk surface itself: Lara's seamless kraft-paper texture, tiled to
-///   [canvasSize], framed by a thin amber edge marking exactly where the
-///   usable canvas ends — mirrors the canvas module's own `example/` app.
-/// - A subtle rounded outline around the landing tray zone (where unplaced
-///   tasks stack — see `TaskSpatialDataSource`'s doc comment) plus a small
-///   "NEW" label, so the tray reads as desk furniture, not decoration.
+/// The desk is now a REAL desk (owner-sourced executive desk photo,
+/// 2026-08-05): the mahogany top surface is perspective-squared so it maps
+/// EXACTLY onto the 2000×1500 canvas rect — cards sit on the actual
+/// desktop — while the drawer pedestals stay visible below the canvas
+/// bounds as pure decoration (never interactive; they hang in the felt
+/// margin over the floor backdrop). The asset carries [kDeskImageMargin]
+/// px of feathered-alpha glow on all sides, so this widget positions it
+/// offset beyond the canvas rect and its Stack must not clip.
+///
+/// Also here: subtle rounded outlines + labels for the landing tray zone
+/// and the done pile (desk furniture, not decoration).
 ///
 /// Purely decorative: `SpatialCanvas` already wraps `background` in
 /// `IgnorePointer`, so this widget carries no state and never needs to
 /// handle input itself.
+/// Feathered margin baked around the desk image's surface rect: the
+/// squared desktop starts this many px in from the asset's left/top edge.
+/// Tied to the asset-generation warp (surface quad → rect at (64,64)).
+const double kDeskImageMargin = 64;
+
+/// Full pixel size of `desk_executive.webp` — surface rect + margin on
+/// left/right/top, drawer pedestals + feather below.
+const Size kDeskImageSize = Size(2128, 2264);
+
 class SpatialDeskBackground extends StatelessWidget {
   const SpatialDeskBackground({super.key, required this.canvasSize});
 
@@ -41,16 +54,20 @@ class SpatialDeskBackground extends StatelessWidget {
     final doneRect = donePileZoneRect(canvasSize);
 
     return Stack(
+      // The desk image intentionally overflows the canvas rect (glow
+      // margins + drawer pedestals below); the canvas's own Stack is
+      // already Clip.none.
+      clipBehavior: Clip.none,
       children: [
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              image: const DecorationImage(
-                image: AssetImage('assets/images/spatial/SeamlessKraft1.jpg'),
-                repeat: ImageRepeat.repeat,
-              ),
-              border: Border.all(color: _kAccentGold, width: 2),
-            ),
+        Positioned(
+          left: -kDeskImageMargin,
+          top: -kDeskImageMargin,
+          width: kDeskImageSize.width,
+          height: kDeskImageSize.height,
+          child: Image.asset(
+            'assets/images/spatial/desk_executive.webp',
+            fit: BoxFit.fill,
+            filterQuality: FilterQuality.medium,
           ),
         ),
         Positioned(
