@@ -24,13 +24,16 @@ const Color _kAccentGold = Color(0xFFC4941A);
 /// Purely decorative: `SpatialCanvas` already wraps `background` in
 /// `IgnorePointer`, so this widget carries no state and never needs to
 /// handle input itself.
-/// Feathered margin baked around the desk image's surface rect: the
-/// squared desktop starts this many px in from the asset's left/top edge.
-/// Tied to the asset-generation warp (surface quad → rect at (64,64)).
-const double kDeskImageMargin = 64;
+/// Where the desk image sits relative to the canvas origin. The canvas IS
+/// the desk's inner bevel panel (owner decision 2026-08-05), which lives
+/// at (154,187) in the asset — so the image is offset up-left by that
+/// much, letting the wooden rim, bevel, and drawer pedestals surround the
+/// interactive surface as pure decoration. Tied to the asset-generation
+/// measurements (groove rect + 5px inset).
+const Offset kDeskImageOffset = Offset(-154, -187);
 
-/// Full pixel size of `desk_executive.webp` — surface rect + margin on
-/// left/right/top, drawer pedestals + feather below.
+/// Full pixel size of `desk_executive.webp` — the whole desk plus its
+/// feathered glow margin; displayed 1:1 in canvas logical px.
 const Size kDeskImageSize = Size(2128, 2264);
 
 class SpatialDeskBackground extends StatelessWidget {
@@ -60,8 +63,8 @@ class SpatialDeskBackground extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Positioned(
-          left: -kDeskImageMargin,
-          top: -kDeskImageMargin,
+          left: kDeskImageOffset.dx,
+          top: kDeskImageOffset.dy,
           width: kDeskImageSize.width,
           height: kDeskImageSize.height,
           child: Image.asset(

@@ -18,10 +18,15 @@ import '../spatial/task_card_adapter.dart';
 import '../spatial/task_spatial_data_source.dart';
 import '../spatial/task_spatial_entity.dart';
 
-/// Canvas bounds for the Spatial View — matches the canvas module's own
-/// `example/` app (DRAG_DROP_CANVAS_MVP_PLAN.md Milestone 4) so gesture feel
-/// carries over 1:1 from the module's manual verification pass.
-const Size kCanvasScreenSize = Size(2000, 1500);
+/// Canvas bounds for the Spatial View: the real desk's inner bevel panel
+/// (owner decision 2026-08-05 — "bind usable desktop within those
+/// corners"). The desk asset keeps its true proportions; the CANVAS
+/// adapts to the desk, not the other way around. These are the measured
+/// dimensions of the sunken panel inside the desk photo's inlay groove —
+/// see `SpatialDeskBackground` for how the image anchors to it. Desk
+/// mats / adornments design to exactly this box (canvas origin = the
+/// panel's top-left corner).
+const Size kCanvasScreenSize = Size(1823, 1264);
 
 /// Key on the grey "this card has hidden ink" pencil glyph (owner L10).
 /// Stable for tests.
