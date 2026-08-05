@@ -48,7 +48,9 @@ const double kTrayArrangeMargin = 20.0;
 /// How many most-recently-finished cards show in the right-side
 /// "recently completed" stack (owner request 2026-08-03). Older completions
 /// simply drop off the pile; the full history lives in the list view.
-const int kRecentCompletedCount = 10;
+/// Trimmed 10 → 8 (owner 2026-08-04 night): a 10-card fan down the right
+/// edge ran into the landing tray's corner.
+const int kRecentCompletedCount = 8;
 
 /// Top-left anchor of the recently-completed stack: upper-right of the
 /// desk, mirroring the landing tray's lower-right inbox — glanceable, out
@@ -227,9 +229,12 @@ class TaskSpatialDataSource extends SpatialDataSource {
       const margin = 40.0;
       final x = canvasSize.width - kCardSize.width - margin;
       final top = completedStackAnchor(canvasSize).dy;
-      final available = canvasSize.height - top - kCardSize.height - margin;
+      // The fan must stop short of the landing tray's corner (owner
+      // screenshot 2026-08-04 night: a 10-card fan ran straight into the
+      // inbox stack).
+      final bottomLimit = taskTrayAnchor(canvasSize).dy - kCardSize.height - 24;
       final n = _recentCompleted.length;
-      final spacing = n <= 1 ? 0.0 : math.min(kCardSize.height + 16.0, available / (n - 1));
+      final spacing = n <= 1 ? 0.0 : math.min(kCardSize.height + 16.0, (bottomLimit - top) / (n - 1));
       // _recentCompleted is oldest-first; the newest takes the top slot.
       for (var i = 0; i < n; i++) {
         _recentCompleted[i].position = Offset(x, top + spacing * (n - 1 - i));
@@ -244,10 +249,26 @@ class TaskSpatialDataSource extends SpatialDataSource {
 
   @override
   void onCanvasTapped(Offset position) {
-    // The done pile's outline box doubles as its control: a felt tap
-    // inside it fans/restacks. (Card taps never get here — entities win
-    // the hit test first.)
+    // Fanned: any felt tap collapses the fan back into its box. Stacked:
+    // the pile's outline box is the control that fans it out. (Taps ON
+    // cards never get here — entities win the hit test first; see
+    // [onEntityTapped] for the other half of tap-off-to-dismiss.)
+    if (_donePileFanned) {
+      toggleDonePileFanned();
+      return;
+    }
     if (_recentCompleted.isNotEmpty && donePileZoneRect(canvasSize).contains(position)) {
+      toggleDonePileFanned();
+    }
+  }
+
+  @override
+  void onEntityTapped(String id) {
+    // The other half of "any tap OFF the fanned cards dismisses them"
+    // (owner 2026-08-04 night): tapping some OTHER card or desk object
+    // collapses the fan too. Tapping a fanned card itself keeps the fan
+    // open — that's inspecting, not dismissing.
+    if (_donePileFanned && !_recentCompleted.any((e) => e.id == id)) {
       toggleDonePileFanned();
     }
   }
@@ -540,11 +561,21 @@ class TaskSpatialDataSource extends SpatialDataSource {
     // zIndex (-position, newest highest) about which card physically reads
     // as "on top" of the tray.
     unplaced.sort((a, b) => b.position.compareTo(a.position));
-    final anchor = taskTrayAnchor(canvasSize);
+    final base = _trayStackBase(unplaced.length);
     final step = taskTrayStackStep(unplaced.length);
     for (var i = 0; i < unplaced.length; i++) {
-      _tray.add(TaskSpatialEntity(task: unplaced[i], position: anchor + step * i.toDouble()));
+      _tray.add(TaskSpatialEntity(task: unplaced[i], position: base + step * i.toDouble()));
     }
+  }
+
+  /// Base (i = 0) position for a stacked tray of [count] cards: the whole
+  /// fan envelope — base card plus `step * (count - 1)` of drift — centered
+  /// on [taskTrayAnchor] (where a lone card sits centered in the outline).
+  /// Without this the visible top of a deep stack reads as shoved into the
+  /// box's bottom-right corner (owner screenshot 2026-08-04 night).
+  Offset _trayStackBase(int count) {
+    final extent = taskTrayStackStep(count) * math.max(0, count - 1).toDouble();
+    return taskTrayAnchor(canvasSize) - extent / 2;
   }
 
   /// Spread the tray into a grid (true) or restack it (false). Positions
@@ -586,10 +617,10 @@ class TaskSpatialDataSource extends SpatialDataSource {
   }
 
   void _positionTrayAsStack() {
-    final anchor = taskTrayAnchor(canvasSize);
+    final base = _trayStackBase(_tray.length);
     final step = taskTrayStackStep(_tray.length);
     for (var i = 0; i < _tray.length; i++) {
-      _tray[i].position = anchor + step * i.toDouble();
+      _tray[i].position = base + step * i.toDouble();
     }
   }
 

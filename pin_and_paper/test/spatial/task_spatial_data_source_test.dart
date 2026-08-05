@@ -1,4 +1,5 @@
 import 'dart:convert' show jsonEncode;
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart' show Color, Offset, Rect, Size;
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import 'package:pin_and_paper/spatial/dachshund_desk_entity.dart';
 import 'package:pin_and_paper/spatial/task_spatial_data_source.dart';
 import 'package:pin_and_paper/spatial/task_spatial_entity.dart';
 import 'package:pin_and_paper_canvas/spatial_canvas.dart' show DachshundStop;
+import 'package:pin_and_paper_card_renderer/card_renderer.dart' show kCardSize;
 import 'package:pin_and_paper_sketchpad/sketchpad.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -88,12 +90,18 @@ void main() {
       final byId = {for (final e in entities) e.id: e};
       final anchor = taskTrayAnchor(_kCanvasSize);
       const step = kTaskTrayBaseStep; // count (3) is well under the tighten threshold
+      // The fan ENVELOPE centers on the anchor (owner 2026-08-04 night):
+      // base card at anchor - extent/2, so the stack's visual middle sits
+      // where a lone card would.
+      final base = anchor - step * ((3 - 1) / 2);
 
-      // Oldest gets i=0 (no offset, sits at the anchor); each newer task
-      // steps further into the fan; newest gets the largest offset.
-      expect(byId[oldest.id]!.position, anchor);
-      expect(byId[middle.id]!.position, anchor + step * 1.0);
-      expect(byId[newest.id]!.position, anchor + step * 2.0);
+      // Oldest gets i=0 (the base slot); each newer task steps further
+      // into the fan; newest gets the largest offset.
+      expect(byId[oldest.id]!.position, base);
+      expect(byId[middle.id]!.position, base + step * 1.0);
+      expect(byId[newest.id]!.position, base + step * 2.0);
+      // Envelope midpoint = anchor.
+      expect((byId[oldest.id]!.position + byId[newest.id]!.position) / 2, anchor);
 
       // Newest-on-top: zIndex = -position, and newest has the most negative
       // position, so it also has the strictly highest zIndex -- "on top" in
@@ -237,11 +245,12 @@ void main() {
       }
       final entities = _cards(await buildDataSource());
 
-      expect(entities, hasLength(20)); // 10 tray + 10 pile
-      // Untightened base step: the furthest tray card sits at anchor+step*9.
+      expect(entities, hasLength(10 + kRecentCompletedCount)); // tray + capped pile
+      // Untightened base step, envelope centered on the anchor: base is
+      // anchor - step*4.5, so the furthest tray card sits at anchor+step*4.5.
       final anchor = taskTrayAnchor(_kCanvasSize);
       final positions = entities.map((e) => e.position).toSet();
-      expect(positions, contains(anchor + kTaskTrayBaseStep * 9.0));
+      expect(positions, contains(anchor + kTaskTrayBaseStep * 4.5));
     });
   });
 
@@ -333,8 +342,9 @@ void main() {
       dataSource.setTrayArranged(false);
       final restacked = {for (final e in _cards(dataSource)) e.id: e};
       final anchor = taskTrayAnchor(_kCanvasSize);
-      expect(restacked[oldest.id]!.position, anchor);
-      expect(restacked[newest.id]!.position, anchor + kTaskTrayBaseStep);
+      final base = anchor - kTaskTrayBaseStep * ((2 - 1) / 2);
+      expect(restacked[oldest.id]!.position, base);
+      expect(restacked[newest.id]!.position, base + kTaskTrayBaseStep);
     });
 
     test('arranged positions are in-memory only; dragging a grid card is what places it', () async {
@@ -658,7 +668,7 @@ void main() {
       }
     });
 
-    test('felt taps elsewhere do nothing, and an empty pile never toggles', () async {
+    test('felt taps elsewhere never FAN, and an empty pile never toggles', () async {
       final dataSource = await withCompleted(0);
       dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
       expect(dataSource.donePileFanned, isFalse);
@@ -666,6 +676,42 @@ void main() {
       final withCards = await withCompleted(2);
       withCards.onCanvasTapped(const Offset(10, 10));
       expect(withCards.donePileFanned, isFalse);
+    });
+
+    test('any tap OFF the fanned cards collapses; tapping a fanned card does not', () async {
+      final placed = await taskService.createTask('Live card');
+      await taskService.updateTaskCanvasPosition(placed.id, 400.0, 400.0);
+      final dataSource = await withCompleted(3);
+
+      // Felt tap far from the pile → collapse.
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      expect(dataSource.donePileFanned, isTrue);
+      dataSource.onCanvasTapped(const Offset(10, 10));
+      expect(dataSource.donePileFanned, isFalse);
+
+      // Tap on some OTHER entity → collapse.
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      expect(dataSource.donePileFanned, isTrue);
+      dataSource.onEntityTapped(placed.id);
+      expect(dataSource.donePileFanned, isFalse);
+
+      // Tap on a fanned card itself → stays open (inspecting, not
+      // dismissing).
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      dataSource.onEntityTapped(pile(dataSource).first.id);
+      expect(dataSource.donePileFanned, isTrue);
+    });
+
+    test('the fan stays clear of the landing tray corner', () async {
+      final dataSource = await withCompleted(kRecentCompletedCount);
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+
+      final lowest = pile(dataSource).map((c) => c.position.dy).reduce(math.max);
+      expect(
+        lowest + kCardSize.height,
+        lessThan(taskTrayAnchor(_kCanvasSize).dy),
+        reason: 'fanned cards must not run into the inbox stack (owner screenshot)',
+      );
     });
 
     test('dragging a fanned pile card snaps back to its fanned slot', () async {
