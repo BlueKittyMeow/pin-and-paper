@@ -384,7 +384,9 @@ void main() {
       await tester.tap(find.byKey(kDeskDrawerTabKey));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(deskDrawerTileKey(kDachshundDeskId)));
-      await tester.pump();
+      // Placement pans the canvas to him (place-back-at-last-spot + focus);
+      // let the animation land so the chips are on screen.
+      await tester.pumpAndSettle();
 
       // On the desk (selected on arrival — the put-away chip is showing),
       // and ghosted in the drawer.

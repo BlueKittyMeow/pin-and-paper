@@ -63,6 +63,9 @@ class _CanvasScreenState extends State<CanvasScreen> {
   @override
   void initState() {
     super.initState();
+    // Async-decodes the figurine's silhouette masks; until they land his
+    // hit target is the whole box (never untappable).
+    DachshundHitMask.ensureLoading();
     WidgetsBinding.instance.addPostFrameCallback((_) => _armSnapshot());
   }
 
@@ -176,6 +179,30 @@ class _CanvasScreenState extends State<CanvasScreen> {
                     // own grounding shadows (same suppression as the canvas
                     // example).
                     liftDecorationBuilder: (entity) => entity is DeskObjectEntity ? const BoxDecoration() : null,
+                    // Desk objects hit-test against their actual silhouette,
+                    // not their (mostly transparent) bounding box — a tap
+                    // just below the dog's nose reaches the card beneath
+                    // (owner report 2026-08-04). Selected objects get their
+                    // full box back: the resize/put-away chips live in the
+                    // transparent margin.
+                    entityHitTest: (entity, local, isSelected) {
+                      if (entity is! DeskObjectEntity || isSelected) return true;
+                      if (entity is DachshundDeskEntity) {
+                        return DachshundHitMask.contains(
+                          entity.stop,
+                          local.dx / entity.size.width,
+                          local.dy / entity.size.height,
+                        );
+                      }
+                      if (entity is AmethystDeskEntity) {
+                        return amethystChunkContainsPoint(
+                          size: entity.size,
+                          rotationY: entity.rotationY,
+                          point: local,
+                        );
+                      }
+                      return true;
+                    },
                   ),
                 ),
               ),
@@ -394,9 +421,11 @@ class _FlipModeButton extends StatelessWidget {
 /// perspective hard-constraint (DESK_OBJECTS.md) keeps UI over the desk
 /// perfectly flat whatever the desk plane ends up doing.
 ///
-/// Tap an available tile → it lands centered in the current view and gets
-/// selected. Tap a ghosted tile → the canvas pans to it (find-my-figurine).
-/// Putting an object away happens on the object itself (its put-away chip).
+/// Tap an available tile → it returns to wherever it last sat on the desk
+/// (its default spot if never placed; owner call 2026-08-04), gets
+/// selected, and the canvas pans to it. Tap a ghosted tile → the canvas
+/// pans to it (find-my-figurine). Putting an object away happens on the
+/// object itself (its put-away chip).
 class _DeskObjectDrawer extends StatelessWidget {
   const _DeskObjectDrawer({
     required this.dataSource,
@@ -427,8 +456,13 @@ class _DeskObjectDrawer extends StatelessWidget {
       right: 0,
       top: 0,
       bottom: 0,
-      child: Center(
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
+      // Near the top, not centered (owner call 2026-08-04) — hangs like a
+      // drawer pull just under the AppBar.
+      child: Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           _tab(),
           // ClipRect + AnimatedContainer: the panel slides out from the
           // edge without ever painting past its animating width.
@@ -440,12 +474,13 @@ class _DeskObjectDrawer extends StatelessWidget {
               child: OverflowBox(
                 minWidth: _panelWidth,
                 maxWidth: _panelWidth,
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.topLeft,
                 child: _panel(),
               ),
             ),
           ),
         ]),
+        ),
       ),
     );
   }
@@ -549,13 +584,13 @@ class _DeskObjectDrawer extends StatelessWidget {
       child: GestureDetector(
         key: deskDrawerTileKey(id),
         onTap: () {
-          if (placed) {
-            controller.focusOnEntity(id);
-            controller.selectEntity(id);
-          } else {
-            dataSource.placeDeskObject(id, viewCenter: controller.visibleRect.center);
-            controller.selectEntity(id);
+          if (!placed) {
+            // Back to wherever it last sat (or its default spot) — the
+            // focus pan below carries the eye to it.
+            dataSource.placeDeskObject(id);
           }
+          controller.focusOnEntity(id);
+          controller.selectEntity(id);
         },
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),

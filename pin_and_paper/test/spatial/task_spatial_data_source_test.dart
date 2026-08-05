@@ -553,6 +553,16 @@ void main() {
       expect(_stone(reopened).position, const Offset(50.0, 60.0));
     });
 
+    test('placing without a view center uses the retained/default spot', () async {
+      final dataSource = await buildDataSource();
+      dataSource.placeDeskObject(kDachshundDeskId);
+      // Default stagger spot right of the stone — NOT a view-center drop.
+      expect(
+        _dog(dataSource).position,
+        Offset((2000 - kDachshundDefaultSize.width) / 2 + 260, (1500 - kDachshundDefaultSize.height) / 2),
+      );
+    });
+
     test('crystal variants start in the drawer, place independently, and survive reopen', () async {
       final dataSource = await buildDataSource();
 
@@ -600,6 +610,74 @@ void main() {
       for (final card in _cards(dataSource)) {
         expect(stone.zIndex, greaterThan(card.zIndex));
       }
+    });
+  });
+
+  group('TaskSpatialDataSource — done-pile fan (owner request 2026-08-04)', () {
+    Future<TaskSpatialDataSource> withCompleted(int count) async {
+      for (var i = 0; i < count; i++) {
+        final t = await taskService.createTask('Done $i');
+        await taskService.toggleTaskCompletion(t);
+      }
+      return buildDataSource();
+    }
+
+    List<TaskSpatialEntity> pile(TaskSpatialDataSource ds) => ds
+        .getVisibleEntities(Rect.zero)
+        .whereType<TaskSpatialEntity>()
+        .where((e) => e.task.completed)
+        .toList();
+
+    test('a felt tap inside the done-pile zone fans the pile down the right edge', () async {
+      final dataSource = await withCompleted(4);
+      expect(dataSource.donePileFanned, isFalse);
+
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      expect(dataSource.donePileFanned, isTrue);
+
+      final cards = pile(dataSource);
+      // All at the same x, spread vertically, no two overlapping fully.
+      final xs = cards.map((c) => c.position.dx).toSet();
+      expect(xs, hasLength(1));
+      final ys = cards.map((c) => c.position.dy).toList()..sort();
+      for (var i = 1; i < ys.length; i++) {
+        expect(ys[i] - ys[i - 1], greaterThan(0));
+      }
+      // Newest completion (highest zIndex in the pile) takes the top slot.
+      final newest = cards.reduce((a, b) => a.zIndex >= b.zIndex ? a : b);
+      expect(newest.position.dy, ys.first);
+
+      // Tapping the zone again restacks at the anchor fan.
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      expect(dataSource.donePileFanned, isFalse);
+      final restacked = pile(dataSource);
+      for (var i = 0; i < restacked.length; i++) {
+        // Order within _recentCompleted isn't exposed; just verify all are
+        // back within the compact zone.
+        expect(donePileZoneRect(_kCanvasSize).inflate(120).contains(restacked[i].position), isTrue);
+      }
+    });
+
+    test('felt taps elsewhere do nothing, and an empty pile never toggles', () async {
+      final dataSource = await withCompleted(0);
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      expect(dataSource.donePileFanned, isFalse);
+
+      final withCards = await withCompleted(2);
+      withCards.onCanvasTapped(const Offset(10, 10));
+      expect(withCards.donePileFanned, isFalse);
+    });
+
+    test('dragging a fanned pile card snaps back to its fanned slot', () async {
+      final dataSource = await withCompleted(3);
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      final before = {for (final c in pile(dataSource)) c.id: c.position};
+
+      final victim = pile(dataSource).first;
+      dataSource.onEntityMoved(victim.id, const Offset(100, 100), 0);
+
+      final after = {for (final c in pile(dataSource)) c.id: c.position};
+      expect(after, before, reason: 'read-only pile re-lays out in its CURRENT mode');
     });
   });
 

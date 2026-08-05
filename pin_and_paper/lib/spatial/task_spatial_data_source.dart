@@ -55,6 +55,24 @@ const int kRecentCompletedCount = 10;
 /// of the way of live work.
 Offset completedStackAnchor(Size canvasSize) => Offset(canvasSize.width - 300, 80);
 
+/// Bounding-box furniture drawn around the done pile (owner request
+/// 2026-08-04), mirroring the landing tray's outline. Same footprint as
+/// [kTaskTrayZoneSize] so the two read as a matched set.
+const Size kDonePileZoneSize = Size(260, 200);
+
+/// The done pile's outline rect in canvas coordinates — the base card sits
+/// centered in it. Also the felt-tap target that fans the pile out along
+/// the right edge / restacks it ([TaskSpatialDataSource.onCanvasTapped]).
+Rect donePileZoneRect(Size canvasSize) {
+  final anchor = completedStackAnchor(canvasSize);
+  return Rect.fromLTWH(
+    anchor.dx - (kDonePileZoneSize.width - kCardSize.width) / 2,
+    anchor.dy - (kDonePileZoneSize.height - kCardSize.height) / 2,
+    kDonePileZoneSize.width,
+    kDonePileZoneSize.height,
+  );
+}
+
 /// How card faces are shown: per-card manual flips, or a temporary
 /// everyone-shows-this-face override for quick scanning (owner request
 /// 2026-08-03). Overrides are view-only — the per-card manual states are
@@ -183,6 +201,56 @@ class TaskSpatialDataSource extends SpatialDataSource {
   final Set<String> _placedDeskObjectIds = {kAmethystDeskId};
 
   bool _trayArranged = false;
+
+  bool _donePileFanned = false;
+
+  /// Whether the done pile is currently fanned down the right edge (true)
+  /// or stacked in its zone (false). Toggled by tapping the pile's outline
+  /// box on empty felt (see [onCanvasTapped]).
+  bool get donePileFanned => _donePileFanned;
+
+  /// Fans the done pile out along the desk's right edge so every recent
+  /// completion is visible at once, or restacks it (owner request
+  /// 2026-08-04). View-state only — nothing persists.
+  void toggleDonePileFanned() {
+    _donePileFanned = !_donePileFanned;
+    _positionDonePile();
+    notifyListeners();
+  }
+
+  /// Lays the done pile out per [_donePileFanned]: a cascade down the
+  /// right edge (newest at top, and — via its higher zIndexOverride — on
+  /// top of the card below it), or the compact anchor-fan.
+  void _positionDonePile() {
+    if (_recentCompleted.isEmpty) return;
+    if (_donePileFanned) {
+      const margin = 40.0;
+      final x = canvasSize.width - kCardSize.width - margin;
+      final top = completedStackAnchor(canvasSize).dy;
+      final available = canvasSize.height - top - kCardSize.height - margin;
+      final n = _recentCompleted.length;
+      final spacing = n <= 1 ? 0.0 : math.min(kCardSize.height + 16.0, available / (n - 1));
+      // _recentCompleted is oldest-first; the newest takes the top slot.
+      for (var i = 0; i < n; i++) {
+        _recentCompleted[i].position = Offset(x, top + spacing * (n - 1 - i));
+      }
+    } else {
+      for (var i = 0; i < _recentCompleted.length; i++) {
+        _recentCompleted[i].position =
+            completedStackAnchor(canvasSize) + kTaskTrayBaseStep * i.toDouble();
+      }
+    }
+  }
+
+  @override
+  void onCanvasTapped(Offset position) {
+    // The done pile's outline box doubles as its control: a felt tap
+    // inside it fans/restacks. (Card taps never get here — entities win
+    // the hit test first.)
+    if (_recentCompleted.isNotEmpty && donePileZoneRect(canvasSize).contains(position)) {
+      toggleDonePileFanned();
+    }
+  }
 
   /// Set by [dispose]; the async restore paths check it so a restore that
   /// lands after disposal (screen closed immediately, common in tests)
@@ -549,12 +617,10 @@ class TaskSpatialDataSource extends SpatialDataSource {
     }
     final stackIndex = _recentCompleted.indexWhere((e) => e.id == id);
     if (stackIndex >= 0) {
-      // The done pile is read-only: finished cards can't be placed. Re-fan
-      // the pile and notify — the dragged card snaps back — and persist
-      // nothing.
-      for (var i = 0; i < _recentCompleted.length; i++) {
-        _recentCompleted[i].position = completedStackAnchor(canvasSize) + kTaskTrayBaseStep * i.toDouble();
-      }
+      // The done pile is read-only: finished cards can't be placed. Re-lay
+      // the pile (respecting its current stacked/fanned mode) and notify —
+      // the dragged card snaps back — and persist nothing.
+      _positionDonePile();
       notifyListeners();
       return;
     }

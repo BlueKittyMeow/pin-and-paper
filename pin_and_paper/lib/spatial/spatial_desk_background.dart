@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:pin_and_paper_card_renderer/card_renderer.dart' show kCardSize;
 
-import 'task_spatial_data_source.dart' show kTaskTrayZoneSize, taskTrayAnchor;
+import 'task_spatial_data_source.dart'
+    show donePileZoneRect, kTaskTrayZoneSize, taskTrayAnchor;
 
 /// Amber gold used throughout the desk's dark-theme accent language.
 const Color _kAccentGold = Color(0xFFC4941A);
@@ -29,9 +31,14 @@ class SpatialDeskBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trayAnchor = taskTrayAnchor(canvasSize);
-    // A little padding around the anchor so the outline comfortably
-    // contains the stack's fan-out, not just the anchor point itself.
-    const trayPadding = EdgeInsets.only(left: 24, top: 34);
+    // Symmetric margins so the resting base card sits CENTERED in the
+    // outline (owner report 2026-08-04: the stack read as shoved into a
+    // corner of its box); the fan then grows down-right from center.
+    final trayPadding = EdgeInsets.only(
+      left: (kTaskTrayZoneSize.width - kCardSize.width) / 2,
+      top: (kTaskTrayZoneSize.height - kCardSize.height) / 2,
+    );
+    final doneRect = donePileZoneRect(canvasSize);
 
     return Stack(
       children: [
@@ -60,7 +67,31 @@ class SpatialDeskBackground extends StatelessWidget {
               padding: EdgeInsets.all(8),
               child: Align(
                 alignment: Alignment.topLeft,
-                child: _TrayLabel(),
+                child: _ZoneLabel('NEW'),
+              ),
+            ),
+          ),
+        ),
+        // Done-pile furniture, the tray's mirror twin (owner request
+        // 2026-08-04). The data source treats felt taps inside this rect
+        // as the fan/restack toggle — the visual affordance is this box +
+        // label; the hit-testing lives in TaskSpatialDataSource
+        // .onCanvasTapped, since the background itself is IgnorePointer'd.
+        Positioned(
+          left: doneRect.left,
+          top: doneRect.top,
+          width: doneRect.width,
+          height: doneRect.height,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: _kAccentGold.withAlpha(90), width: 1.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: _ZoneLabel('RECENTLY COMPLETED'),
               ),
             ),
           ),
@@ -70,13 +101,15 @@ class SpatialDeskBackground extends StatelessWidget {
   }
 }
 
-class _TrayLabel extends StatelessWidget {
-  const _TrayLabel();
+class _ZoneLabel extends StatelessWidget {
+  const _ZoneLabel(this.text);
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     return Text(
-      'NEW',
+      text,
       style: TextStyle(
         color: _kAccentGold.withAlpha(150),
         fontSize: 11,
