@@ -23,22 +23,23 @@ class TestDatabaseHelper {
   /// Get a fresh in-memory test database
   ///
   /// Creates a new database with the full schema (Phase 3.2).
-  /// Each call returns a new, isolated database with a unique path.
+  /// Each call returns a new, isolated database.
   ///
-  /// NOTE: Uses microsecond timestamps to ensure truly unique paths even
-  /// when tests run in parallel. This avoids race conditions from counter increments.
+  /// NOTE: sqflite_common_ffi treats a path as in-memory only when it is
+  /// EXACTLY [inMemoryDatabasePath] — the old `':memory:_test_$timestamp'`
+  /// suffix trick silently created real files (thousands of them) under
+  /// `.dart_tool/sqflite_common_ffi/databases/`. Every `:memory:` connection
+  /// is already its own private database, so isolation comes free;
+  /// `singleInstance: false` keeps the factory from handing tests a shared
+  /// cached instance for the identical path.
   static Future<Database> createTestDatabase() async {
-    // Use microsecond timestamp for truly unique database path
-    // This is more reliable than a counter when tests run in parallel
-    final timestamp = DateTime.now().microsecondsSinceEpoch;
-    final uniquePath = inMemoryDatabasePath + '_test_$timestamp';
-
     final db = await databaseFactory.openDatabase(
-      uniquePath,
+      inMemoryDatabasePath,
       options: OpenDatabaseOptions(
         version: AppConstants.databaseVersion,
         onCreate: _createTestDB,
         onConfigure: _onConfigure,
+        singleInstance: false,
       ),
     );
 
