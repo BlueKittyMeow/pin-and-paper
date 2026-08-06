@@ -255,7 +255,19 @@
 - **Description:** The onboarding quiz includes a question about subtask auto-completion behavior (always autocomplete children, never, or ask each time), but the answer is not currently tied to any app behavior. The quiz stores the answer and awards a badge, but no setting controls this feature yet. Need to add the actual autocomplete-children setting and wire it to task completion logic.
 - **Source:** Phase 3.9 manual testing (2026-01-29)
 
+### Desk 3D Era (2026-08-06)
+
+#### Swappable Desk Mats / Desk Pads
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** The modeled desk renders as separable layers, and mats are compositor-swappable: each mat is a pixel-aligned transparent PNG stacked over the desk image (proven: backend composite matches a joint render at 0.055/255 mean diff). First mat shipped: green felt with stitched leather border (`bundle_v1/mat_greenfelt.png`). App-side work: a mat asset registry keyed by variant, an Image layer over the desk positioned identically to it, and eventually a picker UI (settings or unlockables — owner's "change desk pads" pipeline). New variants cost one material block + one farm render, no desk re-render (see PIN_AND_PAPER_ASSET_HANDOFF.md in dev_harness).
+- **Source:** Desk 3D session (2026-08-06); owner: "setting the pipeline rough out for ability to change desk pads etc."
+
+#### Openable Desk Drawers (renders now exist)
+- **Priority:** LOW (endgame) | **Complexity:** HIGH
+- **Description:** The desk-objects drawer UI endgame — tap a drawer front on the modeled desk, it opens, tchotchkes live inside. The blocker used to be art; it no longer is: drawers are rigged objects with hollow interiors and `build_desk.py --open "L3=1.0,L2=0.5,R1=0.33"` renders any drawer at any pull fraction. A sprite-sequence or a small set of open states per drawer could drive the interaction. Shadow/lighting stays consistent (single-scene renders).
+- **Source:** DESK_3D_BRIEF payoff #2, made concrete 2026-08-06
+
 ---
 
-**Document Version:** 2.2
-**Updated:** 2026-01-29 (added autocomplete children gap)
+**Document Version:** 2.3
+**Updated:** 2026-08-06 (desk 3D era: swappable mats, openable drawers)
