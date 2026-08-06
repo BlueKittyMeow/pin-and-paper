@@ -36,7 +36,9 @@ const Key kDrawingEditorDoneKey = Key('drawing_editor.done');
 /// rejected (a resting palm or stray finger never inks), while stylus and
 /// mouse (Linux desktop has no stylus) always ink. A visible AppBar toggle
 /// allows finger inking; even then a second finger landing mid-stroke
-/// cancels it, so two-finger gestures never leave ink.
+/// cancels it, so two-finger gestures never leave ink — instead, 2+
+/// simultaneous touches drive pinch-to-zoom/pan on the drawing surface
+/// (owner 2026-08-06, see [_PinchZoomView]), in either touch-ink mode.
 ///
 /// Closing (AppBar done or system back) saves and pops with a bool
 /// "changed" result: true only when a row was actually written. A drawing
@@ -97,9 +99,19 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
   /// Owner L6 input policy: false = stylus-only (touch inking rejected).
   bool _allowTouchInking = false;
 
-  /// The touch pointer currently allowed to ink (finger mode only) — a
-  /// second concurrent touch cancels it so two-finger gestures never ink.
-  int? _activeTouchPointer;
+  /// Touch pointers currently down, any count. Distinguishes a lone
+  /// accidental touch (rejected per stylus-only policy, or inked in
+  /// finger mode) from a 2+-finger pinch/pan gesture (owner 2026-08-06:
+  /// always a zoom gesture, never inking, regardless of the touch-ink
+  /// toggle) — see [_handlePolicyPointerDown].
+  final Set<int> _activeTouchPointers = {};
+
+  /// Lets [_handlePolicyPointerDown] discard a wet stroke when a second
+  /// finger turns a would-be ink gesture into a pinch, without calling
+  /// `GestureBinding.cancelPointer` — a binding-level cancel would also
+  /// stop the [InteractiveViewer] zoom gesture from tracking that same
+  /// pointer (see [DrawingCanvasController]'s doc comment).
+  final DrawingCanvasController _canvasController = DrawingCanvasController();
 
   bool _closing = false;
 
@@ -127,37 +139,54 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
     _stack.size ??= _captureSize;
   }
 
+  @override
+  void dispose() {
+    _canvasController.dispose();
+    super.dispose();
+  }
+
   // -- Input policy (owner L6) -------------------------------------------
   //
   // The sketchpad module's DrawingCanvas accepts every pointer kind, and
   // this milestone consumes the module read-only — so policy is enforced
   // from outside: a wrapping Listener sees each pointer-down right after
-  // the canvas does, and kills disallowed pointers with
-  // GestureBinding.cancelPointer. The canvas's own onPointerCancel then
-  // discards the in-progress stroke (and ignores the pointer's remaining
-  // events), so a rejected touch never commits ink.
+  // the canvas does, and rejects disallowed touches by discarding any wet
+  // stroke via [_canvasController.cancelActiveStroke] — see that
+  // controller's doc comment for exactly what that does inside the
+  // canvas.
+  //
+  // Pinch-to-zoom rewrite (owner 2026-08-06): this USED to reject a touch
+  // with `GestureBinding.instance.cancelPointer`, which kills the pointer
+  // at the Flutter binding level — fine when touch could only ever mean
+  // "ink or not", but wrong now that a lone rejected finger might become
+  // the FIRST finger of a two-finger pinch a moment later: cancelling it
+  // immediately (before the second finger even arrives) permanently drops
+  // it from _PinchZoomView's scale-gesture tracking, so the pinch could
+  // never register any scale at all — caught by this screen's own pinch
+  // test failing outright (scale stuck at 1.0) after the naive port of
+  // the old single-finger-only cancelPointer logic. Rejecting through
+  // _canvasController instead only touches the sketchpad's own
+  // in-progress-stroke state; the raw pointer is never cancelled, so it
+  // stays available if a second finger turns the gesture into a pinch.
 
   static bool _isTouch(PointerDeviceKind kind) => kind == PointerDeviceKind.touch;
 
   void _handlePolicyPointerDown(PointerDownEvent event) {
     if (!_isTouch(event.kind)) return; // stylus + mouse always ink
-    if (!_allowTouchInking) {
-      GestureBinding.instance.cancelPointer(event.pointer);
-      return;
+    _activeTouchPointers.add(event.pointer);
+
+    final isMultiFinger = _activeTouchPointers.length >= 2;
+    // Reject ink when: 2+ fingers are down (always a pinch/pan gesture,
+    // never ink, in EITHER touch-ink mode), OR it's a lone finger and
+    // stylus-only mode is active. A lone finger in finger-mode is left
+    // alone — it inks normally.
+    if (isMultiFinger || !_allowTouchInking) {
+      _canvasController.cancelActiveStroke();
     }
-    if (_activeTouchPointer != null) {
-      // Second finger mid-stroke: this is a gesture, not ink. Cancel both
-      // pointers — the canvas discards the wet stroke.
-      GestureBinding.instance.cancelPointer(_activeTouchPointer!);
-      GestureBinding.instance.cancelPointer(event.pointer);
-      _activeTouchPointer = null;
-      return;
-    }
-    _activeTouchPointer = event.pointer;
   }
 
   void _handlePolicyPointerEnd(int pointer) {
-    if (pointer == _activeTouchPointer) _activeTouchPointer = null;
+    _activeTouchPointers.remove(pointer);
   }
 
   // -- Save-on-close ------------------------------------------------------
@@ -241,6 +270,7 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
               strokeOptions: _currentOptions,
               isEraserActive: _eraserActive,
               onStrokeComplete: () => setState(() {}),
+              controller: _canvasController,
             ),
           ),
         ],
@@ -294,11 +324,28 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
                       // FittedBox maps the fixed capture space onto the
                       // letterboxed display box; pointer positions arrive
                       // in capture coordinates automatically, so stroke
-                      // JSON is display-scale-independent.
+                      // JSON is display-scale-independent. _PinchZoomView
+                      // wraps that mapped box for pinch-to-zoom (owner
+                      // 2026-08-06): it doesn't change the child's layout
+                      // constraints, only its paint-time transform, so the
+                      // capture space and stroke coordinates above are
+                      // completely unaffected by the current zoom level —
+                      // canvas-style zoom, not a data transform. It's
+                      // gated to 2+ finger gestures only, so single-finger
+                      // drags stay free for drawing/the touch-ink policy,
+                      // and the focal point (hence pan) follows the
+                      // fingers naturally while pinching — see
+                      // _PinchZoomView's doc comment for why this is a
+                      // small hand-rolled widget instead of Flutter's
+                      // InteractiveViewer.
                       child: SizedBox(
                         width: display.width,
                         height: display.height,
-                        child: FittedBox(fit: BoxFit.fill, child: _buildSurface()),
+                        child: _PinchZoomView(
+                          minScale: 1.0,
+                          maxScale: 5.0,
+                          child: FittedBox(fit: BoxFit.fill, child: _buildSurface()),
+                        ),
                       ),
                     );
                   },
@@ -340,5 +387,111 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
         ),
       ),
     );
+  }
+}
+
+/// Minimal two-finger pinch-to-zoom/pan wrapper (owner request, 2026-08-06:
+/// "pinch-to-zoom inside the drawing widget while editing... pan should
+/// come along naturally if the gesture system allows").
+///
+/// Deliberately NOT Flutter's built-in [InteractiveViewer]. That widget
+/// needs `panEnabled: false` here (a single finger must stay free for
+/// drawing/ink — see [_DrawingEditorScreenState._handlePolicyPointerDown]),
+/// and with `panEnabled: false` it has a reproducible framework bug: the
+/// very first update of a two-finger gesture can throw `Failed assertion:
+/// 'scale != 0.0'` inside `_InteractiveViewerState._matrixScale`
+/// (flutter/packages/flutter/lib/src/widgets/interactive_viewer.dart,
+/// stable 3.35.7) — not a theoretical edge case, this screen's own
+/// existing two-finger test ("finger mode inks with touch, but a second
+/// finger cancels the stroke") hits it every run once InteractiveViewer is
+/// introduced. Rather than ship a widget that crashes on the exact gesture
+/// this feature exists for, this reimplements just the slice needed here:
+/// a uniform scale + translation, driven by [GestureDetector]'s scale
+/// gesture but gated strictly to `details.pointerCount >= 2`, so a lone
+/// finger is never touched by it and single-finger drawing/ink is
+/// completely unaffected.
+class _PinchZoomView extends StatefulWidget {
+  const _PinchZoomView({
+    required this.child,
+    this.minScale = 1.0,
+    this.maxScale = 5.0,
+  });
+
+  final Widget child;
+  final double minScale;
+  final double maxScale;
+
+  @override
+  State<_PinchZoomView> createState() => _PinchZoomViewState();
+}
+
+class _PinchZoomViewState extends State<_PinchZoomView> {
+  double _scale = 1.0;
+  Offset _translation = Offset.zero;
+
+  /// Captured at gesture start: the view scale to multiply
+  /// `details.scale` against (scale gestures report cumulative change
+  /// from gesture start, not frame-to-frame).
+  double _gestureStartScale = 1.0;
+
+  /// The content-space point under the fingers when the gesture started.
+  /// Recomputing the translation to keep this point under the current
+  /// focal point every update is what makes the zoom center on the
+  /// fingers and pan "come along naturally" as they drag.
+  Offset _gestureContentFocalPoint = Offset.zero;
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _gestureStartScale = _scale;
+    _gestureContentFocalPoint =
+        (details.localFocalPoint - _translation) / _scale;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details, Size viewport) {
+    // A lone finger never zooms/pans here — reserved for drawing/ink,
+    // the equivalent of InteractiveViewer's panEnabled: false.
+    if (details.pointerCount < 2) return;
+    // Guards the exact degenerate span InteractiveViewer's assertion
+    // crashes on (see class doc comment) — skip rather than apply a
+    // zero/negative scale for this one frame.
+    if (details.scale <= 0) return;
+
+    final newScale = (_gestureStartScale * details.scale)
+        .clamp(widget.minScale, widget.maxScale);
+    final rawTranslation =
+        details.localFocalPoint - _gestureContentFocalPoint * newScale;
+
+    setState(() {
+      _scale = newScale;
+      _translation = _clampTranslation(rawTranslation, newScale, viewport);
+    });
+  }
+
+  /// Keeps the content from being pinch-panned entirely out of view.
+  /// [minScale] >= 1.0 is assumed (content is always >= viewport size),
+  /// so there's always a valid (non-inverted) clamp range.
+  Offset _clampTranslation(Offset t, double scale, Size viewport) {
+    const margin = 64.0;
+    final minDx = viewport.width - viewport.width * scale - margin;
+    final minDy = viewport.height - viewport.height * scale - margin;
+    return Offset(t.dx.clamp(minDx, margin), t.dy.clamp(minDy, margin));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final viewport = constraints.biggest;
+      return GestureDetector(
+        onScaleStart: _onScaleStart,
+        onScaleUpdate: (details) => _onScaleUpdate(details, viewport),
+        child: ClipRect(
+          child: Transform(
+            transform: Matrix4.identity()
+              ..translateByDouble(_translation.dx, _translation.dy, 0, 1)
+              ..scaleByDouble(_scale, _scale, _scale, 1),
+            child: widget.child,
+          ),
+        ),
+      );
+    });
   }
 }

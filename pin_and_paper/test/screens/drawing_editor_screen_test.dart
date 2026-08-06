@@ -340,4 +340,77 @@ void main() {
       expect(strokeCount(tester), 1, reason: 'The two-finger gesture left no ink');
     });
   });
+
+  group('pinch-to-zoom (owner 2026-08-06)', () {
+    /// The largest scale factor among every `Transform` under the editor.
+    /// `_PinchZoomView`'s Transform is the only one expected to move
+    /// meaningfully away from 1.0 in these tests.
+    double maxTransformScale(WidgetTester tester) {
+      var best = 1.0;
+      for (final t in tester.widgetList<Transform>(find.descendant(
+        of: find.byType(DrawingEditorScreen),
+        matching: find.byType(Transform),
+      ))) {
+        final s = t.transform.getMaxScaleOnAxis();
+        if (s > best) best = s;
+      }
+      return best;
+    }
+
+    testWidgets('a two-finger pinch zooms the drawing surface, even in the '
+        'default stylus-only mode', (tester) async {
+      final task = await createTask(tester, 'Pinch card');
+      await pushEditor(tester, taskId: task.id, onResult: (_) {});
+
+      expect(maxTransformScale(tester), closeTo(1.0, 0.001));
+
+      final center = tester.getCenter(find.byType(DrawingCanvas));
+      final finger1 = await tester.createGesture(kind: PointerDeviceKind.touch);
+      await finger1.down(center - const Offset(20, 0));
+      await tester.pump();
+      final finger2 = await tester.createGesture(kind: PointerDeviceKind.touch);
+      await finger2.down(center + const Offset(20, 0));
+      await tester.pump();
+
+      // Pinch OUT — fingers spread apart, should zoom in.
+      await finger1.moveBy(const Offset(-40, 0));
+      await finger2.moveBy(const Offset(40, 0));
+      await tester.pump();
+
+      expect(maxTransformScale(tester), greaterThan(1.5));
+
+      await finger1.up();
+      await finger2.up();
+      await tester.pump();
+
+      // The pinch itself never left ink.
+      expect(strokeCount(tester), 0);
+    });
+
+    testWidgets('a single finger never zooms, even mid-drag', (tester) async {
+      final task = await createTask(tester, 'No zoom card');
+      await pushEditor(tester, taskId: task.id, onResult: (_) {});
+
+      final center = tester.getCenter(find.byType(DrawingCanvas));
+      final touch = await tester.createGesture(kind: PointerDeviceKind.touch);
+      await touch.down(center);
+      await touch.moveBy(const Offset(40, 40));
+      await tester.pump();
+
+      expect(maxTransformScale(tester), closeTo(1.0, 0.001));
+
+      await touch.up();
+      await tester.pump();
+    });
+
+    testWidgets('a stylus stroke still inks normally with the pinch-zoom '
+        'wrapper in place', (tester) async {
+      final task = await createTask(tester, 'Still inks card');
+      await pushEditor(tester, taskId: task.id, onResult: (_) {});
+
+      await drawStroke(tester, PointerDeviceKind.stylus);
+      expect(strokeCount(tester), 1);
+      expect(maxTransformScale(tester), closeTo(1.0, 0.001));
+    });
+  });
 }
