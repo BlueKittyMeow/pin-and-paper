@@ -715,6 +715,57 @@ void main() {
       );
     });
 
+    test(
+      'fanned cards never overlap enough to cover the title strip, even on a cramped canvas '
+      '(owner report 2026-08-06, phone APK)',
+      () async {
+        // Mirrors the app's real desk-panel canvas (CanvasScreen's
+        // kCanvasScreenSize) rather than this file's generous _kCanvasSize
+        // fixture above -- naive `availableHeight / (n - 1)` spacing at
+        // THAT size, with a full pile, squeezes to ~123px against a 140px
+        // card height (see the fix's doc comment on _positionDonePile for
+        // the numbers), which this file's own larger fixture never
+        // exercised.
+        const crampedCanvas = Size(1823, 1323);
+        for (var i = 0; i < kRecentCompletedCount; i++) {
+          final t = await taskService.createTask('Done $i');
+          await taskService.toggleTaskCompletion(t);
+        }
+        final tasks = await taskService.getAllTasks();
+        final dataSource =
+            TaskSpatialDataSource(tasks: tasks, taskService: taskService, canvasSize: crampedCanvas);
+        await dataSource.initialized;
+
+        dataSource.onCanvasTapped(donePileZoneRect(crampedCanvas).center);
+        expect(dataSource.donePileFanned, isTrue);
+
+        final cards = dataSource
+            .getVisibleEntities(Rect.zero)
+            .whereType<TaskSpatialEntity>()
+            .where((e) => e.task.completed)
+            .toList();
+        expect(cards, hasLength(kRecentCompletedCount));
+
+        // Group by column (x): within a column, consecutive (by y) cards
+        // must be spaced a full card height apart -- anything tighter
+        // means the card above shingles over the title of the card below.
+        final byColumn = <double, List<double>>{};
+        for (final c in cards) {
+          byColumn.putIfAbsent(c.position.dx, () => []).add(c.position.dy);
+        }
+        for (final ys in byColumn.values) {
+          ys.sort();
+          for (var i = 1; i < ys.length; i++) {
+            expect(
+              ys[i] - ys[i - 1],
+              greaterThanOrEqualTo(kCardSize.height),
+              reason: 'a title-covering overlap regressed for a cramped canvas',
+            );
+          }
+        }
+      },
+    );
+
     test('dragging a fanned pile card snaps back to its fanned slot', () async {
       final dataSource = await withCompleted(3);
       dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);

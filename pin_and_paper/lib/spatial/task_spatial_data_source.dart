@@ -234,10 +234,36 @@ class TaskSpatialDataSource extends SpatialDataSource {
       // inbox stack).
       final bottomLimit = taskTrayAnchor(canvasSize).dy - kCardSize.height - 24;
       final n = _recentCompleted.length;
-      final spacing = n <= 1 ? 0.0 : math.min(kCardSize.height + 16.0, (bottomLimit - top) / (n - 1));
-      // _recentCompleted is oldest-first; the newest takes the top slot.
+      final availableHeight = math.max(0.0, bottomLimit - top);
+      // Floor of kCardSize.height (never overlap at all), capped above by
+      // the old "don't spread wastefully thin" ceiling. Below the floor,
+      // the card above starts shingling over the TOP of the card below —
+      // exactly where its accent bar and title sit — not just its
+      // tags/date footer (owner report 2026-08-06, phone APK: at the app's
+      // real desk-panel canvas size a full kRecentCompletedCount pile
+      // squeezed naive `availableHeight / (n - 1)` spacing to ~123px,
+      // 17px short of a card's 140px height, clipping the title of every
+      // card but the topmost). This didn't show up against this file's own
+      // unit tests' more generous canvas fixture — see
+      // task_spatial_data_source_test.dart's cramped-canvas regression
+      // case, added alongside this fix.
+      final spacing = n <= 1
+          ? 0.0
+          : math.max(kCardSize.height, math.min(kCardSize.height + 16.0, availableHeight / (n - 1)));
+      // How many cards one column holds at that floor before running past
+      // the tray corner; the rest wrap into a second column just to the
+      // left rather than crowd — the same "add a column instead of
+      // shrinking" escape valve the landing tray's arrange grid uses for a
+      // deep inbox ([_positionTrayAsGrid]'s `layer`).
+      final perColumn = spacing <= 0 ? n : math.max(1, (availableHeight / spacing).floor() + 1);
+      // _recentCompleted is oldest-first; the newest takes the top slot of
+      // the first column.
       for (var i = 0; i < n; i++) {
-        _recentCompleted[i].position = Offset(x, top + spacing * (n - 1 - i));
+        final fanIndex = n - 1 - i;
+        final column = fanIndex ~/ perColumn;
+        final slot = fanIndex % perColumn;
+        _recentCompleted[i].position =
+            Offset(x - (kCardSize.width + 16.0) * column, top + spacing * slot);
       }
     } else {
       for (var i = 0; i < _recentCompleted.length; i++) {
