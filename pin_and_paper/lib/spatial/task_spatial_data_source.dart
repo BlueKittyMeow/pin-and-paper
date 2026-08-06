@@ -134,6 +134,15 @@ Offset taskTrayStackStep(int unplacedCount) {
 /// logged, not surfaced — a failed persist just means the position doesn't
 /// survive restart, not a crash). Desk objects persist via the
 /// desk_objects table ([DeskObjectService]) instead — decor, not tasks.
+///
+/// The constructor's [Task] snapshot can be stale for canvas_x/canvas_y —
+/// its caller (`CanvasScreen`) hands over `TaskProvider.tasks`, and nothing
+/// patches that cache after a drag persists (unlike e.g. `updateTaskTitle`,
+/// which does patch it). [_restoreCanvasPositions] re-reads positions
+/// straight from SQLite after [_layout] runs and reconciles, the same
+/// "don't trust the snapshot, re-read the table" pattern
+/// [_restoreDeskObjects] already used for desk objects — see that method's
+/// doc comment for the full bug story (owner report 2026-08-05).
 class TaskSpatialDataSource extends SpatialDataSource {
   TaskSpatialDataSource({
     required List<Task> tasks,
@@ -173,7 +182,7 @@ class TaskSpatialDataSource extends SpatialDataSource {
         ),
       ) {
     _layout(tasks);
-    initialized = Future.wait([_restoreDeskObjects(), _loadDrawings()]);
+    initialized = Future.wait([_restoreDeskObjects(), _loadDrawings(), _restoreCanvasPositions()]);
   }
 
   final TaskService _taskService;
@@ -315,8 +324,11 @@ class TaskSpatialDataSource extends SpatialDataSource {
   bool get trayArranged => _trayArranged;
 
   /// Completes when the amethyst's persisted position/size (if any) has
-  /// been applied. Awaited by tests; the app lets it land whenever it lands
-  /// (a frame or two after first paint, via notifyListeners).
+  /// been applied, drawings have loaded, AND fresh canvas_x/canvas_y have
+  /// been re-read from SQLite for every placed/tray card ([_restoreCanvasPositions] —
+  /// the fix for the stale-snapshot "cards don't come back" bug, see that
+  /// method's doc comment). Awaited by tests; the app lets it land whenever
+  /// it lands (a frame or two after first paint, via notifyListeners).
   late final Future<void> initialized;
 
   /// Ids currently showing their `TaskCardBack` face. View-state, not task
@@ -701,6 +713,90 @@ class TaskSpatialDataSource extends SpatialDataSource {
       await _taskService.updateTaskCanvasPosition(id, position.dx, position.dy);
     } catch (e) {
       debugPrint('TaskSpatialDataSource: failed to persist position for $id: $e');
+    }
+  }
+
+  /// Owner bug report 2026-08-05 (phone APK): Spatial View → task list →
+  /// back to Spatial View kept desk-object positions but lost card
+  /// positions. Root cause was upstream of this class: [_layout] trusts the
+  /// [Task] snapshot handed to the constructor (per its doc comment, "a
+  /// one-time [Task] snapshot"), and that snapshot is `CanvasScreen`'s copy
+  /// of `TaskProvider.tasks` — a cache [_persist] above has no handle on and
+  /// never touches. `updateTaskTitle`/`updateTask` patch that cache's Task
+  /// in place after their write; the canvas position write path never did,
+  /// so TaskProvider kept serving the pre-drag (often still-`null`)
+  /// canvas_x/canvas_y for that task on every subsequent screen build until
+  /// something else forced a full `loadTasks()` (e.g. an app restart) — at
+  /// which point [_layout] re-buckets the card into the tray as "unplaced",
+  /// exactly the "lost" position the owner saw.
+  ///
+  /// Desk objects never had this failure mode because [_restoreDeskObjects]
+  /// never trusts a snapshot at all: it re-reads the desk_objects table
+  /// itself on every construction, straight from [_deskObjectService],
+  /// independent of whatever `CanvasScreen`/`TaskProvider` passed in. This
+  /// mirrors that pattern for cards instead of trying to keep
+  /// `TaskProvider`'s cache honest (which `TaskSpatialDataSource` has no
+  /// reference to, and per `task_spatial_entity.dart`'s doc comment,
+  /// deliberately never mutates the wrapped [Task] anyway): re-read every
+  /// task's canvas_x/canvas_y straight from SQLite via [_taskService] after
+  /// [_layout] has already run against the (possibly stale) snapshot, and
+  /// reconcile —
+  /// - A [_placed] entity's position is refreshed to whatever the DB says
+  ///   now, in case it drifted between the snapshot and this read landing.
+  /// - A [_tray] entity that the fresh DB row shows a real position for was
+  ///   only in the tray because the stale snapshot showed it unplaced; it
+  ///   graduates to [_placed] at that position, and the remaining tray is
+  ///   re-stacked (grid or stack, whichever mode is current) so it doesn't
+  ///   leave a hole where the graduated card sat.
+  /// Completed tasks are left alone entirely — the done pile's "never mixes
+  /// with live work" invariant (see class doc) isn't this method's call to
+  /// revisit, and a completed task can't reach here anyway ([_layout] never
+  /// puts one in [_placed] or [_tray]).
+  Future<void> _restoreCanvasPositions() async {
+    try {
+      final rows = await _taskService.getAllTasks();
+      final byId = {for (final row in rows) row.id: row};
+      var changed = false;
+
+      for (final entity in _placed) {
+        final fresh = byId[entity.id];
+        final x = fresh?.canvasX;
+        final y = fresh?.canvasY;
+        if (fresh == null || fresh.completed || x == null || y == null) continue;
+        final restored = Offset(x, y);
+        if (entity.position != restored) {
+          entity.position = restored;
+          changed = true;
+        }
+      }
+
+      final graduated = <TaskSpatialEntity>[];
+      for (final entity in _tray) {
+        final fresh = byId[entity.id];
+        final x = fresh?.canvasX;
+        final y = fresh?.canvasY;
+        if (fresh == null || fresh.completed || x == null || y == null) continue;
+        entity.position = Offset(x, y);
+        graduated.add(entity);
+      }
+      if (graduated.isNotEmpty) {
+        _tray.removeWhere(graduated.contains);
+        _placed.addAll(graduated);
+        // Re-lay the remaining tray in whatever mode it's currently in, so
+        // the departed card(s) don't leave a gap in the stack/grid.
+        if (_trayArranged) {
+          _positionTrayAsGrid();
+        } else {
+          _positionTrayAsStack();
+        }
+        changed = true;
+      }
+
+      if (changed && !_disposed) notifyListeners();
+    } catch (e) {
+      // Same contract as the desk-objects/drawings restores: a failed read
+      // means the snapshot's (possibly stale) positions stand, not a crash.
+      debugPrint('TaskSpatialDataSource: canvas position restore skipped: $e');
     }
   }
 

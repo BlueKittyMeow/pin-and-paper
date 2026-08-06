@@ -838,6 +838,51 @@ void main() {
       expect(stillInTray.single.id, oldest.id);
       expect(stillInTray.single.position, taskTrayAnchor(_kCanvasSize)); // now the sole (and top) tray card
     });
+
+    test(
+      'a card placed via drag-end survives reopen even from a STALE Task snapshot '
+      '(owner report 2026-08-05, phone APK: cards lost position on Spatial View -> '
+      'task list -> Spatial View, while desk objects survived)',
+      () async {
+        // CanvasScreen builds TaskSpatialDataSource from `TaskProvider.tasks`
+        // -- a cache nothing patches after onEntityMoved's fire-and-forget
+        // persist. Reproduce that exactly: hold on to the pre-drag (unplaced,
+        // canvasX/Y == null) Task snapshot and keep reusing THAT stale
+        // object across "reopens" instead of ever re-querying the service
+        // for a fresh one, same as a TaskProvider that never calls
+        // loadTasks() again after the drag.
+        final stale = await taskService.createTask('Dragged then reopened');
+        expect(stale.canvasX, isNull);
+        expect(stale.canvasY, isNull);
+
+        final firstOpen = TaskSpatialDataSource(
+          tasks: [stale],
+          taskService: taskService,
+          canvasSize: _kCanvasSize,
+        );
+        await firstOpen.initialized;
+        expect(_cards(firstOpen).single.position, taskTrayAnchor(_kCanvasSize)); // starts in the tray
+
+        firstOpen.onEntityMoved(stale.id, const Offset(650.0, 500.0), 0);
+        await _waitForCanvasPosition(taskService, stale.id, const Offset(650.0, 500.0));
+        firstOpen.dispose();
+
+        // "Reopen" the Spatial View using the SAME stale, still-unplaced
+        // Task object -- this is the bug repro: without a self-healing
+        // restore, _layout buckets it right back into the tray because the
+        // snapshot it's handed still shows canvasX/canvasY == null.
+        final secondOpen = TaskSpatialDataSource(
+          tasks: [stale],
+          taskService: taskService,
+          canvasSize: _kCanvasSize,
+        );
+        await secondOpen.initialized;
+
+        final entity = _cards(secondOpen).single;
+        expect(entity.position, const Offset(650.0, 500.0),
+            reason: 'canvas position must be re-read from SQLite, not trusted from the stale snapshot');
+      },
+    );
   });
 
   group('TaskSpatialDataSource flip state (M3/M4 addendum item 1)', () {
