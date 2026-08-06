@@ -64,7 +64,7 @@
   - **Stroke size control for every implement**: adjustable size plus a "reset to tool default" affordance.
   - **Pinch-to-zoom inside the drawing widget** (canvas-style zoom while editing).
   - **Layer chip + eye unification:** layer visibility toggle should sit adjacent to its go-to-layer chip — eyeball next to "sketch"; tapping "sketch" switches to that layer, tapping its eyeball toggles visibility. Add a grouping element (light-opacity ring or similar) binding each layer chip to its own eyeball so ownership is obvious.
-  - **Layer blend-mode option:** choice between draw/ink layers blending additively with the paper AND each other (current behavior) vs blending with the paper but NOT with each other — enables touch-ups that color-match across layers in edge cases the current compositing fights.
+  - **Layer blend mode:** ~~choice between~~ owner decision 2026-08-06: NO option/toggle — switch to a single unified blend mode where draw/ink layers each blend with the paper behind but NOT with each other (replaces the additive-between-layers behavior). Enables touch-ups that color-match across layers in edge cases the additive compositing fights.
   - **Consider (stretch):** further stroke refinement; color picker.
 - **Source:** Owner request (2026-08-05, first full-suite mobile session)
 
