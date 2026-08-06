@@ -213,6 +213,40 @@ class TaskSpatialDataSource extends SpatialDataSource {
 
   bool _trayArranged = false;
 
+  // -- Tag-tap spotlight (owner idea 2026-08-06, tentative -- first-pass for
+  // device feel-testing) --------------------------------------------------
+
+  /// The tag currently spotlit, or null when nothing is. View-state only --
+  /// deliberately never persisted (a fresh Spatial View open always starts
+  /// un-spotlit, per the owner's design note) and never written anywhere
+  /// but here. Identified by tag id (matches [TagChip.id]/the main app's
+  /// `Tag.id`), the same identity `TaskCardAdapter` already uses when it
+  /// maps a `Tag` to a `TagChip` -- not by name, which isn't guaranteed
+  /// unique.
+  String? _spotlitTag;
+
+  /// See [_spotlitTag]. `CanvasScreen` reads this (via the data source it
+  /// already listens to) to decide which desk cards ghost.
+  String? get spotlitTag => _spotlitTag;
+
+  /// Tag-chip tap handler: spotlighting is a toggle on the tapped tag, not
+  /// a stack -- tapping the ALREADY-spotlit tag clears it (owner spec:
+  /// "tapping the same tag again clears the spotlight"), tapping any other
+  /// tag switches straight to it (no need to clear first).
+  void spotlightTag(String tagId) {
+    _spotlitTag = _spotlitTag == tagId ? null : tagId;
+    notifyListeners();
+  }
+
+  /// Clears the spotlight, if any -- fired by a tap on empty felt (owner
+  /// spec), alongside [onCanvasTapped]'s existing done-pile-fan collapse.
+  /// No-op (no spurious notify) when nothing is spotlit.
+  void clearSpotlight() {
+    if (_spotlitTag == null) return;
+    _spotlitTag = null;
+    notifyListeners();
+  }
+
   bool _donePileFanned = false;
 
   /// Whether the done pile is currently fanned down the right edge (true)
@@ -315,6 +349,11 @@ class TaskSpatialDataSource extends SpatialDataSource {
 
   @override
   void onCanvasTapped(Offset position) {
+    // Tag-tap spotlight (owner idea 2026-08-06): any felt tap clears it,
+    // same "tap off to dismiss" shape as the done-pile fan below. Runs
+    // first and unconditionally -- it's independent of the fan/pile
+    // handling that follows, so both can react to the same tap.
+    clearSpotlight();
     // Fanned: any felt tap collapses the fan back into its box. Stacked:
     // the pile's outline box is the control that fans it out. (Taps ON
     // cards never get here — entities win the hit test first; see

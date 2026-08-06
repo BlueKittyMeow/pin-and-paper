@@ -40,6 +40,22 @@ const Key kDeskDrawerTabKey = Key('canvas_screen.desk_drawer_tab');
 /// Key for a desk-objects drawer tile. Stable for tests.
 Key deskDrawerTileKey(String id) => Key('canvas_screen.desk_drawer_tile.$id');
 
+/// Opacity a desk card fades to when a tag is spotlit and it doesn't carry
+/// that tag (owner idea 2026-08-06, tentative "tag-tap spotlight" first
+/// pass for device feel-testing). 0.3 sits in the owner's requested
+/// "clearly dimmed but still readable/locatable" ~0.25-0.35 band: dim
+/// enough that the spotlit cards visually pop against the rest of the desk,
+/// but a ghosted card's title/tags/position stay legible at a glance --
+/// this is a spotlight, not a filter, so nothing should become hard to find
+/// or identify, just visually de-emphasized.
+const double kSpotlightGhostOpacity = 0.3;
+
+/// How long a card takes to fade in/out of ghost. Long enough to read as an
+/// intentional sweep of the desk rather than a flicker, short enough to
+/// feel responsive to the tap that caused it (owner idea 2026-08-06,
+/// tentative first pass).
+const Duration kSpotlightFadeDuration = Duration(milliseconds: 200);
+
 /// The "Spatial View": real tasks as draggable index cards on a pannable,
 /// zoomable desk (DRAG_DROP_CANVAS_MVP_PLAN.md Milestone 4).
 ///
@@ -307,59 +323,96 @@ class _CanvasScreenState extends State<CanvasScreen> {
       isSelected: isSelected,
       frontOverlay: overlayFor(TaskDrawing.faceFront),
       backOverlay: overlayFor(TaskDrawing.faceBack),
+      // Tag-tap spotlight (owner idea 2026-08-06, tentative): any tag chip
+      // on any card can drive the spotlight, including done-pile cards --
+      // spotlighting is a global desk state, not something scoped to
+      // where the tap happened.
+      onTagTap: dataSource.spotlightTag,
     );
 
     final hasHidden = dataSource.hasHiddenDrawing(id);
-    if (!isSelected && !hasHidden) return card;
-
-    // Chips act on the face currently showing: draw on (or show/hide) the
-    // front normally, the back when the card is flipped (owner L1).
-    final face = showBack ? TaskDrawing.faceBack : TaskDrawing.faceFront;
-    final hasDrawing = dataSource.drawingJsonFor(id, face: face) != null;
-    final drawingVisible = dataSource.isDrawingVisible(id, face: face);
-    return Stack(children: [
-      Positioned.fill(child: card),
-      // Owner L10 tell: hidden ink gets a small grey pencil glyph.
-      // Bottom-right corner — the chips live top-right, the due date
-      // bottom-left, so nothing collides.
-      if (hasHidden)
-        const Positioned(
-          right: 5,
-          bottom: 5,
-          child: IgnorePointer(
-            child: Icon(
-              Icons.edit,
-              key: kHiddenDrawingGlyphKey,
-              size: 12,
-              color: DeskColors.hiddenDrawingGlyph,
+    final Widget content;
+    if (!isSelected && !hasHidden) {
+      content = card;
+    } else {
+      // Chips act on the face currently showing: draw on (or show/hide) the
+      // front normally, the back when the card is flipped (owner L1).
+      final face = showBack ? TaskDrawing.faceBack : TaskDrawing.faceFront;
+      final hasDrawing = dataSource.drawingJsonFor(id, face: face) != null;
+      final drawingVisible = dataSource.isDrawingVisible(id, face: face);
+      content = Stack(children: [
+        Positioned.fill(child: card),
+        // Owner L10 tell: hidden ink gets a small grey pencil glyph.
+        // Bottom-right corner — the chips live top-right, the due date
+        // bottom-left, so nothing collides.
+        if (hasHidden)
+          const Positioned(
+            right: 5,
+            bottom: 5,
+            child: IgnorePointer(
+              child: Icon(
+                Icons.edit,
+                key: kHiddenDrawingGlyphKey,
+                size: 12,
+                color: DeskColors.hiddenDrawingGlyph,
+              ),
             ),
           ),
-        ),
-      // Selected-card controls, INSIDE the card bounds (same arena rules
-      // as the amethyst's chips above): pencil opens the editor for the
-      // showing face; the eye — only when that face has a drawing —
-      // toggles its visibility.
-      if (isSelected)
-        Positioned(
-          top: 8,
-          right: 4,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _EntityChip(
-              icon: Icons.edit,
-              tooltip: 'Draw on this card',
-              onTap: () => _openDrawingEditor(dataSource, id, face, data),
-            ),
-            if (hasDrawing) ...[
-              const SizedBox(height: 4),
+        // Selected-card controls, INSIDE the card bounds (same arena rules
+        // as the amethyst's chips above): pencil opens the editor for the
+        // showing face; the eye — only when that face has a drawing —
+        // toggles its visibility.
+        if (isSelected)
+          Positioned(
+            top: 8,
+            right: 4,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
               _EntityChip(
-                icon: drawingVisible ? Icons.visibility : Icons.visibility_off,
-                tooltip: drawingVisible ? 'Hide drawing' : 'Show drawing',
-                onTap: () => dataSource.toggleDrawingVisible(id, face: face),
+                icon: Icons.edit,
+                tooltip: 'Draw on this card',
+                onTap: () => _openDrawingEditor(dataSource, id, face, data),
               ),
-            ],
-          ]),
-        ),
-    ]);
+              if (hasDrawing) ...[
+                const SizedBox(height: 4),
+                _EntityChip(
+                  icon: drawingVisible ? Icons.visibility : Icons.visibility_off,
+                  tooltip: drawingVisible ? 'Hide drawing' : 'Show drawing',
+                  onTap: () => dataSource.toggleDrawingVisible(id, face: face),
+                ),
+              ],
+            ]),
+          ),
+      ]);
+    }
+
+    return _spotlightGhost(dataSource, taskEntity, data, content);
+  }
+
+  /// Dims [content] to [kSpotlightGhostOpacity] when a tag is spotlit and
+  /// this card doesn't carry it (owner idea 2026-08-06, tentative "tag-tap
+  /// spotlight" first pass for device feel-testing). A visual dim only --
+  /// [AnimatedOpacity] never affects hit testing, so a ghosted card still
+  /// drags/taps/flips exactly like a spotlit one (owner spec: "nothing
+  /// becomes non-interactive").
+  ///
+  /// The done pile ([Task.completed]) is exempt regardless of tags: the
+  /// spotlight is about finding live desk work, not the finished pile
+  /// (owner spec) -- this covers both the on-desk fan and the overflow
+  /// tray, since both render through this same `_buildCard` path.
+  Widget _spotlightGhost(
+    TaskSpatialDataSource dataSource,
+    TaskSpatialEntity taskEntity,
+    TaskCardData data,
+    Widget content,
+  ) {
+    final spotlit = dataSource.spotlitTag;
+    final isGhosted =
+        spotlit != null && !taskEntity.task.completed && !data.tags.any((tag) => tag.id == spotlit);
+    return AnimatedOpacity(
+      opacity: isGhosted ? kSpotlightGhostOpacity : 1.0,
+      duration: kSpotlightFadeDuration,
+      child: content,
+    );
   }
 
   /// A desk object (knick-knack) on the canvas. Selected: resize + put-away

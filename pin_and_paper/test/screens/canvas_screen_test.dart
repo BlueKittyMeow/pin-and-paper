@@ -599,4 +599,95 @@ void main() {
       expect(find.byKey(kDonePileTrayKey), findsNothing);
     });
   });
+
+  group('tag-tap spotlight (owner idea 2026-08-06, tentative)', () {
+    /// Two placed cards -- one tagged 'work', one untagged -- far enough
+    /// apart that their AnimatedOpacity ancestors are unambiguous by title.
+    /// Returns the live data source plus the created tag's real id: tags
+    /// are identified by [Tag.id] (a UUID), not [Tag.name] -- see
+    /// `TaskSpatialDataSource.spotlitTag`'s doc comment -- so tests that
+    /// assert on `spotlitTag` need the id, not the display string 'work'.
+    Future<(TaskSpatialDataSource, String tagId)> pumpDeskWithTaggedCards(WidgetTester tester) async {
+      late String tagId;
+      await tester.runAsync(() async {
+        final tagService = TagService();
+        final workTag = await tagService.createTag('work');
+        tagId = workTag.id;
+        final tagged = await taskService.createTask('Work card');
+        await taskService.updateTaskCanvasPosition(tagged.id, 150.0, 150.0);
+        await tagService.addTagToTask(tagged.id, workTag.id);
+        final untagged = await taskService.createTask('Other card');
+        await taskService.updateTaskCanvasPosition(untagged.id, 150.0, 400.0);
+        await taskProvider.loadTasks();
+      });
+      await tester.pumpWidget(wrap());
+      await tester.pump(); // postFrameCallback -> snapshot
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(); // restores' notifyListeners
+      final dataSource = tester.widget<SpatialCanvas>(find.byType(SpatialCanvas)).dataSource as TaskSpatialDataSource;
+      return (dataSource, tagId);
+    }
+
+    /// The AnimatedOpacity this card's title sits inside -- `_spotlightGhost`
+    /// wraps every task card's whole rendered content (drawing chips and
+    /// all), so the title is always a descendant of it.
+    double cardOpacity(WidgetTester tester, String title) => tester
+        .widget<AnimatedOpacity>(find.ancestor(of: find.text(title), matching: find.byType(AnimatedOpacity)).first)
+        .opacity;
+
+    /// Taps a tag chip and pumps past the canvas's tap/double-tap
+    /// disambiguation window -- chip taps share that arena with the card's
+    /// own recognizers, same as the drawing chips above (see `select()`'s
+    /// doc comment in the "card drawing chips" group).
+    Future<void> tapTag(WidgetTester tester, String tagName) async {
+      await tester.tap(find.text(tagName), warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('tapping a tag ghosts cards without it, leaves the matching card at full opacity', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await pumpDeskWithTaggedCards(tester);
+
+      expect(cardOpacity(tester, 'Work card'), 1.0);
+      expect(cardOpacity(tester, 'Other card'), 1.0);
+
+      await tapTag(tester, 'work');
+
+      expect(cardOpacity(tester, 'Work card'), 1.0, reason: 'the spotlit card itself must stay full opacity');
+      expect(cardOpacity(tester, 'Other card'), kSpotlightGhostOpacity);
+    });
+
+    testWidgets('tapping the same tag again clears the spotlight', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final (dataSource, tagId) = await pumpDeskWithTaggedCards(tester);
+
+      await tapTag(tester, 'work');
+      expect(dataSource.spotlitTag, tagId);
+      expect(cardOpacity(tester, 'Other card'), kSpotlightGhostOpacity);
+
+      await tapTag(tester, 'work');
+      expect(dataSource.spotlitTag, isNull);
+      expect(cardOpacity(tester, 'Work card'), 1.0);
+      expect(cardOpacity(tester, 'Other card'), 1.0);
+    });
+
+    testWidgets('a felt tap clears the spotlight and un-ghosts everything', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final (dataSource, _) = await pumpDeskWithTaggedCards(tester);
+
+      await tapTag(tester, 'work');
+      expect(cardOpacity(tester, 'Other card'), kSpotlightGhostOpacity);
+
+      // Exercises the same onCanvasTapped path a real felt tap drives
+      // (SpatialCanvas forwards background taps to it) -- called directly
+      // on the live data source, the same convention the done-pile tray
+      // tests above use for data-source-level interactions.
+      dataSource.onCanvasTapped(const Offset(900, 900));
+      await tester.pump();
+
+      expect(dataSource.spotlitTag, isNull);
+      expect(cardOpacity(tester, 'Work card'), 1.0);
+      expect(cardOpacity(tester, 'Other card'), 1.0);
+    });
+  });
 }

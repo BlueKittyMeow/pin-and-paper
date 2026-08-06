@@ -1073,6 +1073,72 @@ void main() {
       expect(identical(dataSource.drawingStackFor(task.id), before), isFalse);
     });
   });
+
+  group('TaskSpatialDataSource — tag-tap spotlight (owner idea 2026-08-06, tentative)', () {
+    test('spotlighting a tag sets it, notifies, and starts null (never persisted)', () async {
+      final dataSource = await buildDataSource();
+      expect(dataSource.spotlitTag, isNull);
+
+      var notifyCount = 0;
+      dataSource.addListener(() => notifyCount++);
+
+      dataSource.spotlightTag('work');
+      expect(dataSource.spotlitTag, 'work');
+      expect(notifyCount, 1);
+    });
+
+    test('tapping the same tag again clears the spotlight', () async {
+      final dataSource = await buildDataSource();
+
+      dataSource.spotlightTag('work');
+      expect(dataSource.spotlitTag, 'work');
+
+      dataSource.spotlightTag('work');
+      expect(dataSource.spotlitTag, isNull);
+    });
+
+    test('tapping a different tag switches the spotlight straight to it', () async {
+      final dataSource = await buildDataSource();
+
+      dataSource.spotlightTag('work');
+      expect(dataSource.spotlitTag, 'work');
+
+      dataSource.spotlightTag('urgent');
+      expect(dataSource.spotlitTag, 'urgent');
+    });
+
+    test('a felt tap clears an active spotlight', () async {
+      final dataSource = await buildDataSource();
+      dataSource.spotlightTag('work');
+      expect(dataSource.spotlitTag, 'work');
+
+      dataSource.onCanvasTapped(const Offset(10, 10));
+      expect(dataSource.spotlitTag, isNull);
+    });
+
+    test('clearSpotlight is a no-op (no spurious notify) when nothing is spotlit', () async {
+      final dataSource = await buildDataSource();
+      var notifyCount = 0;
+      dataSource.addListener(() => notifyCount++);
+
+      dataSource.clearSpotlight();
+      expect(dataSource.spotlitTag, isNull);
+      expect(notifyCount, 0);
+    });
+
+    test('a felt tap still collapses the done pile fan even with no active spotlight', () async {
+      final done = await taskService.createTask('Finished chore');
+      await taskService.toggleTaskCompletion(done);
+      final dataSource = await buildDataSource();
+
+      dataSource.onCanvasTapped(donePileZoneRect(_kCanvasSize).center);
+      expect(dataSource.donePileFanned, isTrue);
+
+      dataSource.onCanvasTapped(const Offset(10, 10));
+      expect(dataSource.donePileFanned, isFalse);
+      expect(dataSource.spotlitTag, isNull);
+    });
+  });
 }
 
 /// A minimal valid format-v1 drawing (one ink stroke), varied by [label] so
