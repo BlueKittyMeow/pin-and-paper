@@ -200,11 +200,27 @@ class _CanvasScreenState extends State<CanvasScreen> {
                     // Desk objects hit-test against their actual silhouette,
                     // not their (mostly transparent) bounding box — a tap
                     // just below the dog's nose reaches the card beneath
-                    // (owner report 2026-08-04). Selected objects get their
-                    // full box back: the resize/put-away chips live in the
-                    // transparent margin.
+                    // (owner report 2026-08-04). Selected objects get the
+                    // CHIP CLUSTER corner of their box back (only that
+                    // corner, not the whole box): the resize/put-away chips
+                    // live in the transparent margin, so they need their
+                    // spot back to stay tappable. Handing back the ENTIRE
+                    // box while selected (the original fix) went too far —
+                    // because a selected entity also paints/hit-tests ABOVE
+                    // every other entity (see SpatialCanvas's `_layerTier`),
+                    // that full box silently ate any tap landing in its
+                    // margin, including taps meant for whatever sat
+                    // underneath: another desk object, or a card (owner
+                    // report 2026-08-05 — tapping a second knick-knack while
+                    // the first was selected didn't transfer selection,
+                    // single tap required first deselecting). Narrowing the
+                    // box-back region to just the chips fixes the tap-theft
+                    // while keeping them reachable.
                     entityHitTest: (entity, local, isSelected) {
-                      if (entity is! DeskObjectEntity || isSelected) return true;
+                      if (entity is! DeskObjectEntity) return true;
+                      if (isSelected && _isInDeskObjectChipCluster(entity.size, local)) {
+                        return true;
+                      }
                       if (entity is DachshundDeskEntity) {
                         return DachshundHitMask.contains(
                           entity.stop,
@@ -396,6 +412,39 @@ class _CanvasScreenState extends State<CanvasScreen> {
       if (mounted) setState(() {});
     }
   }
+}
+
+/// Selection chip cluster geometry for a desk object, mirroring
+/// [_CanvasScreenState._buildDeskObject]'s chip `Column` by hand: inset 2
+/// from the top-right corner, three stacked 22×22 `_EntityChip`s with 4px
+/// gaps between them. If that layout ever changes, update this too.
+const double _kDeskObjectChipInset = 2;
+const double _kDeskObjectChipSize = 22;
+const double _kDeskObjectChipSpacing = 4;
+const int _kDeskObjectChipCount = 3;
+
+/// A little extra room around the chip cluster's own footprint, same
+/// "forgiving halo" idea as the hit masks' texel halo — a selected chip
+/// shouldn't be a hairline target.
+const double _kDeskObjectChipHitPad = 6;
+
+/// Whether [local] (a raw-pixel offset within a desk object's own
+/// `Offset.zero`..[entitySize] box, per `SpatialCanvas.entityHitTest`'s
+/// local-coordinate contract) falls within that object's selection chip
+/// cluster — the ONLY part of a selected desk object's transparent margin
+/// that should hit-test as "the object" rather than fall through to
+/// whatever's underneath. See the `entityHitTest` closure in
+/// `CanvasScreen.build` for why this matters.
+bool _isInDeskObjectChipCluster(Size entitySize, Offset local) {
+  const clusterHeight =
+      _kDeskObjectChipCount * _kDeskObjectChipSize + (_kDeskObjectChipCount - 1) * _kDeskObjectChipSpacing;
+  final cluster = Rect.fromLTWH(
+    entitySize.width - _kDeskObjectChipInset - _kDeskObjectChipSize,
+    _kDeskObjectChipInset,
+    _kDeskObjectChipSize,
+    clusterHeight,
+  ).inflate(_kDeskObjectChipHitPad);
+  return cluster.contains(local);
 }
 
 /// One of the two quick-scan face-override AppBar buttons. Active mode

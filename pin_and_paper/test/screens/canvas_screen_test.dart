@@ -11,6 +11,7 @@ import 'package:pin_and_paper/providers/task_provider.dart';
 import 'package:pin_and_paper/providers/task_sort_provider.dart';
 import 'package:pin_and_paper/screens/canvas_screen.dart';
 import 'package:pin_and_paper/services/database_service.dart';
+import 'package:pin_and_paper/services/desk_object_service.dart';
 import 'package:pin_and_paper/spatial/amethyst_desk_entity.dart';
 import 'package:pin_and_paper/spatial/dachshund_desk_entity.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
@@ -415,5 +416,108 @@ void main() {
       // closes the DB.
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     });
+  });
+
+  group('desk-object selection transfer (owner report 2026-08-05)', () {
+    // Scoped past the drawer: it always builds a thumbnail Dachshund/Gem
+    // Figurine per catalog entry (clipped to zero width, not gone), so an
+    // unscoped find.byType would match those too.
+    Finder onDesk(Type type) =>
+        find.descendant(of: find.byType(SpatialCanvas), matching: find.byType(type));
+
+    /// Pumps the desk, gives the data source's desk_objects restore (real
+    /// sqflite ffi I/O) time to land, then polls until both hit masks this
+    /// test depends on have actually finished decoding. A real PNG decode
+    /// isn't on the fake test clock, so a fixed delay would be a guess: a
+    /// known-transparent corner sample (0.02, 0.02) answers `true` (the
+    /// whole-box fallback) before a mask lands and `false` once it's
+    /// decoded -- the same trick `DachshundHitMask`'s own "answers
+    /// whole-box true before masks load" unit test relies on -- so polling
+    /// on that is a reliable loaded signal without a public flag.
+    Future<void> pumpDeskAndAwaitMasks(WidgetTester tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(); // postFrameCallback -> snapshot
+      for (var i = 0; i < 60; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump();
+        final dachshundLoaded = !DachshundHitMask.contains(DachshundStop.threeQLeft, 0.02, 0.02);
+        final amethystLoaded = !GemHitMask.contains(GemVariant.amethyst, SpriteStop.threeQLeft, 0.02, 0.02);
+        if (dachshundLoaded && amethystLoaded) return;
+      }
+      fail('hit masks did not finish decoding in time (real PNG decode running long?)');
+    }
+
+    testWidgets(
+      'tapping a second desk object while the first is selected transfers selection directly',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+
+        // The dachshund ("A") sits at (280, 80). His widened sprite frame's
+        // transparent margin is made to overlap the amethyst's ("B")
+        // visible body: B is placed so its own silhouette center lands at
+        // A's local (39.2, 352.8) -- normalized (0.1, 0.9), confirmed
+        // transparent in the source art (outside the "central ~40%" dog)
+        // and well clear of the chip cluster in A's top-right corner. Same
+        // shape of overlap as the owner's phone report: tap a second
+        // knick-knack while the first is selected.
+        const dachshundPos = Offset(280, 80);
+        final marginLocal = Offset(0.1 * kDachshundDefaultSize.width, 0.9 * kDachshundDefaultSize.height);
+        final swallowPoint = dachshundPos + marginLocal;
+        final amethystPos =
+            swallowPoint - Offset(kAmethystDefaultSize.width / 2, kAmethystDefaultSize.height / 2);
+
+        await tester.runAsync(() async {
+          await taskProvider.loadTasks(); // zero tasks -- desk objects only
+          await DeskObjectService().save(
+            id: kDachshundDeskId,
+            placed: true,
+            x: dachshundPos.dx,
+            y: dachshundPos.dy,
+            width: kDachshundDefaultSize.width,
+          );
+          await DeskObjectService().save(
+            id: kAmethystDeskId,
+            placed: true,
+            x: amethystPos.dx,
+            y: amethystPos.dy,
+            width: kAmethystDefaultSize.width,
+          );
+        });
+
+        await pumpDeskAndAwaitMasks(tester);
+
+        // Select the dachshund by tapping his own visible body (box
+        // center -- deep inside the opaque "central ~40%" silhouette).
+        await tester.tap(onDesk(DachshundFigurine), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(tester.widget<DachshundFigurine>(onDesk(DachshundFigurine)).isSelected, isTrue);
+        expect(tester.widget<GemFigurine>(onDesk(GemFigurine)).isSelected, isFalse);
+
+        // Tap the swallow point: on the dachshund's transparent margin
+        // (inside his box, outside his silhouette) AND on the amethyst's
+        // visible body underneath. Before the fix, the selected
+        // dachshund's full box reclaimed this point and the tap never
+        // reached the amethyst at all -- selection stayed on him. Fixed:
+        // selection transfers to the amethyst in this ONE tap, no
+        // deselect-first required.
+        final dogTopLeft = tester.getTopLeft(onDesk(DachshundFigurine));
+        await tester.tapAt(dogTopLeft + marginLocal);
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(tester.widget<GemFigurine>(onDesk(GemFigurine)).isSelected, isTrue);
+        expect(tester.widget<DachshundFigurine>(onDesk(DachshundFigurine)).isSelected, isFalse);
+
+        // Constraint check: his chips must still be reachable while he's
+        // selected (this fix narrows his box-back region to exactly their
+        // footprint -- confirm it didn't narrow them into unreachability).
+        await tester.tap(onDesk(DachshundFigurine), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.byTooltip('Put away in the drawer'), findsOneWidget);
+
+        // Let the fire-and-forget desk_objects writes land before teardown
+        // closes the DB.
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      },
+    );
   });
 }
