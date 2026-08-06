@@ -64,6 +64,16 @@ class _CanvasScreenState extends State<CanvasScreen> {
 
   bool _drawerOpen = false;
 
+  /// Which done-pile tray card (if any) is selected -- own lightweight
+  /// state (owner decision 2026-08-06) rather than the canvas's shared
+  /// [SpatialCanvasController] selection: the tray is chrome outside the
+  /// canvas, its cards' compact on-desk twins don't need to visually react,
+  /// and driving the tray's own rebuild off the SAME controller a tray
+  /// card's tap would notify caused knock-on timing trouble for unrelated
+  /// canvas animations (desk-object focus/select pans) sharing that
+  /// controller -- plain [setState] avoids coupling the two entirely.
+  String? _selectedTrayCardId;
+
   TaskProvider? _watchedProvider;
   VoidCallback? _isLoadingListener;
 
@@ -251,6 +261,15 @@ class _CanvasScreenState extends State<CanvasScreen> {
                 open: _drawerOpen,
                 onToggle: () => setState(() => _drawerOpen = !_drawerOpen),
               ),
+              _DonePileTray(
+                dataSource: dataSource,
+                selectedCardId: _selectedTrayCardId,
+                onCardTap: (id) {
+                  setState(() => _selectedTrayCardId = id);
+                  dataSource.onEntityTapped(id);
+                },
+                cardBuilder: (entity, isSelected) => _buildCard(context, dataSource, entity, isSelected),
+                ),
             ]),
     );
   }
@@ -663,6 +682,186 @@ class _DeskObjectDrawer extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Key on the done-pile tray's outer panel. Stable for tests.
+const Key kDonePileTrayKey = Key('canvas_screen.done_pile_tray');
+
+/// Key for a done-pile tray card tile.
+Key donePileTrayCardKey(String id) => Key('canvas_screen.done_pile_tray_card.$id');
+
+/// The done pile's scrollable browsing tray (owner decision 2026-08-06,
+/// replacing an earlier second-fan-column attempt): screen-space chrome
+/// modeled directly on [_DeskObjectDrawer] just above — it sits OVER the
+/// desk plane and never inherits its transforms, the same world-vs-chrome
+/// split from DESK_OBJECTS.md's perspective constraint.
+///
+/// Shown only while the pile is fanned AND [TaskSpatialDataSource
+/// .donePileOverflowsFan] — a full pile that doesn't fit one on-desk fan
+/// column without shingling over card titles. The desk itself stays at its
+/// neat compact stack in that state ([TaskSpatialDataSource
+/// ._positionCompletedStack]); this tray is the only way to browse the
+/// rest, newest first, by scrolling instead of fanning.
+///
+/// Tapping a card here does exactly what tapping a fanned on-desk card
+/// does today: selects it (surfacing its own edit/eye chips, same as an
+/// on-desk selected card) and calls [TaskSpatialDataSource.onEntityTapped]
+/// (a no-op while the pile's cards are the selection target — it only
+/// collapses the pile for taps on something ELSE, so this keeps the tray
+/// open: inspecting, not dismissing). Selection is this widget's OWN
+/// lightweight state ([CanvasScreen._selectedTrayCardId]), not the canvas's
+/// shared [SpatialCanvasController] selection — see that field's doc
+/// comment for why. The header's close control (or any felt tap on the
+/// desk underneath) collapses the pile back to its stack, same as
+/// collapsing an on-desk fan.
+class _DonePileTray extends StatelessWidget {
+  const _DonePileTray({
+    required this.dataSource,
+    required this.selectedCardId,
+    required this.onCardTap,
+    required this.cardBuilder,
+  });
+
+  final TaskSpatialDataSource dataSource;
+
+  /// The currently-selected tray card, if any -- owned by `CanvasScreen`.
+  final String? selectedCardId;
+
+  /// Fired when a tray card is tapped; `CanvasScreen` updates
+  /// [selectedCardId] and forwards to [TaskSpatialDataSource.onEntityTapped].
+  final void Function(String id) onCardTap;
+
+  /// Builds one card's widget -- forwarded from `CanvasScreen._buildCard`
+  /// so tray cards render identically to on-desk ones (flip state, drawing
+  /// overlays, hidden-drawing tell, selected chips).
+  final Widget Function(SpatialEntity entity, bool isSelected) cardBuilder;
+
+  static const double _panelWidth = 252;
+
+  @override
+  Widget build(BuildContext context) {
+    // Fan/overflow state lives on the data source; selection is plain
+    // widget state passed down from CanvasScreen (see selectedCardId's doc
+    // comment), so only the data source needs listening here.
+    return ListenableBuilder(
+      listenable: dataSource,
+      builder: (context, _) {
+        if (!dataSource.donePileFanned || !dataSource.donePileOverflowsFan) {
+          // Must still be a Positioned, not a bare SizedBox: this widget is
+          // a direct child of CanvasScreen's outer Stack, alongside
+          // _DeskObjectDrawer and the canvas's own Positioned.fill — every
+          // sibling there is Positioned today. RenderStack sizes itself
+          // from its NON-positioned children whenever any exist (falling
+          // back to Size(constraints.minWidth, constraints.minHeight)
+          // instead of filling available space) — a bare SizedBox.shrink()
+          // here would be the Stack's first-ever non-positioned child,
+          // collapsing the whole Stack to near-zero and scrambling every
+          // other Positioned sibling's coordinates (caught by two
+          // completely unrelated, pre-existing desk-object drawer tests
+          // failing once this widget was added — the drawer tab rendered
+          // at a negative, zero-height Rect).
+          return const Positioned(top: 0, right: 0, child: SizedBox.shrink());
+        }
+        final cards = dataSource.recentCompletedNewestFirst;
+        return Positioned(
+          // Starts below the desk-objects drawer's tab (16 top padding +
+          // 92 tall) so the two pieces of screen-space chrome never
+          // overlap.
+          top: 116,
+          right: 0,
+          bottom: 16,
+          child: Container(
+            key: kDonePileTrayKey,
+            width: _panelWidth,
+            decoration: const BoxDecoration(
+              color: DeskColors.chipBackground,
+              border: Border(
+                left: BorderSide(color: DeskColors.accentGold, width: 0.5),
+                top: BorderSide(color: DeskColors.accentGold),
+                bottom: BorderSide(color: DeskColors.accentGold),
+              ),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(10),
+                bottomLeft: Radius.circular(10),
+              ),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Recently completed',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: DeskColors.drawerLabel,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'Close',
+                        child: GestureDetector(
+                          onTap: dataSource.toggleDonePileFanned,
+                          child: const Icon(Icons.close, size: 16, color: DeskColors.accentGold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Column(
+                      children: [
+                        for (final entity in cards)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            // RepaintBoundary, matching SpatialCanvas's own
+                            // per-entity wrapping ([_buildEntityCore]):
+                            // selecting a tray card inserts brand-new
+                            // Tooltip-bearing chip widgets into this same
+                            // subtree as a direct result of its own tap --
+                            // exactly what an on-desk selected card's chips
+                            // already do safely under that wrapping.
+                            child: RepaintBoundary(
+                              child: GestureDetector(
+                                key: donePileTrayCardKey(entity.id),
+                                onTap: () => onCardTap(entity.id),
+                                onDoubleTap: () => dataSource.onEntityDoubleTapped(entity.id),
+                                // On the desk, `_buildCard`'s selected-state
+                                // Stack (front card + chip Positioneds) is
+                                // always laid out inside SpatialCanvas's own
+                                // `Positioned(width:, height:)` per entity,
+                                // which is what gives that Stack a bounded
+                                // size to compute against. Here it's sitting
+                                // in a Column inside a SingleChildScrollView
+                                // instead, which hands children unbounded
+                                // height -- an explicit SizedBox reproduces
+                                // the same bounded footprint so the selected
+                                // Stack doesn't hit RenderStack's
+                                // "size.isFinite" layout assertion.
+                                child: SizedBox(
+                                  width: kCardSize.width,
+                                  height: kCardSize.height,
+                                  child: cardBuilder(entity, entity.id == selectedCardId),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

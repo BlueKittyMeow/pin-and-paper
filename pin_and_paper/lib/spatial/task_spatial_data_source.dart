@@ -220,6 +220,29 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// box on empty felt (see [onCanvasTapped]).
   bool get donePileFanned => _donePileFanned;
 
+  bool _donePileOverflowsFan = false;
+
+  /// True once the done pile is fanned AND [kRecentCompletedCount] cards
+  /// don't fit as one non-overlapping column within the fan's safe
+  /// vertical band (see [_positionDonePile]'s spacing floor). Always false
+  /// while stacked ([_donePileFanned] false).
+  ///
+  /// `CanvasScreen` reads this to decide how to present the fanned state:
+  /// an on-desk fan when it fits, or a scrollable tray overlay (modeled on
+  /// the desk-objects drawer) when it doesn't — owner decision 2026-08-06,
+  /// superseding an earlier attempt at wrapping the overflow into a second
+  /// on-desk fan column. The desk itself stays at its neat compact stack
+  /// while overflowing ([_positionDonePile] falls back to
+  /// [_positionCompletedStack]) — "no fan on the desk in that case" was the
+  /// explicit call, not a degraded multi-column fan.
+  bool get donePileOverflowsFan => _donePileOverflowsFan;
+
+  /// The done pile, newest-first — the browsing order for
+  /// [donePileOverflowsFan]'s tray (owner decision 2026-08-06). Internally
+  /// [_recentCompleted] is oldest-first (see that field's doc comment for
+  /// why); this is a read-only reversed view for UI consumers.
+  List<TaskSpatialEntity> get recentCompletedNewestFirst => _recentCompleted.reversed.toList();
+
   /// Fans the done pile out along the desk's right edge so every recent
   /// completion is visible at once, or restacks it (owner request
   /// 2026-08-04). View-state only — nothing persists.
@@ -234,51 +257,59 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// top of the card below it), or the compact anchor-fan.
   void _positionDonePile() {
     if (_recentCompleted.isEmpty) return;
-    if (_donePileFanned) {
-      const margin = 40.0;
-      final x = canvasSize.width - kCardSize.width - margin;
-      final top = completedStackAnchor(canvasSize).dy;
-      // The fan must stop short of the landing tray's corner (owner
-      // screenshot 2026-08-04 night: a 10-card fan ran straight into the
-      // inbox stack).
-      final bottomLimit = taskTrayAnchor(canvasSize).dy - kCardSize.height - 24;
-      final n = _recentCompleted.length;
-      final availableHeight = math.max(0.0, bottomLimit - top);
-      // Floor of kCardSize.height (never overlap at all), capped above by
-      // the old "don't spread wastefully thin" ceiling. Below the floor,
-      // the card above starts shingling over the TOP of the card below —
-      // exactly where its accent bar and title sit — not just its
-      // tags/date footer (owner report 2026-08-06, phone APK: at the app's
-      // real desk-panel canvas size a full kRecentCompletedCount pile
-      // squeezed naive `availableHeight / (n - 1)` spacing to ~123px,
-      // 17px short of a card's 140px height, clipping the title of every
-      // card but the topmost). This didn't show up against this file's own
-      // unit tests' more generous canvas fixture — see
-      // task_spatial_data_source_test.dart's cramped-canvas regression
-      // case, added alongside this fix.
-      final spacing = n <= 1
-          ? 0.0
-          : math.max(kCardSize.height, math.min(kCardSize.height + 16.0, availableHeight / (n - 1)));
-      // How many cards one column holds at that floor before running past
-      // the tray corner; the rest wrap into a second column just to the
-      // left rather than crowd — the same "add a column instead of
-      // shrinking" escape valve the landing tray's arrange grid uses for a
-      // deep inbox ([_positionTrayAsGrid]'s `layer`).
-      final perColumn = spacing <= 0 ? n : math.max(1, (availableHeight / spacing).floor() + 1);
-      // _recentCompleted is oldest-first; the newest takes the top slot of
-      // the first column.
-      for (var i = 0; i < n; i++) {
-        final fanIndex = n - 1 - i;
-        final column = fanIndex ~/ perColumn;
-        final slot = fanIndex % perColumn;
-        _recentCompleted[i].position =
-            Offset(x - (kCardSize.width + 16.0) * column, top + spacing * slot);
-      }
-    } else {
-      for (var i = 0; i < _recentCompleted.length; i++) {
-        _recentCompleted[i].position =
-            completedStackAnchor(canvasSize) + kTaskTrayBaseStep * i.toDouble();
-      }
+    if (!_donePileFanned) {
+      _donePileOverflowsFan = false;
+      _positionCompletedStack();
+      return;
+    }
+    const margin = 40.0;
+    final x = canvasSize.width - kCardSize.width - margin;
+    final top = completedStackAnchor(canvasSize).dy;
+    // The fan must stop short of the landing tray's corner (owner
+    // screenshot 2026-08-04 night: a 10-card fan ran straight into the
+    // inbox stack).
+    final bottomLimit = taskTrayAnchor(canvasSize).dy - kCardSize.height - 24;
+    final n = _recentCompleted.length;
+    final availableHeight = math.max(0.0, bottomLimit - top);
+    // A card's own height is the spacing floor: below it, the card above
+    // starts shingling over the TOP of the card below — exactly where its
+    // accent bar and title sit, not just its tags/date footer (owner
+    // report 2026-08-06, phone APK: at the app's real desk-panel canvas
+    // size a full kRecentCompletedCount pile squeezed naive
+    // `availableHeight / (n - 1)` spacing to ~123px, 17px short of a
+    // card's 140px height, clipping the title of every card but the
+    // topmost). This didn't show up against this file's own unit tests'
+    // more generous canvas fixture — see
+    // task_spatial_data_source_test.dart's cramped-canvas regression case.
+    final idealSpacing = n <= 1 ? 0.0 : availableHeight / (n - 1);
+    _donePileOverflowsFan = n > 1 && idealSpacing < kCardSize.height;
+    if (_donePileOverflowsFan) {
+      // Doesn't fit one column at the floor. An earlier fix wrapped the
+      // overflow into a second on-desk column; the owner's call
+      // (2026-08-06) was simpler: no fan on the desk at all in that case
+      // — CanvasScreen shows the scrollable tray instead
+      // (see [donePileOverflowsFan]) — so the desk itself just stays at
+      // its neat compact stack.
+      _positionCompletedStack();
+      return;
+    }
+    // Capped above by the old "don't spread wastefully thin" ceiling, but
+    // that can never pull it back below the floor above (idealSpacing is
+    // already >= kCardSize.height in this branch).
+    final spacing = n <= 1 ? 0.0 : math.min(kCardSize.height + 16.0, idealSpacing);
+    // _recentCompleted is oldest-first; the newest takes the top slot.
+    for (var i = 0; i < n; i++) {
+      _recentCompleted[i].position = Offset(x, top + spacing * (n - 1 - i));
+    }
+  }
+
+  /// The compact anchor-fan: every card's small stack offset from
+  /// [completedStackAnchor], the pile's non-fanned resting state and also
+  /// what stays on the desk while [_donePileOverflowsFan] is true (the
+  /// tray takes over browsing duty in that case).
+  void _positionCompletedStack() {
+    for (var i = 0; i < _recentCompleted.length; i++) {
+      _recentCompleted[i].position = completedStackAnchor(canvasSize) + kTaskTrayBaseStep * i.toDouble();
     }
   }
 

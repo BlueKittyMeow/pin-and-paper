@@ -14,6 +14,7 @@ import 'package:pin_and_paper/services/database_service.dart';
 import 'package:pin_and_paper/services/desk_object_service.dart';
 import 'package:pin_and_paper/spatial/amethyst_desk_entity.dart';
 import 'package:pin_and_paper/spatial/dachshund_desk_entity.dart';
+import 'package:pin_and_paper/spatial/task_spatial_data_source.dart';
 import 'package:pin_and_paper/services/tag_service.dart';
 import 'package:pin_and_paper/services/task_service.dart';
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
@@ -519,5 +520,83 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       },
     );
+  });
+
+  group('done-pile scrollable tray (owner decision 2026-08-06)', () {
+    /// Fills the pile to [kRecentCompletedCount] -- at the app's real
+    /// [kCanvasScreenSize], a full pile is exactly the case that overflows
+    /// a single on-desk fan column (see task_spatial_data_source_test.dart's
+    /// cramped-canvas regression case for the numbers) -- then pumps the
+    /// desk and hands back the live data source CanvasScreen actually built,
+    /// the same way the "desk-objects drawer" group above reaches into the
+    /// widget tree rather than re-deriving app internals.
+    Future<TaskSpatialDataSource> pumpDeskWithFullPile(WidgetTester tester) async {
+      await tester.runAsync(() async {
+        for (var i = 0; i < kRecentCompletedCount; i++) {
+          final t = await taskService.createTask('Done $i');
+          await taskService.toggleTaskCompletion(t);
+        }
+        await taskProvider.loadTasks();
+      });
+      await tester.pumpWidget(wrap());
+      await tester.pump(); // postFrameCallback -> snapshot
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(); // restores' notifyListeners
+      return tester.widget<SpatialCanvas>(find.byType(SpatialCanvas)).dataSource as TaskSpatialDataSource;
+    }
+
+    testWidgets('fanning a full pile overflows into the tray instead of an on-desk fan', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final dataSource = await pumpDeskWithFullPile(tester);
+      expect(find.byKey(kDonePileTrayKey), findsNothing);
+
+      dataSource.toggleDonePileFanned();
+      await tester.pump();
+
+      expect(dataSource.donePileOverflowsFan, isTrue);
+      expect(find.byKey(kDonePileTrayKey), findsOneWidget);
+      for (final entity in dataSource.recentCompletedNewestFirst) {
+        expect(find.byKey(donePileTrayCardKey(entity.id)), findsOneWidget);
+      }
+    });
+
+    testWidgets('tapping a tray card selects it (its chips surface) without closing the tray', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final dataSource = await pumpDeskWithFullPile(tester);
+      dataSource.toggleDonePileFanned();
+      await tester.pump();
+
+      final first = dataSource.recentCompletedNewestFirst.first;
+      await tester.tap(find.byKey(donePileTrayCardKey(first.id)));
+      // Chip taps/selection resolve after the canvas's double-tap
+      // disambiguation window, same as on-desk card chips.
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(dataSource.donePileFanned, isTrue, reason: 'inspecting a tray card must not dismiss the pile');
+      expect(find.byKey(kDonePileTrayKey), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(donePileTrayCardKey(first.id)),
+          matching: find.byTooltip('Draw on this card'),
+        ),
+        findsOneWidget,
+        reason: 'selecting a tray card surfaces its edit chip, same as an on-desk selected card',
+      );
+    });
+
+    testWidgets("the tray header's close control restacks the pile", (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final dataSource = await pumpDeskWithFullPile(tester);
+      dataSource.toggleDonePileFanned();
+      await tester.pump();
+      expect(find.byKey(kDonePileTrayKey), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pump();
+
+      expect(dataSource.donePileFanned, isFalse);
+      expect(dataSource.donePileOverflowsFan, isFalse);
+      expect(find.byKey(kDonePileTrayKey), findsNothing);
+    });
   });
 }
