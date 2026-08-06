@@ -17,6 +17,20 @@ void main() {
     const singleParseTarget = Duration(milliseconds: 1);
     const rapidParseTarget = Duration(milliseconds: 10);
 
+    // One-time JIT/regex-engine warm-up, paid outside any assertion.
+    // Without this, the *first* RegExp/Stopwatch use in this isolate pays a
+    // one-off compilation tax (observed 1-2.4ms on a loaded dev host, vs.
+    // ~20us once warm) that lands entirely on whichever test happens to run
+    // first below — a false failure from JIT noise, not a real regression
+    // in mockDateParser. This mirrors the "host guard" used elsewhere in
+    // the date-parsing suite (see
+    // test/integration/date_parsing_integration_test.dart) but for a
+    // different underlying cause: this file never touches flutter_js, so
+    // it isn't gated on the QuickJS native library like those tests are.
+    setUpAll(() {
+      mockDateParser('warm up');
+    });
+
     test('Single parse speed should be well under 1ms', () {
       const testPhrase =
           'This is a test to see if we can find tomorrow in this string';
