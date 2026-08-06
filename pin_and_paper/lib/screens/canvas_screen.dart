@@ -18,15 +18,17 @@ import '../spatial/task_card_adapter.dart';
 import '../spatial/task_spatial_data_source.dart';
 import '../spatial/task_spatial_entity.dart';
 
-/// Canvas bounds for the Spatial View: the real desk's inner bevel panel
+/// Canvas bounds for the Spatial View: the desk's inner cut-in panel
 /// (owner decision 2026-08-05 — "bind usable desktop within those
 /// corners"). The desk asset keeps its true proportions; the CANVAS
-/// adapts to the desk, not the other way around. These are the measured
-/// dimensions of the sunken panel inside the desk photo's inlay groove —
-/// see `SpatialDeskBackground` for how the image anchors to it. Desk
-/// mats / adornments design to exactly this box (canvas origin = the
-/// panel's top-left corner).
-const Size kCanvasScreenSize = Size(1823, 1264);
+/// adapts to the desk, not the other way around. These are the modeled
+/// desk's panel dimensions from the bundle v1 camera contract
+/// (marker-verified sub-pixel in the renders) — see
+/// `SpatialDeskBackground` for how the image anchors to it. Full-panel
+/// desk-mat art designs to exactly this box at 2× = 3646×2646 (canvas
+/// origin = the panel's top-left corner); the bundled mats are
+/// full-frame layers instead and just stack over the desk.
+const Size kCanvasScreenSize = Size(1823, 1323);
 
 /// Key on the grey "this card has hidden ink" pencil glyph (owner L10).
 /// Stable for tests.
