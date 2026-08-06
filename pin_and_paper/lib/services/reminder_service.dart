@@ -234,6 +234,12 @@ class ReminderService {
   /// Design principle: EVERYTHING flows from user preferences, no hardcoded
   /// midnight assumptions. The "user_midnight" concept means overdue is
   /// determined by the user's configured end-of-day time.
+  ///
+  /// NOTE: this is a fourth, independent copy of the canonical isTaskOverdue in
+  /// date_parsing_service.dart (see handoff.md 2026-08-06). It was NOT folded
+  /// into the Phase 4.4-MVP consolidation and uses a different algorithm plus a
+  /// different cutoff source (UserSettings here vs DateParsingService's
+  /// SharedPreferences copy) — keep in sync / consolidate to avoid drift.
   bool _isTaskOverdue(Task task, UserSettings settings, DateTime now) {
     if (task.dueDate == null) return false;
     if (task.isAllDay) {

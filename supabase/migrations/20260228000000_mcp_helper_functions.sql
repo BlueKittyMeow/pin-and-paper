@@ -91,6 +91,10 @@ BEGIN
   SELECT json_build_object(
     'active', COUNT(*) FILTER (WHERE deleted_at IS NULL AND completed = false),
     'completed', COUNT(*) FILTER (WHERE deleted_at IS NULL AND completed = true),
+    -- NOTE: 'overdue' uses due_date < NOW(), ignoring the todayCutoffHour
+    -- Today-Window setting and all-day date-only handling from the canonical
+    -- Dart isTaskOverdue (pin_and_paper/lib/services/date_parsing_service.dart).
+    -- Drift risk; see handoff.md 2026-08-06. Keep in sync / consolidate.
     'overdue', COUNT(*) FILTER (WHERE deleted_at IS NULL AND completed = false AND due_date < NOW()),
     'due_today', COUNT(*) FILTER (WHERE deleted_at IS NULL AND completed = false AND due_date::date = CURRENT_DATE),
     'due_this_week', COUNT(*) FILTER (WHERE deleted_at IS NULL AND completed = false AND due_date BETWEEN NOW() AND NOW() + INTERVAL '7 days'),

@@ -137,6 +137,11 @@ export function registerListTasks(
           const now = new Date();
           switch (due) {
             case "overdue":
+              // NOTE: duplicates the overdue rule as due_date < now, ignoring
+              // the todayCutoffHour setting and all-day date-only handling from
+              // the canonical Dart isTaskOverdue
+              // (pin_and_paper/lib/services/date_parsing_service.dart). Drift
+              // risk; see handoff.md 2026-08-06. Keep in sync / consolidate.
               q = q.lt("due_date", now.toISOString()).not("due_date", "is", null);
               break;
             case "today": {
