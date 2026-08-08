@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -149,7 +151,7 @@ void main() {
   });
 
   group('backdrop-aware multiply compositing (owner report 2026-08-06, '
-      'fixed 2026-08-07)', () {
+      'fixed 2026-08-07, device bug fixed 2026-08-08)', () {
     // A "Blend"/Marker layer must multiply against the REAL card face, not
     // an imaginary flat paper tone — see stroke_painter.dart's
     // "Backdrop-aware multiply compositing" note. DrawingCanvas needs a
@@ -157,8 +159,79 @@ void main() {
     // blend; this proves the editor actually captures and wires one
     // through, at the exact capture-space resolution strokes are recorded
     // in (so the blend math and stroke coordinates agree 1:1).
+    //
+    // These tests only check SIZE and "didn't throw" as of 2026-08-07 —
+    // which is exactly why they missed the real bug (owner report
+    // 2026-08-07: "blend still does not blend with card itself... nada"
+    // on-device, despite these tests passing). Root cause: the capture
+    // path gated on `RenderObject.debugNeedsPaint`, a debug-only getter
+    // that throws `LateInitializationError` the instant asserts are
+    // stripped — i.e. on every release build, but never in a widget test
+    // (which always runs with asserts on). The exception was thrown
+    // OUTSIDE the method's own try/catch, so it silently killed capture
+    // forever: `_backdropImage` stayed null, every multiply layer fell
+    // back to the flat-paper precompute, and "does something (darkens)
+    // but the card never shows through" is exactly what a stuck
+    // flat-paper fallback looks like. See
+    // lib/rendering/backdrop_capture.dart's doc comment for the full
+    // mechanism and a standalone repro.
+    //
+    // Fixed by never branching on `debugNeedsPaint` for production
+    // control flow (see [captureBackdrop]) — but a widget test can't
+    // reproduce the release-mode assert-stripping itself (flutter test
+    // always runs with asserts on), so the regression coverage that
+    // matters here is: prove the backdrop that arrives is REAL, non-blank
+    // card content, not just "some non-null image of the right size" —
+    // a bug that swallows the capture and a bug that captures blank
+    // content would BOTH have slipped past the old width/height-only
+    // assertions.
+
+    /// Decode [image]'s raw RGBA bytes for pixel probing.
+    Future<ByteData> pixelsOf(ui.Image image) async {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      return bytes!;
+    }
+
+    int channelAt(ByteData data, int width, int x, int y, int channel) =>
+        data.getUint8((y * width + x) * 4 + channel);
+
+    /// A capture that silently failed (e.g. swallowed the
+    /// LateInitializationError this group guards against, or grabbed a
+    /// boundary before it ever painted) would produce either no image at
+    /// all, or one that's uniformly transparent/blank. A REAL TaskCard
+    /// capture is opaque (modulo its own `BorderRadius.circular(4)`
+    /// rounded corners -- 16px in this 4x capture space, hence the 20px
+    /// inset below to sample the flat interior, not the corner arc's own
+    /// legitimate transparency) and visually varies — cream background
+    /// vs. the gold top rule vs. dark title ink — so this asserts both.
+    void expectRealCardContent(ByteData pixels, int width, int height) {
+      const inset = 20; // clears the 16px corner-radius arc
+      for (final xy in [
+        [inset, inset],
+        [width - inset - 1, inset],
+        [width ~/ 2, height ~/ 2],
+        [inset, height - inset - 1],
+      ]) {
+        expect(channelAt(pixels, width, xy[0], xy[1], 3), 255,
+            reason: 'a blank/never-painted capture would show as '
+                'transparent at (${xy[0]}, ${xy[1]})');
+      }
+      // Not a flat single color: sample the gold top-rule strip (owner's
+      // accent color runs along the very top of every TaskCard) against
+      // the cream body a little further down — a blank or placeholder
+      // capture would make these identical.
+      final topRuleR = channelAt(pixels, width, width ~/ 2, 1, 0);
+      final topRuleG = channelAt(pixels, width, width ~/ 2, 1, 1);
+      final bodyR = channelAt(pixels, width, width ~/ 2, height ~/ 2, 0);
+      final bodyG = channelAt(pixels, width, width ~/ 2, height ~/ 2, 1);
+      expect(topRuleR != bodyR || topRuleG != bodyG, isTrue,
+          reason: 'top-rule and card-body pixels came back identical — '
+              'this looks like a blank/flat capture, not the real card');
+    }
+
     testWidgets('captures a backdrop snapshot of the real TaskCard, sized '
-        'to the drawing capture space', (tester) async {
+        'to the drawing capture space, with real (non-blank) card content',
+        (tester) async {
       final task = await createTask(tester, 'Front card');
       await pushEditor(tester, taskId: task.id, onResult: (_) {});
 
@@ -168,10 +241,13 @@ void main() {
           'card to blend against without this');
       expect(backdrop!.width, kDrawingEditorCaptureSize.width.round());
       expect(backdrop.height, kDrawingEditorCaptureSize.height.round());
+
+      final pixels = await tester.runAsync(() => pixelsOf(backdrop));
+      expectRealCardContent(pixels!, backdrop.width, backdrop.height);
     });
 
-    testWidgets('captures a backdrop snapshot of the real TaskCardBack too',
-        (tester) async {
+    testWidgets('captures a backdrop snapshot of the real TaskCardBack too, '
+        'with real (non-blank) card content', (tester) async {
       final task = await createTask(tester, 'Back card');
       await pushEditor(tester, taskId: task.id, face: TaskDrawing.faceBack, onResult: (_) {});
 
@@ -180,6 +256,39 @@ void main() {
       expect(backdrop, isNotNull);
       expect(backdrop!.width, kDrawingEditorCaptureSize.width.round());
       expect(backdrop.height, kDrawingEditorCaptureSize.height.round());
+
+      final pixels = await tester.runAsync(() => pixelsOf(backdrop));
+      expectRealCardContent(pixels!, backdrop.width, backdrop.height);
+    });
+
+    testWidgets('a Marker (multiply) stroke drawn after the backdrop lands '
+        'actually composites against it, not the flat-paper fallback',
+        (tester) async {
+      final task = await createTask(tester, 'Marker card');
+      await pushEditor(tester, taskId: task.id, onResult: (_) {});
+
+      // The default bottom layer ("Color"/"Marker" in the toolbar) is
+      // multiply-blend out of the box — switch to it directly rather
+      // than driving the toolbar UI, which isn't what this test is
+      // checking.
+      final stack = editorStack(tester);
+      expect(stack.layers.first.blendMode, BlendMode.multiply);
+      stack.setActiveLayer(0);
+
+      await drawStroke(tester, PointerDeviceKind.stylus);
+      expect(strokeCount(tester), 1);
+
+      // The backdrop must have landed (previous tests in this group cover
+      // that in isolation) — the point here is that a stroke on the
+      // multiply layer, painted through the LIVE DrawingCanvas after the
+      // backdrop is already wired in, still sees it (i.e. the widget
+      // rebuild that supplies backdropImage doesn't get raced or dropped
+      // by the in-progress-stroke/bake path).
+      final canvas = tester.widget<DrawingCanvas>(find.byType(DrawingCanvas));
+      expect(canvas.backdropImage, isNotNull,
+          reason: 'if this is null here, the stroke silently rendered '
+              'against the flat-paper fallback instead — the exact '
+              'symptom of the 2026-08-07 device bug');
     });
   });
 

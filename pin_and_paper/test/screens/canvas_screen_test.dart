@@ -343,6 +343,126 @@ void main() {
     });
   });
 
+  group('on-desk Marker/multiply show-through (follow-up filed d6fdb90, '
+      'wired 2026-08-08)', () {
+    // A saved drawing renders on the desk via DrawingPreview as an OVERLAY
+    // on the already-visible FlippableTaskCard (unlike the editor, where
+    // the card face itself is the visible backdrop) -- so a Marker/
+    // multiply layer needs its OWN rasterized snapshot of the card face,
+    // captured hidden and wired in as DrawingPreview.backdropImage. See
+    // the "On-desk Marker/multiply show-through" note on
+    // `_CanvasScreenState._backdropImages` in canvas_screen.dart.
+
+    /// A drawing whose only content sits on the multiply-blend "Color"/
+    /// "Marker" layer (index 0 -- see `LayerStack._defaultLayers`), so a
+    /// desk overlay for it needs a real backdrop to show anything but the
+    /// flat-paper fallback.
+    String markerDrawingJson() {
+      final stack = LayerStack(size: kDrawingEditorCaptureSize);
+      stack.setActiveLayer(0);
+      expect(stack.activeLayer.blendMode, BlendMode.multiply,
+          reason: 'sanity check on the default layer stack this test '
+              'relies on -- if this ever fails, `_needsBackdrop` needs a '
+              'different layer index, not this test\'s assumption');
+      stack.addStrokeToActiveLayer(
+        const Stroke(
+          points: [StrokePoint(100, 100, 0.5), StrokePoint(300, 200, 0.5)],
+          color: Color(0xFFC75B4A),
+          options: StrokeOptions.watercolor,
+        ),
+      );
+      return jsonEncode(stack.toJson());
+    }
+
+    /// An ordinary top (ink) layer drawing -- no multiply content, so it
+    /// should never trigger a backdrop capture at all.
+    String inkDrawingJson() {
+      final stack = LayerStack(size: kDrawingEditorCaptureSize);
+      stack.addStrokeToActiveLayer(
+        const Stroke(
+          points: [StrokePoint(100, 100, 0.5), StrokePoint(300, 200, 0.5)],
+          color: Color(0xFF2D2D2D),
+          options: StrokeOptions.ink,
+        ),
+      );
+      return jsonEncode(stack.toJson());
+    }
+
+    Future<void> pumpDesk(WidgetTester tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(); // postFrameCallback -> snapshot
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(); // drawings-loaded notifyListeners
+    }
+
+    /// Drives the full async capture chain to completion: the request
+    /// registered mid-build needs one more frame before its hidden host
+    /// even mounts (see `_backdropImageFor`'s doc comment for why), and
+    /// the host's own `captureBackdrop` self-schedules whatever further
+    /// frames it needs to attempt `toImage()` (see that function's doc
+    /// comment) -- so `pumpAndSettle` alone chases the whole chain, same
+    /// as `test/rendering/backdrop_capture_test.dart`'s `captureAndSettle`.
+    /// Bounded to a few calls: each `setState` in the chain reliably
+    /// schedules the NEXT frame, but `pumpAndSettle` only sees frames
+    /// scheduled up to the moment it stops, so a chain with more than one
+    /// hop can need more than one `pumpAndSettle` call to fully drain.
+    Future<void> settleBackdropCapture(WidgetTester tester) async {
+      for (var i = 0; i < 5; i++) {
+        await tester.pumpAndSettle();
+        final preview = tester.widgetList<DrawingPreview>(find.byType(DrawingPreview));
+        if (preview.isNotEmpty && preview.first.backdropImage != null) return;
+      }
+    }
+
+    testWidgets('a Marker/multiply drawing on the desk eventually gets a '
+        'non-null backdropImage (real card show-through), not the '
+        'flat-paper fallback forever', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() async {
+        final t = await taskService.createTask('Marker desk card');
+        await taskService.updateTaskCanvasPosition(t.id, 150.0, 150.0);
+        await DrawingService().saveTaskDrawing(t.id, markerDrawingJson());
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+
+      expect(find.byType(DrawingPreview), findsOneWidget);
+      // Not yet -- the capture is async, same window as the editor's.
+      expect(
+        tester.widget<DrawingPreview>(find.byType(DrawingPreview)).backdropImage,
+        isNull,
+      );
+
+      await settleBackdropCapture(tester);
+
+      final preview = tester.widget<DrawingPreview>(find.byType(DrawingPreview));
+      expect(preview.backdropImage, isNotNull,
+          reason: 'a Marker layer with ink needs a real backdrop to show '
+              'the card through it -- without this the desk silently '
+              'keeps using the flat-paper precompute forever, the exact '
+              'on-desk half of the owner\'s 2026-08-07 report');
+      await drainRestores(tester);
+    });
+
+    testWidgets('an ordinary ink drawing never requests a backdrop capture '
+        '(no wasted rasterization for cards that would look identical '
+        'either way)', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() async {
+        final t = await taskService.createTask('Ink desk card');
+        await taskService.updateTaskCanvasPosition(t.id, 150.0, 150.0);
+        await DrawingService().saveTaskDrawing(t.id, inkDrawingJson());
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+      await settleBackdropCapture(tester);
+
+      final preview = tester.widget<DrawingPreview>(find.byType(DrawingPreview));
+      expect(preview.backdropImage, isNull);
+      await drainRestores(tester);
+    });
+  });
+
   group('complete-from-card chip (owner request 2026-08-06)', () {
     /// Pumps the desk, gives the data source's restore queries (real
     /// sqflite ffi I/O at construction) real-async time to land, and

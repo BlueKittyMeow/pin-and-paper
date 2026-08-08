@@ -4,11 +4,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:pin_and_paper_card_renderer/card_renderer.dart';
 import 'package:pin_and_paper_sketchpad/sketchpad.dart';
 
 import '../models/task_drawing.dart';
+import '../rendering/backdrop_capture.dart';
 import '../services/drawing_service.dart';
 import '../theme/desk_colors.dart';
 
@@ -130,6 +130,14 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
   /// captures it; a multiply layer painted before then falls back to the
   /// sketchpad's flat-paper precompute (see stroke_painter.dart), same as
   /// pre-fix behavior — never a crash or a blank stroke.
+  ///
+  /// NOTE (owner, 2026-08-07): the 2026-08-07 fix above shipped with a
+  /// capture path that PASSED every test but never actually ran on the
+  /// owner's phone ("blend still does not blend with card itself...
+  /// nada") — see [captureBackdrop]'s doc comment for the root cause
+  /// (a debug-only `debugNeedsPaint` check used for production control
+  /// flow, throwing `LateInitializationError` on every release build).
+  /// [_captureBackdrop] now delegates to that release-safe helper.
   ui.Image? _backdropImage;
 
   @override
@@ -157,13 +165,6 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _captureBackdrop());
   }
 
-  /// Bails [_captureBackdrop]'s "wait for a clean paint" retry rather than
-  /// rescheduling forever if something keeps the boundary dirty every
-  /// frame — a missed backdrop just means multiply layers keep using the
-  /// flat-paper fallback, never a crash or a stuck frame-callback loop.
-  static const int _maxBackdropCaptureAttempts = 60;
-  int _backdropCaptureAttempts = 0;
-
   /// Rasterize [_buildBackdropFace] (the real card face, already laid out
   /// at [_captureSize] under [_backdropCaptureKey]'s RepaintBoundary — see
   /// `_buildSurface`) into a `ui.Image` so the sketchpad can multiply-blend
@@ -173,35 +174,24 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
   /// `DrawingCanvas`/`paintLayerStack` can draw it 1:1 under the ink with
   /// no further scale math.
   ///
-  /// [RenderRepaintBoundary.toImage] requires `!debugNeedsPaint` — a
-  /// postFrameCallback normally guarantees that, but doesn't always land
-  /// on a fully clean boundary the very first time (observed here: the
-  /// widget test harness's `pumpAndSettle` needed a couple of extra
-  /// frames). Reschedule to the next frame instead of giving up on one
-  /// dirty check, capped at [_maxBackdropCaptureAttempts] frames.
+  /// Delegates the actual "wait for a real paint, retry if not ready yet"
+  /// dance to [captureBackdrop] — see that function's doc comment for why
+  /// this used to gate on `debugNeedsPaint` and why that silently broke
+  /// backdrop capture on every release build (owner report 2026-08-07:
+  /// "blend still does not blend with card itself... nada"), never a
+  /// single widget test, since `flutter test` always runs with assertions
+  /// enabled and `debugNeedsPaint` only misbehaves with them stripped.
   ///
   /// The card face is static for the life of this screen (built once from
   /// `widget.cardData`/`widget.backFields`, never mutated here), so one
   /// successful capture is enough — no need to re-capture on every
   /// rebuild.
   Future<void> _captureBackdrop() async {
-    final renderObject = _backdropCaptureKey.currentContext?.findRenderObject();
-    if (renderObject is! RenderRepaintBoundary) return;
-    if (renderObject.debugNeedsPaint) {
-      if (!mounted || _backdropCaptureAttempts >= _maxBackdropCaptureAttempts) {
-        return;
-      }
-      _backdropCaptureAttempts++;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _captureBackdrop());
-      return;
-    }
-    final ui.Image image;
-    try {
-      image = await renderObject.toImage(pixelRatio: 1.0);
-    } catch (e) {
-      // Best-effort only: a failed capture just means multiply layers
-      // keep using the flat-paper precompute fallback, never a crash.
-      debugPrint('DrawingEditorScreen: backdrop capture failed: $e');
+    final image = await captureBackdrop(_backdropCaptureKey);
+    if (image == null) {
+      // Best-effort only: a failed/exhausted capture just means multiply
+      // layers keep using the flat-paper precompute fallback, never a
+      // crash.
       return;
     }
     if (!mounted) {

@@ -1,12 +1,15 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:pin_and_paper_canvas/spatial_canvas.dart';
 import 'package:pin_and_paper_card_renderer/card_renderer.dart';
-import 'package:pin_and_paper_sketchpad/sketchpad.dart' show DrawingPreview;
+import 'package:pin_and_paper_sketchpad/sketchpad.dart' show DrawingPreview, LayerStack;
 import 'package:provider/provider.dart';
 
 import '../models/task.dart';
 import '../models/task_drawing.dart';
 import '../providers/task_provider.dart';
+import '../rendering/backdrop_capture.dart';
 import '../services/task_service.dart';
 import '../theme/desk_colors.dart';
 import 'drawing_editor_screen.dart';
@@ -90,6 +93,35 @@ class _CanvasScreenState extends State<CanvasScreen> {
   /// controller -- plain [setState] avoids coupling the two entirely.
   String? _selectedTrayCardId;
 
+  // -- On-desk Marker/multiply show-through (follow-up filed d6fdb90,
+  // wired 2026-08-07) --------------------------------------------------
+  //
+  // A saved drawing renders on the desk via DrawingPreview as an OVERLAY
+  // on top of the already-visible FlippableTaskCard (see `overlayFor` in
+  // `_buildCard`) -- unlike the drawing editor, where the card face IS
+  // the visible backdrop the ink sits on, here the real card pixels
+  // aren't otherwise available as a raster the sketchpad can multiply
+  // against. So: rasterize a hidden twin of the card face per (task,
+  // face) that actually needs one (only when a visible multiply/"Marker"
+  // layer has ink -- see [_needsBackdrop]), via the same release-safe
+  // [captureBackdrop] helper the editor uses (see that function's doc
+  // comment for why a naive `debugNeedsPaint` gate silently breaks this
+  // on every release build).
+  //
+  // Simplification (documented, not a correctness bug): keyed by
+  // 'taskId/face' only, captured once per key for the life of this
+  // screen -- NOT re-captured if the task's title/tags/etc. change while
+  // the desk stays open. Mirrors the editor's own "card face is static
+  // for the life of this screen" reasoning, just scoped to "this desk
+  // session" instead of "this fixed-data screen" (the desk, unlike the
+  // editor, can have a task's content change live underneath it). A
+  // stale show-through after a live edit is a narrow, self-correcting
+  // residual (fixed by reopening the desk) -- full signature-based
+  // invalidation was judged not worth the extra bookkeeping for a
+  // deferred follow-up. Revisit if it becomes a real complaint.
+  final Map<String, ui.Image> _backdropImages = {};
+  final Map<String, _BackdropCaptureRequest> _backdropCaptureRequests = {};
+
   TaskProvider? _watchedProvider;
   VoidCallback? _isLoadingListener;
 
@@ -158,8 +190,81 @@ class _CanvasScreenState extends State<CanvasScreen> {
     }
     _canvasController.dispose();
     _dataSource?.dispose();
+    for (final image in _backdropImages.values) {
+      image.dispose();
+    }
     super.dispose();
   }
+
+  /// Whether [stack] has any visible layer that's actually going to use a
+  /// backdrop (a multiply/"Marker" layer with ink) -- cards with no such
+  /// layer skip the capture entirely, so a desk full of ordinary Pencil/Pen
+  /// drawings never pays for a hidden rasterization it doesn't need.
+  bool _needsBackdrop(LayerStack? stack) {
+    if (stack == null) return false;
+    return stack.layers.any(
+      (l) => l.visible && l.blendMode == ui.BlendMode.multiply && l.strokes.isNotEmpty,
+    );
+  }
+
+  /// The cached backdrop image for [taskId]'s [face], kicking off a
+  /// capture (see the class-level "On-desk Marker/multiply show-through"
+  /// note) if one hasn't been requested yet. Returns null immediately if
+  /// no capture has completed yet -- the caller (DrawingPreview) falls
+  /// back to the flat-paper precompute until [_onBackdropCaptured] lands
+  /// and triggers a rebuild, exactly like the editor's own async-capture
+  /// window.
+  ///
+  /// Called from deep inside THIS SAME build() (via SpatialCanvas's
+  /// `entityBuilder` -> `_buildCard` -> `overlayFor`) -- which runs
+  /// AFTER `_buildBackdropCaptureHosts()` already produced this frame's
+  /// widget list from whatever was in `_backdropCaptureRequests` at that
+  /// earlier point. So a request added here for the first time can't
+  /// possibly make it into a hidden host THIS frame — schedule one more
+  /// rebuild (post-frame, never mid-build) so the next frame's
+  /// `_buildBackdropCaptureHosts()` actually mounts it. Without this, a
+  /// desk that never rebuilds for any other reason (no pan/zoom/select)
+  /// would leave a freshly-drawn Marker layer's backdrop request stuck in
+  /// the map forever, captured by nothing.
+  ui.Image? _backdropImageFor(String taskId, String face, TaskCardData data) {
+    final key = '$taskId/$face';
+    final cached = _backdropImages[key];
+    if (cached != null) return cached;
+    if (!_backdropCaptureRequests.containsKey(key)) {
+      _backdropCaptureRequests[key] = _BackdropCaptureRequest(face: face, data: data);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
+    return null;
+  }
+
+  void _onBackdropCaptured(String key, ui.Image image) {
+    if (!mounted) {
+      image.dispose();
+      return;
+    }
+    setState(() {
+      _backdropImages[key] = image;
+      _backdropCaptureRequests.remove(key);
+    });
+  }
+
+  /// Hidden (zero-footprint but fully painted) capture hosts for every
+  /// backdrop currently in flight -- see [_BackdropCaptureHost]'s doc
+  /// comment for why they're built this way instead of `Offstage`/
+  /// `Opacity(0)`. Spread into the desk's outer Stack (same one that
+  /// hosts the drawer/tray chrome) so they exist in the real render tree
+  /// without taking any visible space or affecting its layout.
+  List<Widget> _buildBackdropCaptureHosts() => [
+        for (final entry in _backdropCaptureRequests.entries)
+          _BackdropCaptureHost(
+            key: ValueKey('backdrop-capture-${entry.key}'),
+            face: entry.value.face,
+            data: entry.value.data,
+            onCaptured: (image) => _onBackdropCaptured(entry.key, image),
+          ),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -308,6 +413,10 @@ class _CanvasScreenState extends State<CanvasScreen> {
                 },
                 cardBuilder: (entity, isSelected) => _buildCard(context, dataSource, entity, isSelected),
                 ),
+              // Hidden card-face rasterizers for on-desk Marker/multiply
+              // show-through -- zero footprint, not part of any visible
+              // layout (see [_buildBackdropCaptureHosts]).
+              ..._buildBackdropCaptureHosts(),
             ]),
     );
   }
@@ -336,7 +445,12 @@ class _CanvasScreenState extends State<CanvasScreen> {
       if (!dataSource.isDrawingVisible(id, face: face)) return null;
       final stack = dataSource.drawingStackFor(id, face: face);
       if (stack == null) return null;
-      return DrawingPreview(layerStack: stack, size: kCardSize);
+      // Backdrop-aware multiply ("Marker" shows the card through it) on
+      // the desk -- see the "On-desk Marker/multiply show-through" note
+      // above _backdropImages. Only requested for faces that actually
+      // have multiply-blend ink; other faces render exactly as before.
+      final backdrop = _needsBackdrop(stack) ? _backdropImageFor(id, face, data) : null;
+      return DrawingPreview(layerStack: stack, size: kCardSize, backdropImage: backdrop);
     }
 
     final card = FlippableTaskCard(
@@ -993,6 +1107,95 @@ class _EntityChip extends StatelessWidget {
             border: Border.all(color: DeskColors.accentGold, width: 1),
           ),
           child: Icon(icon, size: 14, color: DeskColors.accentGold),
+        ),
+      ),
+    );
+  }
+}
+
+/// One pending backdrop capture: which face of which task's card face
+/// needs rasterizing, and the data to build it from. See the "On-desk
+/// Marker/multiply show-through" note on `_CanvasScreenState._backdropImages`.
+class _BackdropCaptureRequest {
+  const _BackdropCaptureRequest({required this.face, required this.data});
+
+  final String face;
+  final TaskCardData data;
+}
+
+/// Hidden (zero-footprint, but fully painted) twin of a card face,
+/// existing only so [captureBackdrop] can rasterize it for on-desk
+/// Marker/multiply show-through — see
+/// `_CanvasScreenState._buildBackdropCaptureHosts`.
+///
+/// Deliberately NOT `Offstage`/`Opacity(opacity: 0.0)`: both explicitly
+/// skip PAINTING their child entirely (see `RenderOffstage.paint`'s "If
+/// true ... without painting anything" and `RenderOpacity.paint`'s
+/// `if (child == null || _alpha == 0) return;` early-out in the Flutter
+/// framework source) — either one would leave this boundary's layer
+/// permanently null and [captureBackdrop] would never see a successful
+/// paint pass. `SizedBox(width: 0, height: 0)` wrapping an `OverflowBox`
+/// keeps this widget's OWN footprint at zero in the desk's outer Stack
+/// (no visual or layout impact — the surrounding chrome and cards are
+/// completely unaffected) while its child is still laid out and PAINTED
+/// at the card's real size: a `RepaintBoundary` always records its own
+/// isolated layer regardless of an ancestor's size/position/clip, so
+/// this "hidden in plain sight" trick is exactly as good a backdrop
+/// source as the editor's always-visible one (drawing_editor_screen.dart).
+class _BackdropCaptureHost extends StatefulWidget {
+  const _BackdropCaptureHost({
+    super.key,
+    required this.face,
+    required this.data,
+    required this.onCaptured,
+  });
+
+  final String face;
+  final TaskCardData data;
+  final ValueChanged<ui.Image> onCaptured;
+
+  @override
+  State<_BackdropCaptureHost> createState() => _BackdropCaptureHostState();
+}
+
+class _BackdropCaptureHostState extends State<_BackdropCaptureHost> {
+  final GlobalKey _boundaryKey = GlobalKey();
+  bool _requested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestCapture();
+  }
+
+  void _requestCapture() {
+    if (_requested) return;
+    _requested = true;
+    captureBackdrop(_boundaryKey).then((image) {
+      if (!mounted || image == null) {
+        image?.dispose();
+        return;
+      }
+      widget.onCaptured(image);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 0,
+      height: 0,
+      child: OverflowBox(
+        minWidth: kCardSize.width,
+        maxWidth: kCardSize.width,
+        minHeight: kCardSize.height,
+        maxHeight: kCardSize.height,
+        alignment: Alignment.topLeft,
+        child: RepaintBoundary(
+          key: _boundaryKey,
+          child: widget.face == TaskDrawing.faceBack
+              ? TaskCardBack(data: widget.data)
+              : TaskCard(data: widget.data),
         ),
       ),
     );
