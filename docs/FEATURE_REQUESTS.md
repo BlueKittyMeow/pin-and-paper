@@ -55,6 +55,32 @@
 
 ## Backlog (Unassigned)
 
+### Spatial View: Edit & Complete Tasks In Place (HIGH — owner felt strongly 2026-08-06)
+- **Priority:** HIGH | **Complexity:** MEDIUM–HIGH
+- **Description:** The Spatial View is currently read-plus-draw only — the
+  card's pencil chip opens the DRAWING editor, and there is no way to edit
+  a task's fields or complete it from the desk. To actually finish a task
+  the owner has to leave the Spatial View for the main list, which breaks
+  the "the desk IS the workspace" premise. Wants:
+  1. **Complete a task from its card** (highest-value slice — the acute pain:
+     "to complete a task I have to go back to the main list"). A done
+     affordance on the card that marks it complete and animates it into the
+     done pile. Smallest useful increment; consider shipping this first.
+  2. **Edit visible fields in place** on the card (title, due, tags, notes,
+     status) without leaving the desk.
+  3. **Call up the full record for editing**, including fields hidden on the
+     card face, from the card (an "open full editor" affordance distinct
+     from the drawing pencil).
+- **Notes for design:** the card back already shows Status/Due/Tags/Notes and
+  has a chip cluster (currently just the drawing pencil + hidden-ink tell);
+  the full edit dialog already exists in the main list (EditTaskDialog).
+  Likely path: a second chip → EditTaskDialog for the task, plus a
+  complete/checkbox affordance wired to TaskService completion + the
+  done-pile animation. Respect the one-time snapshot model (edits must
+  refresh the data source, same self-heal pattern as card positions).
+- **Source:** Owner request (2026-08-06, first extended device pass on the
+  modeled desk).
+
 ### UX Polish
 
 #### Sketchpad Refinements (owner phone-test batch, 2026-08-05)
