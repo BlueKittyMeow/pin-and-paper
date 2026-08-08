@@ -23,6 +23,32 @@ class ParsedDate {
   }
 }
 
+/// Whether [dueDate] counts as overdue right now, respecting the Today
+/// Window for all-day tasks and the wall clock for timed tasks.
+///
+/// Phase 4.4-MVP (Milestone 4 addendum item 2): extracted from two
+/// independently-duplicated private implementations —
+/// `DateSuffixParser._isOverdue` (date_suffix_parser.dart) and the inline
+/// `DateFilter.overdue` branch in `TaskProvider._refreshTreeController`
+/// (task_provider.dart) — so both call sites and the new Spatial View card
+/// adapter (`lib/spatial/task_card_adapter.dart`) agree on exactly one rule
+/// instead of three copies drifting apart.
+///
+/// [isAllDay] tasks are compared date-only against
+/// [DateParsingService.getCurrentEffectiveToday] (so a same-day due date
+/// isn't overdue until the user's configured Today Window cutoff has
+/// passed); timed tasks are compared against the live wall clock.
+bool isTaskOverdue(DateTime dueDate, {required bool isAllDay}) {
+  if (isAllDay) {
+    final effectiveToday = DateParsingService().getCurrentEffectiveToday();
+    final today = DateTime(effectiveToday.year, effectiveToday.month, effectiveToday.day);
+    final dateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+    return dateOnly.isBefore(today);
+  } else {
+    return dueDate.isBefore(DateTime.now());
+  }
+}
+
 class DateParsingService {
   static final DateParsingService _instance = DateParsingService._internal();
   factory DateParsingService() => _instance;

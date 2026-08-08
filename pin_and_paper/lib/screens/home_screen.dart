@@ -19,6 +19,7 @@ import '../widgets/tag_filter_dialog.dart'; // Phase 3.6A
 import '../widgets/search_dialog.dart'; // Phase 3.6B
 import '../widgets/snooze_options_sheet.dart'; // Phase 3.8.4
 import 'brain_dump_screen.dart'; // Phase 2
+import 'canvas_screen.dart'; // Phase 4.4-MVP: Spatial View
 import 'settings_screen.dart'; // Phase 2
 import 'quick_complete_screen.dart'; // Phase 2 Stretch
 import '../services/sync_service.dart'; // Phase 4.0
@@ -270,6 +271,17 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const BrainDumpScreen()),
+              );
+            },
+          ),
+          // Phase 4.4-MVP: Spatial View button
+          IconButton(
+            icon: const Icon(Icons.space_dashboard_outlined),
+            tooltip: 'Spatial View',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CanvasScreen()),
               );
             },
           ),

@@ -631,6 +631,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
+  perfect_freehand:
+    dependency: transitive
+    description:
+      name: perfect_freehand
+      sha256: f42b8164c4e7e689b278f4e2e8e8f5006e716f8c127eb44404f21bd73b1d3b56
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.5.2+1"
   petitparser:
     dependency: transitive
     description:
@@ -639,6 +647,27 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.1"
+  pin_and_paper_canvas:
+    dependency: "direct main"
+    description:
+      path: "../../pin_and_paper_canvas"
+      relative: true
+    source: path
+    version: "0.0.1"
+  pin_and_paper_card_renderer:
+    dependency: "direct main"
+    description:
+      path: "../../pin_and_paper_card_renderer"
+      relative: true
+    source: path
+    version: "0.0.1"
+  pin_and_paper_sketchpad:
+    dependency: "direct main"
+    description:
+      path: "../../pin_and_paper_sketchpad"
+      relative: true
+    source: path
+    version: "0.1.0"
   platform:
     dependency: transitive
     description:

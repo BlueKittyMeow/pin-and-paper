@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/utils/constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../helpers/test_database_helper.dart';
 
 /// Tests for database migrations
 ///
@@ -277,6 +278,574 @@ void main() {
       expect(v6Tags[2]['name'], equals('Work'));
     });
   });
+
+  group('Database Migration v12 → v13', () {
+    late Database db;
+
+    setUpAll(() {
+      // Initialize sqflite_ffi for testing
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    tearDown(() async {
+      if (db.isOpen) {
+        await db.close();
+      }
+    });
+
+    /// Helper: Create a v12 database with the schema as it existed just
+    /// before the v13 spatial-canvas migration (no canvas_x/canvas_y).
+    Future<Database> createV12Database() async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 12,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE ${AppConstants.tasksTable} (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                completed INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                completed_at INTEGER,
+                due_date INTEGER,
+                is_all_day INTEGER DEFAULT 1,
+                start_date INTEGER,
+                parent_id TEXT,
+                position INTEGER NOT NULL DEFAULT 0,
+                is_template INTEGER DEFAULT 0,
+                notification_type TEXT DEFAULT 'use_global',
+                notification_time INTEGER,
+                deleted_at INTEGER DEFAULT NULL,
+                notes TEXT DEFAULT NULL,
+                position_before_completion INTEGER DEFAULT NULL,
+                updated_at INTEGER,
+                FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE sync_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                table_name TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                payload TEXT,
+                created_at INTEGER NOT NULL,
+                synced INTEGER NOT NULL DEFAULT 0
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE sync_meta (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                user_id TEXT,
+                last_push_at INTEGER,
+                last_pull_at INTEGER,
+                sync_enabled INTEGER DEFAULT 0,
+                CHECK (id = 1)
+              )
+            ''');
+            await db.insert('sync_meta', {'id': 1});
+          },
+        ),
+      );
+
+      return db;
+    }
+
+    test('migrates from v12 to v13: adds canvas_x/canvas_y and data survives', () async {
+      // 1. Create v12 database
+      db = await createV12Database();
+
+      // 2. Add sample data
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.insert(AppConstants.tasksTable, {
+        'id': 'task-1',
+        'title': 'Pre-migration task',
+        'completed': 0,
+        'created_at': now,
+        'position': 0,
+        'is_template': 0,
+        'is_all_day': 1,
+        'notification_type': 'use_global',
+        'updated_at': now,
+      });
+
+      // 3. Run migration directly on the same database
+      await _migrateV12ToV13(db);
+
+      // 4. Verify schema changes
+      final taskColumns = await db.rawQuery('PRAGMA table_info(${AppConstants.tasksTable})');
+      final columnNames = taskColumns.map((col) => col['name'] as String).toList();
+
+      expect(columnNames, contains('canvas_x'));
+      expect(columnNames, contains('canvas_y'));
+
+      // 5. Verify existing data preserved, new columns default to NULL
+      final tasks = await db.query(AppConstants.tasksTable);
+      expect(tasks.length, equals(1));
+      expect(tasks.first['id'], equals('task-1'));
+      expect(tasks.first['title'], equals('Pre-migration task'));
+      expect(tasks.first['canvas_x'], isNull);
+      expect(tasks.first['canvas_y'], isNull);
+    });
+
+    test('canvas_x/canvas_y accept and round-trip real values after migration', () async {
+      db = await createV12Database();
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert(AppConstants.tasksTable, {
+        'id': 'task-2',
+        'title': 'Task to place on canvas',
+        'completed': 0,
+        'created_at': now,
+        'position': 0,
+        'is_template': 0,
+        'is_all_day': 1,
+        'notification_type': 'use_global',
+        'updated_at': now,
+      });
+
+      await _migrateV12ToV13(db);
+
+      await db.update(
+        AppConstants.tasksTable,
+        {'canvas_x': 123.5, 'canvas_y': -45.25},
+        where: 'id = ?',
+        whereArgs: ['task-2'],
+      );
+
+      final rows = await db.query(AppConstants.tasksTable, where: 'id = ?', whereArgs: ['task-2']);
+      expect(rows.first['canvas_x'], equals(123.5));
+      expect(rows.first['canvas_y'], equals(-45.25));
+    });
+
+    test('fresh v13 install schema matches the migrated schema', () async {
+      // The fresh-install schema (test harness equivalent of DatabaseService._createDB)
+      // must have the same canvas_x/canvas_y columns as a migrated v12 database.
+      final freshDb = await TestDatabaseHelper.createTestDatabase();
+
+      final freshColumns = await freshDb.rawQuery('PRAGMA table_info(${AppConstants.tasksTable})');
+      final freshColumnNames = freshColumns.map((col) => col['name'] as String).toSet();
+
+      expect(freshColumnNames, contains('canvas_x'));
+      expect(freshColumnNames, contains('canvas_y'));
+
+      // Fresh-installed tasks have NULL canvas position until placed
+      await freshDb.insert(AppConstants.tasksTable, {
+        'id': 'fresh-task-1',
+        'title': 'Fresh task',
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+      });
+      final rows = await freshDb.query(AppConstants.tasksTable, where: 'id = ?', whereArgs: ['fresh-task-1']);
+      expect(rows.first['canvas_x'], isNull);
+      expect(rows.first['canvas_y'], isNull);
+
+      await freshDb.close();
+    });
+  });
+
+  group('Database Migration v13 → v14', () {
+    late Database db;
+
+    setUpAll(() {
+      // Initialize sqflite_ffi for testing
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    tearDown(() async {
+      if (db.isOpen) {
+        await db.close();
+      }
+    });
+
+    /// Helper: Create a v13 database with the schema as it existed just
+    /// before the v14 card-drawings migration (no task_drawings table).
+    Future<Database> createV13Database() async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 13,
+          onConfigure: (db) async {
+            await db.execute('PRAGMA foreign_keys = ON');
+          },
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE ${AppConstants.tasksTable} (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                completed INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                completed_at INTEGER,
+                due_date INTEGER,
+                is_all_day INTEGER DEFAULT 1,
+                start_date INTEGER,
+                parent_id TEXT,
+                position INTEGER NOT NULL DEFAULT 0,
+                is_template INTEGER DEFAULT 0,
+                notification_type TEXT DEFAULT 'use_global',
+                notification_time INTEGER,
+                deleted_at INTEGER DEFAULT NULL,
+                notes TEXT DEFAULT NULL,
+                position_before_completion INTEGER DEFAULT NULL,
+                updated_at INTEGER,
+                canvas_x REAL,
+                canvas_y REAL,
+                FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE sync_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                table_name TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                payload TEXT,
+                created_at INTEGER NOT NULL,
+                synced INTEGER NOT NULL DEFAULT 0
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE sync_meta (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                user_id TEXT,
+                last_push_at INTEGER,
+                last_pull_at INTEGER,
+                sync_enabled INTEGER DEFAULT 0,
+                CHECK (id = 1)
+              )
+            ''');
+            await db.insert('sync_meta', {'id': 1});
+          },
+        ),
+      );
+
+      return db;
+    }
+
+    test('migrates from v13 to v14: adds task_drawings and task data survives', () async {
+      // 1. Create v13 database
+      db = await createV13Database();
+
+      // 2. Add sample data (including canvas positions — must survive)
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.insert(AppConstants.tasksTable, {
+        'id': 'task-1',
+        'title': 'Pre-migration task',
+        'completed': 0,
+        'created_at': now,
+        'position': 0,
+        'is_template': 0,
+        'is_all_day': 1,
+        'notification_type': 'use_global',
+        'updated_at': now,
+        'canvas_x': 123.5,
+        'canvas_y': -45.25,
+      });
+
+      // 3. Run migration directly on the same database
+      await _migrateV13ToV14(db);
+
+      // 4. Verify the table + index exist with the expected columns
+      final drawingColumns = await db.rawQuery(
+          'PRAGMA table_info(${AppConstants.taskDrawingsTable})');
+      final columnNames =
+          drawingColumns.map((col) => col['name'] as String).toSet();
+
+      expect(
+        columnNames,
+        equals({
+          'id',
+          'task_id',
+          'face',
+          'drawing_json',
+          'visible',
+          'position_x',
+          'position_y',
+          'created_at',
+          'updated_at',
+        }),
+      );
+
+      final indexes = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+          [AppConstants.taskDrawingsTable]);
+      expect(
+        indexes.map((row) => row['name'] as String),
+        contains('idx_task_drawings_task'),
+      );
+
+      // 5. Verify existing task data preserved
+      final tasks = await db.query(AppConstants.tasksTable);
+      expect(tasks.length, equals(1));
+      expect(tasks.first['id'], equals('task-1'));
+      expect(tasks.first['title'], equals('Pre-migration task'));
+      expect(tasks.first['canvas_x'], equals(123.5));
+      expect(tasks.first['canvas_y'], equals(-45.25));
+
+      // 6. New table starts empty
+      final drawings = await db.query(AppConstants.taskDrawingsTable);
+      expect(drawings, isEmpty);
+    });
+
+    test('task_drawings defaults apply after migration (face/visible/position)', () async {
+      db = await createV13Database();
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert(AppConstants.tasksTable, {
+        'id': 'task-2',
+        'title': 'Task with a doodle',
+        'completed': 0,
+        'created_at': now,
+        'position': 0,
+        'updated_at': now,
+      });
+
+      await _migrateV13ToV14(db);
+
+      // Insert relying on column defaults
+      await db.insert(AppConstants.taskDrawingsTable, {
+        'id': 'drawing-1',
+        'task_id': 'task-2',
+        'drawing_json': '{"v":1}',
+        'created_at': now,
+      });
+
+      final rows = await db.query(AppConstants.taskDrawingsTable);
+      expect(rows.length, equals(1));
+      expect(rows.first['face'], equals('front'));
+      expect(rows.first['visible'], equals(1));
+      expect(rows.first['position_x'], equals(0));
+      expect(rows.first['position_y'], equals(0));
+      expect(rows.first['updated_at'], isNull);
+    });
+
+    test('fresh v14 install schema matches the migrated schema (parity)', () async {
+      // The fresh-install schema (test harness equivalent of
+      // DatabaseService._createDB) must produce the exact same task_drawings
+      // table definition as a migrated v13 database — compare full
+      // PRAGMA table_info rows (name, type, notnull, default, pk).
+      db = await createV13Database();
+      await _migrateV13ToV14(db);
+
+      final freshDb = await TestDatabaseHelper.createTestDatabase();
+
+      List<Map<String, Object?>> normalize(List<Map<String, Object?>> info) =>
+          info
+              .map((col) => {
+                    'name': col['name'],
+                    'type': col['type'],
+                    'notnull': col['notnull'],
+                    'dflt_value': col['dflt_value'],
+                    'pk': col['pk'],
+                  })
+              .toList();
+
+      final migratedInfo = normalize(await db
+          .rawQuery('PRAGMA table_info(${AppConstants.taskDrawingsTable})'));
+      final freshInfo = normalize(await freshDb
+          .rawQuery('PRAGMA table_info(${AppConstants.taskDrawingsTable})'));
+
+      expect(freshInfo, equals(migratedInfo));
+
+      // Index parity too
+      final freshIndexes = await freshDb.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+          [AppConstants.taskDrawingsTable]);
+      expect(
+        freshIndexes.map((row) => row['name'] as String),
+        contains('idx_task_drawings_task'),
+      );
+
+      await freshDb.close();
+    });
+
+    test('deleting a task cascades to its task_drawings rows', () async {
+      db = await createV13Database();
+      await _migrateV13ToV14(db);
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert(AppConstants.tasksTable, {
+        'id': 'task-3',
+        'title': 'Doomed task',
+        'completed': 0,
+        'created_at': now,
+        'position': 0,
+        'updated_at': now,
+      });
+      await db.insert(AppConstants.taskDrawingsTable, {
+        'id': 'drawing-2',
+        'task_id': 'task-3',
+        'drawing_json': '{"v":1}',
+        'created_at': now,
+      });
+
+      await db.delete(AppConstants.tasksTable,
+          where: 'id = ?', whereArgs: ['task-3']);
+
+      final drawings = await db.query(AppConstants.taskDrawingsTable);
+      expect(drawings, isEmpty);
+    });
+  });
+
+  group('Database Migration v14 → v15', () {
+    late Database db;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    tearDown(() async {
+      if (db.isOpen) {
+        await db.close();
+      }
+    });
+
+    /// A v14-shaped database is a v13 one (only the tables the v15
+    /// migration touches matter for this group — none) — desk_objects is
+    /// purely additive.
+    Future<Database> createV14Database() async {
+      final v14 = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 14,
+          onCreate: (db, version) async {
+            // Minimal: v15 touches nothing pre-existing.
+            await db.execute('CREATE TABLE ${AppConstants.tasksTable} ('
+                'id TEXT PRIMARY KEY, title TEXT NOT NULL, '
+                'created_at INTEGER NOT NULL)');
+          },
+        ),
+      );
+      return v14;
+    }
+
+    test('migrates from v14 to v15: adds desk_objects, starts empty', () async {
+      db = await createV14Database();
+      await _migrateV14ToV15(db);
+
+      final columns =
+          await db.rawQuery('PRAGMA table_info(${AppConstants.deskObjectsTable})');
+      expect(
+        columns.map((col) => col['name'] as String).toSet(),
+        equals({'id', 'placed', 'x', 'y', 'width', 'variant', 'created_at', 'updated_at'}),
+      );
+
+      expect(await db.query(AppConstants.deskObjectsTable), isEmpty);
+    });
+
+    test('desk_objects defaults apply (placed 0, variant 0, nullable geometry)', () async {
+      db = await createV14Database();
+      await _migrateV14ToV15(db);
+
+      await db.insert(AppConstants.deskObjectsTable, {
+        'id': 'desk-object-dachshund',
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      final rows = await db.query(AppConstants.deskObjectsTable);
+      expect(rows.length, equals(1));
+      expect(rows.first['placed'], equals(0));
+      expect(rows.first['variant'], equals(0));
+      expect(rows.first['x'], isNull);
+      expect(rows.first['y'], isNull);
+      expect(rows.first['width'], isNull);
+      expect(rows.first['updated_at'], isNull);
+    });
+
+    test('fresh v15 install schema matches the migrated schema (parity)', () async {
+      db = await createV14Database();
+      await _migrateV14ToV15(db);
+
+      final freshDb = await TestDatabaseHelper.createTestDatabase();
+
+      List<Map<String, Object?>> normalize(List<Map<String, Object?>> info) =>
+          info
+              .map((col) => {
+                    'name': col['name'],
+                    'type': col['type'],
+                    'notnull': col['notnull'],
+                    'dflt_value': col['dflt_value'],
+                    'pk': col['pk'],
+                  })
+              .toList();
+
+      final migratedInfo = normalize(await db
+          .rawQuery('PRAGMA table_info(${AppConstants.deskObjectsTable})'));
+      final freshInfo = normalize(await freshDb
+          .rawQuery('PRAGMA table_info(${AppConstants.deskObjectsTable})'));
+
+      expect(freshInfo, equals(migratedInfo));
+
+      await freshDb.close();
+    });
+  });
+}
+
+/// Manual implementation of v12→v13 migration for testing
+///
+/// This replicates the logic from DatabaseService._migrateToV13
+/// so we can test it without making the method public.
+Future<void> _migrateV12ToV13(Database db) async {
+  await db.transaction((txn) async {
+    await txn.execute(
+        'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_x REAL');
+    await txn.execute(
+        'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_y REAL');
+  });
+}
+
+/// Manual implementation of v13→v14 migration for testing
+///
+/// This replicates the logic from DatabaseService._migrateToV14
+/// so we can test it without making the method public.
+Future<void> _migrateV13ToV14(Database db) async {
+  await db.transaction((txn) async {
+    await txn.execute('''
+      CREATE TABLE ${AppConstants.taskDrawingsTable} (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        face TEXT NOT NULL DEFAULT 'front',
+        drawing_json TEXT NOT NULL,
+        visible INTEGER NOT NULL DEFAULT 1,
+        position_x REAL NOT NULL DEFAULT 0,
+        position_y REAL NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER,
+        FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+      )
+    ''');
+
+    await txn.execute(
+        'CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)');
+  });
+}
+
+/// Manual implementation of v14→v15 migration for testing
+///
+/// This replicates the logic from DatabaseService._migrateToV15
+/// so we can test it without making the method public.
+Future<void> _migrateV14ToV15(Database db) async {
+  await db.execute('''
+    CREATE TABLE ${AppConstants.deskObjectsTable} (
+      id TEXT PRIMARY KEY,
+      placed INTEGER NOT NULL DEFAULT 0,
+      x REAL,
+      y REAL,
+      width REAL,
+      variant INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER
+    )
+  ''');
 }
 
 /// Manual implementation of v5→v6 migration for testing

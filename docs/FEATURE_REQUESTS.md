@@ -55,7 +55,95 @@
 
 ## Backlog (Unassigned)
 
+### Spatial View: Manual Card Reordering / Z-order Commands (ELEVATED 2026-08-06)
+- **Priority:** HIGH (owner elevated) | **Complexity:** MEDIUM
+- **Description:** Explicit "move above / to front / to back / forward /
+  backward" controls for cards on the desk, so a buried card can be lifted
+  deliberately (the manual sibling of the automatic tag-spotlight raise
+  built 2026-08-06). Owner asked to elevate this alongside complete-from-card.
+- **Grounding:** design already researched in
+  `pin_and_paper_dev_harness/docs/working/ZORDER_RESEARCH.md` +
+  `SELECTION_UX_RESEARCH.md`. Headlines to honor: expose EXPLICIT commands
+  (a pile-heavy desk favors all four, not just front/back), keep auto-raise
+  OFF as the default (safer on touch, preserves intentional piles/spatial
+  memory), use plain language not z-order jargon, and PRESERVE RELATIVE
+  ORDER for multi-select moves (same principle the spotlight-raise uses).
+  Persist z-order deterministically with a renumber/compaction plan; decide
+  global vs overlap-aware forward/backward.
+- **Implementation note:** the spotlight-raise (2026-08-06) already added a
+  reversible, non-persisted paint-order lift in task_spatial_data_source.dart
+  — the manual commands are the persisted, user-invoked counterpart; reuse
+  the paint-order machinery. Controls likely live on the selected card's
+  chip cluster and/or a context action in canvas_screen.dart.
+- **Source:** Owner request (2026-08-06 device pass); prior roadmap item now
+  elevated.
+
+### Spatial View: Edit & Complete Tasks In Place (HIGH — owner felt strongly 2026-08-06)
+- **Priority:** HIGH | **Complexity:** MEDIUM–HIGH
+- **Description:** The Spatial View is currently read-plus-draw only — the
+  card's pencil chip opens the DRAWING editor, and there is no way to edit
+  a task's fields or complete it from the desk. To actually finish a task
+  the owner has to leave the Spatial View for the main list, which breaks
+  the "the desk IS the workspace" premise. Wants:
+  1. **Complete a task from its card** (highest-value slice — the acute pain:
+     "to complete a task I have to go back to the main list"). A done
+     affordance on the card that marks it complete and animates it into the
+     done pile. Smallest useful increment; consider shipping this first.
+  2. **Edit visible fields in place** on the card (title, due, tags, notes,
+     status) without leaving the desk.
+  3. **Call up the full record for editing**, including fields hidden on the
+     card face, from the card (an "open full editor" affordance distinct
+     from the drawing pencil).
+- **Notes for design:** the card back already shows Status/Due/Tags/Notes and
+  has a chip cluster (currently just the drawing pencil + hidden-ink tell);
+  the full edit dialog already exists in the main list (EditTaskDialog).
+  Likely path: a second chip → EditTaskDialog for the task, plus a
+  complete/checkbox affordance wired to TaskService completion + the
+  done-pile animation. Respect the one-time snapshot model (edits must
+  refresh the data source, same self-heal pattern as card positions).
+- **Source:** Owner request (2026-08-06, first extended device pass on the
+  modeled desk).
+
+### Marker backdrop show-through on DESK cards (follow-up, 2026-08-06)
+- **Priority:** LOW–MEDIUM | **Complexity:** LOW–MEDIUM
+- **Description:** The backdrop-aware Marker blend (2026-08-06) makes a
+  multiply/Marker layer show the card through it — but only in the drawing
+  EDITOR, which snapshots its card-face backdrop. On the desk, the saved
+  drawing renders via `DrawingPreview` in canvas_screen.dart (~line 326)
+  with no backdrop, so desk-side Marker layers fall back to the flat-paper
+  precompute (no regression, just not fully consistent with the editor).
+  To finish: rasterize the real card face (`FlippableTaskCard` content) and
+  pass it as `DrawingPreview(..., backdropImage: cardSnapshot)`. Held during
+  the 2026-08-06 batch because canvas_screen.dart was under concurrent edit.
+- **Source:** Follow-up from the marker-blend fix (owner report 2026-08-06).
+
 ### UX Polish
+
+#### Sketchpad Refinements (owner phone-test batch, 2026-08-05)
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Batch of drawing-editor refinements from owner device testing:
+  - **BUG (diagnosed 2026-08-06, verification pending):** strokes intermittently draw far thinner than their preset (owner-reported as "purple thinner than other marker colors"; video-documented at 2–3x coverage-rate difference between a purple and a blue pass, same Color tool). Frame forensics + code trace verdict: no color→width code path exists; the lever is REAL touchscreen pressure × thinning (watercolor thinning 0.8 is the most sensitive) — color was the deliberate variable but per-stroke touch pressure was the lurking one. The Aug 3 sketchpad fix (`1265115`) pins touch pressure to 0.5, which makes touch width constant — the video build appears to predate it. VERIFY on next fresh build: color two shapes with the Color tool, swap swatches between them, one pass hurried/light + one slow/deliberate. Uniform width → stale-build confirmed, close. Still varies → wire up `DrawingCanvas.debugPressure` and catch live values. Owner policy: if unconfirmed, keep filed as possible-bug (unreproduced) and dig only if it recurs. FOLLOW-UP design question for owner: with pressure pinned, thinning is inert for touch — decide whether the marker should get organic width variation back via `simulatePressure: true` or a pressure floor instead of the hard pin.
+  - **Stroke size control for every implement**: adjustable size plus a "reset to tool default" affordance.
+  - **Pinch-to-zoom inside the drawing widget** (canvas-style zoom while editing).
+  - **Layer chip + eye unification:** layer visibility toggle should sit adjacent to its go-to-layer chip — eyeball next to "sketch"; tapping "sketch" switches to that layer, tapping its eyeball toggles visibility. Add a grouping element (light-opacity ring or similar) binding each layer chip to its own eyeball so ownership is obvious.
+  - **Layer blend mode:** ~~choice between~~ owner decision 2026-08-06: NO option/toggle — switch to a single unified blend mode where draw/ink layers each blend with the paper behind but NOT with each other (replaces the additive-between-layers behavior). Enables touch-ups that color-match across layers in edge cases the additive compositing fights.
+  - **Consider (stretch):** further stroke refinement; color picker.
+- **Source:** Owner request (2026-08-05, first full-suite mobile session)
+
+#### Easter Egg: The Old Guard Stones
+- **Priority:** LOW | **Complexity:** LOW
+- **Description:** When the painted 2.5D crystal chunks (AmethystChunkPainter + hue-shift variants — the original amethyst "shadow saga" stone and its citrine/rose-quartz/fluorite siblings) are retired from the drawer in favor of the Blender-modeled habit gems, keep them recoverable as a hidden easter egg — some secret interaction someday pulls the old guard back onto the desk. The painter code stays in the canvas module regardless.
+- **Source:** Owner request (2026-08-05, gem habit round)
+
+#### Recall All Cards (Spatial View)
+- **Priority:** MEDIUM | **Complexity:** LOW
+- **Description:** A "recall all cards" action that brings every placed card back into the visible/usable desk area (e.g., re-stack or grid within bounds), guarded by an "are you sure" confirmation and undoable. Motivated by cards stranded outside canvas bounds after the canvas rebind to the desk panel (2026-08-05) — off-bounds cards can't be grabbed at all.
+- **Source:** Owner request (2026-08-05)
+
+#### Spatial View Sound Design
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** Sounds for the desk's tactile experience (owner: "Sounds will help with tactile experience"). Candidates: card pickup/drop (paper slide), card flip, drawer open/close, desk-object placement thunk (per-material: stone clink vs figurine tap), done-pile fan/restack shuffle, completion sound. Should respect a global mute and follow the same reduce-stimulation philosophy as reduce-motion (see DEFAULTS_TO_REVISIT).
+- **Source:** Owner request (2026-08-05, Spatial View desk-objects session)
 
 #### Tag Color Palette Review
 - **Priority:** LOW | **Complexity:** LOW
@@ -229,7 +317,19 @@
 - **Description:** The onboarding quiz includes a question about subtask auto-completion behavior (always autocomplete children, never, or ask each time), but the answer is not currently tied to any app behavior. The quiz stores the answer and awards a badge, but no setting controls this feature yet. Need to add the actual autocomplete-children setting and wire it to task completion logic.
 - **Source:** Phase 3.9 manual testing (2026-01-29)
 
+### Desk 3D Era (2026-08-06)
+
+#### Swappable Desk Mats / Desk Pads
+- **Priority:** MEDIUM | **Complexity:** MEDIUM
+- **Description:** The modeled desk renders as separable layers, and mats are compositor-swappable: each mat is a pixel-aligned transparent PNG stacked over the desk image (proven: backend composite matches a joint render at 0.055/255 mean diff). First mat shipped: green felt with stitched leather border (`bundle_v1/mat_greenfelt.png`). App-side work: a mat asset registry keyed by variant, an Image layer over the desk positioned identically to it, and eventually a picker UI (settings or unlockables — owner's "change desk pads" pipeline). New variants cost one material block + one farm render, no desk re-render (see PIN_AND_PAPER_ASSET_HANDOFF.md in dev_harness).
+- **Source:** Desk 3D session (2026-08-06); owner: "setting the pipeline rough out for ability to change desk pads etc."
+
+#### Openable Desk Drawers (renders now exist)
+- **Priority:** LOW (endgame) | **Complexity:** HIGH
+- **Description:** The desk-objects drawer UI endgame — tap a drawer front on the modeled desk, it opens, tchotchkes live inside. The blocker used to be art; it no longer is: drawers are rigged objects with hollow interiors and `build_desk.py --open "L3=1.0,L2=0.5,R1=0.33"` renders any drawer at any pull fraction. A sprite-sequence or a small set of open states per drawer could drive the interaction. Shadow/lighting stays consistent (single-scene renders).
+- **Source:** DESK_3D_BRIEF payoff #2, made concrete 2026-08-06
+
 ---
 
-**Document Version:** 2.2
-**Updated:** 2026-01-29 (added autocomplete children gap)
+**Document Version:** 2.3
+**Updated:** 2026-08-06 (desk 3D era: swappable mats, openable drawers)

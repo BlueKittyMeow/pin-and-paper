@@ -88,6 +88,11 @@ void main() {
           ChangeNotifierProvider(
             create: (_) => TagProvider(tagService: fakeTagService),
           ),
+          // Phase 3.9 Refactor: HomeScreen consumes TaskSortProvider directly
+          // via Consumer<TaskSortProvider>, so it must be provided on the
+          // tree itself, not just threaded into TaskProvider's constructor.
+          ChangeNotifierProvider(create: (_) => TaskSortProvider()),
+          ChangeNotifierProvider(create: (_) => TaskHierarchyProvider()),
           ChangeNotifierProxyProvider<TagProvider, TaskFilterProvider>(
             create: (context) => TaskFilterProvider(
               tagProvider: Provider.of<TagProvider>(context, listen: false),
@@ -99,17 +104,19 @@ void main() {
             create: (context) => TaskProvider(
               taskService: fakeTaskService,
               tagService: fakeTagService,
-              sortProvider: TaskSortProvider(),
+              tagProvider: Provider.of<TagProvider>(context, listen: false),
+              sortProvider: Provider.of<TaskSortProvider>(context, listen: false),
               filterProvider: Provider.of<TaskFilterProvider>(context, listen: false),
-              hierarchyProvider: TaskHierarchyProvider(),
+              hierarchyProvider: Provider.of<TaskHierarchyProvider>(context, listen: false),
             ),
             update: (context, tagProvider, filterProvider, previous) =>
                 previous ?? TaskProvider(
                   taskService: fakeTaskService,
                   tagService: fakeTagService,
-                  sortProvider: TaskSortProvider(),
+                  tagProvider: tagProvider,
+                  sortProvider: Provider.of<TaskSortProvider>(context, listen: false),
                   filterProvider: filterProvider,
-                  hierarchyProvider: TaskHierarchyProvider(),
+                  hierarchyProvider: Provider.of<TaskHierarchyProvider>(context, listen: false),
                 ),
           ),
         ],

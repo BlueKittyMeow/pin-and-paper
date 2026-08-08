@@ -3,7 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/services/date_parsing_service.dart';
 
-void main() {
+/// HOST GUARD: flutter_js's native QuickJS library can't load on some test
+/// hosts (e.g. a Linux desktop missing libquickjs_c_bridge_plugin.so on the
+/// library path — the owner's dev machine). The library ships inside real
+/// app builds, so this only ever affects `flutter test` on under-provisioned
+/// hosts; without this guard, every test below that calls `initialize()`
+/// fails with a noisy FFI error instead (owner call 2026-08-06: skip guard
+/// over fixing the host — same pattern as
+/// test/integration/date_parsing_integration_test.dart).
+Future<void> main() async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  var quickJsAvailable = !kIsWeb;
+  if (quickJsAvailable) {
+    try {
+      // Singleton: a successful probe leaves the service warm for the
+      // tests below; a failed probe leaves it cleanly uninitialized (see
+      // DateParsingService.initialize — it only flips `_initialized` on
+      // success), so this has no side effects either way.
+      await DateParsingService().initialize();
+    } catch (_) {
+      quickJsAvailable = false;
+    }
+  }
+  final String? quickJsSkipReason = quickJsAvailable
+      ? null
+      : 'flutter_js QuickJS native library unavailable on this host '
+          '(fine in real builds — see doc comment)';
+
   group('DateParsingService', () {
     late DateParsingService service;
 
@@ -29,7 +55,7 @@ void main() {
         // flutter_js is not available on web, but service should handle gracefully
         expect(true, isTrue); // Just verify no crash
       });
-    });
+    }, skip: quickJsSkipReason);
 
     group('containsPotentialDate (Pre-filter)', () {
       test('returns false for non-date strings', () {
@@ -218,13 +244,13 @@ void main() {
         await service.initialize();
         final result = service.parse('');
         expect(result, isNull);
-      });
+      }, skip: quickJsSkipReason);
 
       test('returns null for whitespace-only string', () async {
         await service.initialize();
         final result = service.parse('   ');
         expect(result, isNull);
-      });
+      }, skip: quickJsSkipReason);
 
       test('handles null gracefully when not initialized', () {
         // The singleton may already be initialized from earlier tests in
@@ -246,7 +272,7 @@ void main() {
           expect(result, isNull);
         }
         // On non-web, might return a result or null depending on chrono.js availability
-      });
+      }, skip: quickJsSkipReason);
     });
 
     group('ParsedDate model', () {
@@ -284,7 +310,7 @@ void main() {
 
         // Should not crash
         expect(() => service.parse(longString), returnsNormally);
-      });
+      }, skip: quickJsSkipReason);
 
       test('handles special characters', () async {
         await service.initialize();
@@ -292,14 +318,14 @@ void main() {
         expect(() => service.parse('Meeting @ tomorrow'), returnsNormally);
         expect(() => service.parse('Call #tomorrow'), returnsNormally);
         expect(() => service.parse('Due: tomorrow!'), returnsNormally);
-      });
+      }, skip: quickJsSkipReason);
 
       test('handles unicode characters', () async {
         await service.initialize();
 
         expect(() => service.parse('Meeting 明天 tomorrow'), returnsNormally);
         expect(() => service.parse('Tomorrow café ☕'), returnsNormally);
-      });
+      }, skip: quickJsSkipReason);
 
       test('containsPotentialDate handles empty string', () {
         expect(service.containsPotentialDate(''), isFalse);
@@ -323,7 +349,7 @@ void main() {
         final newService = DateParsingService();
         await newService.initialize();
         expect(true, isTrue);
-      });
+      }, skip: quickJsSkipReason);
     });
   });
 }

@@ -35,6 +35,11 @@ export function registerGetSummary(
 
         // Overdue task details
         if (include_overdue_details) {
+          // NOTE: overdue computed as due_date < now — does NOT honor the
+          // todayCutoffHour Today-Window setting or the all-day date-only rule
+          // applied by the canonical Dart isTaskOverdue
+          // (pin_and_paper/lib/services/date_parsing_service.dart). Drift risk;
+          // see handoff.md 2026-08-06. Keep in sync / consolidate.
           const { data: overdue } = await supabase
             .from("tasks")
             .select("id, title, due_date")

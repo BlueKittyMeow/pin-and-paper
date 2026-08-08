@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pin_and_paper/services/date_parsing_service.dart';
 import 'package:pin_and_paper/utils/date_formatter.dart';
@@ -15,8 +14,31 @@ import 'package:pin_and_paper/utils/debouncer.dart';
 /// - DateFormatter
 ///
 /// Note: Some tests are skipped on web platform where flutter_js is not available
-void main() {
-  group('Date Parsing Integration', () {
+///
+/// HOST GUARD: the whole suite also skips when flutter_js's native QuickJS
+/// library can't load on the test host (e.g. a Linux desktop without
+/// libquickjs_c_bridge_plugin.so on the library path — the owner's dev
+/// machine). The library ships inside real app builds, so this only ever
+/// skips `flutter test` on under-provisioned hosts; it previously failed
+/// all 11 tests there with a noisy FFI error instead (owner call
+/// 2026-08-06: skip guard over fixing the host).
+Future<void> main() async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  var quickJsAvailable = !kIsWeb;
+  if (quickJsAvailable) {
+    try {
+      // Singleton: a successful probe leaves the service warm for the
+      // tests below; their own initialize() calls early-return.
+      await DateParsingService().initialize();
+    } catch (_) {
+      quickJsAvailable = false;
+    }
+  }
+  group('Date Parsing Integration',
+      skip: quickJsAvailable
+          ? false
+          : 'flutter_js QuickJS native library unavailable on this host '
+              '(fine in real builds — see doc comment)', () {
     group('End-to-End Parsing Flow', () {
       testWidgets('typing "tomorrow" triggers parsing and highlighting', (tester) async {
         // Skip on web (flutter_js not available)

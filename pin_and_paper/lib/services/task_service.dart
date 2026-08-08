@@ -440,19 +440,20 @@ class TaskService {
     final db = await _dbService.database;
 
     if (!task.completed) {
-      // Completing: Save current position for potential restore
+      // Completing: Save current position for potential restore.
+      // Update only the columns this operation owns — writing the full task
+      // map would clobber columns changed since the caller's Task was loaded
+      // (e.g. canvas_x/canvas_y persisted by updateTaskCanvasPosition).
       final now = DateTime.now();
-      final updatedTask = task.copyWith(
-        completed: true,
-        completedAt: now,
-        positionBeforeCompletion: task.position,
-        updatedAt: now,
-      );
-
-      final taskMap = updatedTask.toMap();
+      final updateMap = <String, dynamic>{
+        'completed': 1,
+        'completed_at': now.millisecondsSinceEpoch,
+        'position_before_completion': task.position,
+        'updated_at': now.millisecondsSinceEpoch,
+      };
       await db.update(
         AppConstants.tasksTable,
-        taskMap,
+        updateMap,
         where: 'id = ?',
         whereArgs: [task.id],
       );
@@ -461,10 +462,15 @@ class TaskService {
         tableName: 'tasks',
         recordId: task.id,
         operation: 'UPDATE',
-        payload: taskMap,
+        payload: updateMap,
       );
 
-      return updatedTask;
+      return task.copyWith(
+        completed: true,
+        completedAt: now,
+        positionBeforeCompletion: task.position,
+        updatedAt: now,
+      );
     } else {
       // Uncompleting: Use restoreTaskToPosition for proper handling
       return await uncompleteTask(task.id);
@@ -681,6 +687,52 @@ class TaskService {
 
     // Return updated copy (leverages existing copyWith method)
     return originalTask.copyWith(title: trimmedTitle, updatedAt: now);
+  }
+
+  // Phase 4.4-MVP: Update task's spatial canvas position
+  /// Updates the stored canvas_x/canvas_y for a task (drag-end only, so no
+  /// throttling needed).
+  ///
+  /// NOTE: bumping updated_at on drag can win coarse LWW over a concurrent
+  /// remote edit made around the same time - this is a pre-existing accepted
+  /// sync limitation (see updateTaskTitle and friends, which have the same
+  /// property), not something new introduced here.
+  ///
+  /// Throws [Exception] if task not found
+  Future<void> updateTaskCanvasPosition(String taskId, double x, double y) async {
+    final db = await _dbService.database;
+
+    // Fetch the original task first to have all its data
+    final maps = await db.query(
+      AppConstants.tasksTable,
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    if (maps.isEmpty) {
+      throw Exception('Task not found: $taskId');
+    }
+
+    // Perform the update
+    final now = DateTime.now();
+    final updateMap = {
+      'canvas_x': x,
+      'canvas_y': y,
+      'updated_at': now.millisecondsSinceEpoch,
+    };
+    await db.update(
+      AppConstants.tasksTable,
+      updateMap,
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    await SyncService.instance.logChange(
+      tableName: 'tasks',
+      recordId: taskId,
+      operation: 'UPDATE',
+      payload: updateMap,
+    );
   }
 
   // Get count of incomplete tasks

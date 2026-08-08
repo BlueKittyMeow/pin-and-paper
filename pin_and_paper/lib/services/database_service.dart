@@ -98,6 +98,10 @@ class DatabaseService {
         -- Phase 4.0: Sync layer
         updated_at INTEGER,
 
+        -- Phase 4.4-MVP: Spatial canvas positions (NULL = never placed)
+        canvas_x REAL,
+        canvas_y REAL,
+
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
       )
     ''');
@@ -194,6 +198,38 @@ class DatabaseService {
         file_size INTEGER,
         created_at INTEGER NOT NULL,
         FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Card drawings (DB v14): stroke JSON per task face.
+    // Parity rule: must match _migrateToV14 exactly.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.taskDrawingsTable} (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        face TEXT NOT NULL DEFAULT 'front',
+        drawing_json TEXT NOT NULL,
+        visible INTEGER NOT NULL DEFAULT 1,
+        position_x REAL NOT NULL DEFAULT 0,
+        position_y REAL NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER,
+        FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Desk objects (DB v15): knick-knack placement for the drawer.
+    // Parity rule: must match _migrateToV15 exactly.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.deskObjectsTable} (
+        id TEXT PRIMARY KEY,
+        placed INTEGER NOT NULL DEFAULT 0,
+        x REAL,
+        y REAL,
+        width REAL,
+        variant INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER
       )
     ''');
 
@@ -302,6 +338,11 @@ class DatabaseService {
 
     await db.execute('''
       CREATE INDEX idx_task_images_hero ON ${AppConstants.taskImagesTable}(task_id) WHERE is_hero = 1
+    ''');
+
+    // Card drawings index (DB v14)
+    await db.execute('''
+      CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)
     ''');
 
     // Entity and tag indexes
@@ -503,6 +544,21 @@ class DatabaseService {
     // Migrate from version 11 to 12: Phase 4.0 - Sync layer
     if (oldVersion < 12) {
       await _migrateToV12(db);
+    }
+
+    // Migrate from version 12 to 13: Phase 4.4-MVP - Spatial canvas positions
+    if (oldVersion < 13) {
+      await _migrateToV13(db);
+    }
+
+    // Migrate from version 13 to 14: Card drawings M-D4 - task_drawings table
+    if (oldVersion < 14) {
+      await _migrateToV14(db);
+    }
+
+    // Migrate from version 14 to 15: Desk-objects drawer - desk_objects table
+    if (oldVersion < 15) {
+      await _migrateToV15(db);
     }
   }
 
@@ -1258,6 +1314,99 @@ class DatabaseService {
     });
 
     debugPrint('✅ Database migrated to v12 successfully');
+  }
+
+  /// Phase 4.4-MVP Migration: v12 → v13
+  ///
+  /// Adds:
+  /// - canvas_x, canvas_y columns to tasks (nullable; NULL = never placed
+  ///   on the spatial canvas)
+  ///
+  /// x/y only per approved scope - canvas_rotation/canvas_z are deferred
+  /// to a later migration when those features land.
+  Future<void> _migrateToV13(Database db) async {
+    debugPrint('Migrating database from v12 to v13: Spatial canvas positions');
+
+    await db.transaction((txn) async {
+      await txn.execute(
+          'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_x REAL');
+      await txn.execute(
+          'ALTER TABLE ${AppConstants.tasksTable} ADD COLUMN canvas_y REAL');
+    });
+
+    debugPrint('✅ Database migrated to v13 successfully');
+  }
+
+  /// Card Drawings M-D4 Migration: v13 → v14
+  ///
+  /// Adds:
+  /// - task_drawings table: per-task, per-face stroke JSON
+  ///   (LayerStack serialization format v1) with a per-card visibility
+  ///   toggle and future multi-drawing placement columns (position_x/y)
+  /// - idx_task_drawings_task index
+  ///
+  /// One row per (task_id, face) in v1 — enforced in the service layer,
+  /// not the schema, so the schema is already multi-drawing-ready.
+  /// face is 'front' | 'back' (owner decision: backs get drawings too).
+  ///
+  /// CRITICAL: Must match the task_drawings block in _createDB exactly
+  /// (fresh-install parity rule).
+  Future<void> _migrateToV14(Database db) async {
+    debugPrint('Migrating database from v13 to v14: Card drawings (task_drawings)');
+
+    await db.transaction((txn) async {
+      await txn.execute('''
+        CREATE TABLE ${AppConstants.taskDrawingsTable} (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          face TEXT NOT NULL DEFAULT 'front',
+          drawing_json TEXT NOT NULL,
+          visible INTEGER NOT NULL DEFAULT 1,
+          position_x REAL NOT NULL DEFAULT 0,
+          position_y REAL NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER,
+          FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+        )
+      ''');
+
+      await txn.execute(
+          'CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)');
+    });
+
+    debugPrint('✅ Database migrated to v14 successfully');
+  }
+
+  /// Desk-objects drawer: v14 → v15
+  ///
+  /// One row per knick-knack KIND (fixed ids like 'desk-object-amethyst'),
+  /// holding placement (placed flag + canvas x/y), display width, and a
+  /// small integer `variant` (the dachshund's rotation-stop index; unused
+  /// by the amethyst). Replaces the amethyst's three SharedPreferences keys
+  /// — TaskSpatialDataSource seeds this table from them on first load, so a
+  /// placed stone keeps its spot across the upgrade.
+  ///
+  /// Sync-silent like task_drawings: no SyncService.logChange (the push
+  /// path maps only tasks/tags/task_tags; logging rows now would mark them
+  /// synced-and-dropped). Decor placement is per-device until a remote
+  /// table ships.
+  Future<void> _migrateToV15(Database db) async {
+    debugPrint('Migrating database from v14 to v15: Desk objects (desk_objects)');
+
+    await db.execute('''
+      CREATE TABLE ${AppConstants.deskObjectsTable} (
+        id TEXT PRIMARY KEY,
+        placed INTEGER NOT NULL DEFAULT 0,
+        x REAL,
+        y REAL,
+        width REAL,
+        variant INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER
+      )
+    ''');
+
+    debugPrint('✅ Database migrated to v15 successfully');
   }
 
   Future<void> close() async {

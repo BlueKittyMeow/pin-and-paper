@@ -23,22 +23,23 @@ class TestDatabaseHelper {
   /// Get a fresh in-memory test database
   ///
   /// Creates a new database with the full schema (Phase 3.2).
-  /// Each call returns a new, isolated database with a unique path.
+  /// Each call returns a new, isolated database.
   ///
-  /// NOTE: Uses microsecond timestamps to ensure truly unique paths even
-  /// when tests run in parallel. This avoids race conditions from counter increments.
+  /// NOTE: sqflite_common_ffi treats a path as in-memory only when it is
+  /// EXACTLY [inMemoryDatabasePath] — the old `':memory:_test_$timestamp'`
+  /// suffix trick silently created real files (thousands of them) under
+  /// `.dart_tool/sqflite_common_ffi/databases/`. Every `:memory:` connection
+  /// is already its own private database, so isolation comes free;
+  /// `singleInstance: false` keeps the factory from handing tests a shared
+  /// cached instance for the identical path.
   static Future<Database> createTestDatabase() async {
-    // Use microsecond timestamp for truly unique database path
-    // This is more reliable than a counter when tests run in parallel
-    final timestamp = DateTime.now().microsecondsSinceEpoch;
-    final uniquePath = inMemoryDatabasePath + '_test_$timestamp';
-
     final db = await databaseFactory.openDatabase(
-      uniquePath,
+      inMemoryDatabasePath,
       options: OpenDatabaseOptions(
         version: AppConstants.databaseVersion,
         onCreate: _createTestDB,
         onConfigure: _onConfigure,
+        singleInstance: false,
       ),
     );
 
@@ -71,6 +72,8 @@ class TestDatabaseHelper {
         deleted_at INTEGER,
         notes TEXT DEFAULT NULL,
         position_before_completion INTEGER DEFAULT NULL,
+        canvas_x REAL,
+        canvas_y REAL,
         FOREIGN KEY (parent_id) REFERENCES ${AppConstants.tasksTable} (id) ON DELETE CASCADE
       )
     ''');
@@ -129,6 +132,40 @@ class TestDatabaseHelper {
         PRIMARY KEY (task_id, tag_id),
         FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE,
         FOREIGN KEY (tag_id) REFERENCES ${AppConstants.tagsTable}(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Card drawings M-D4 (DB v14): task_drawings table
+    // Parity rule: must match DatabaseService._createDB / _migrateToV14.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.taskDrawingsTable} (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        face TEXT NOT NULL DEFAULT 'front',
+        drawing_json TEXT NOT NULL,
+        visible INTEGER NOT NULL DEFAULT 1,
+        position_x REAL NOT NULL DEFAULT 0,
+        position_y REAL NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER,
+        FOREIGN KEY (task_id) REFERENCES ${AppConstants.tasksTable}(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_task_drawings_task ON ${AppConstants.taskDrawingsTable}(task_id)');
+
+    // Desk-objects drawer (DB v15): desk_objects table
+    // Parity rule: must match DatabaseService._createDB / _migrateToV15.
+    await db.execute('''
+      CREATE TABLE ${AppConstants.deskObjectsTable} (
+        id TEXT PRIMARY KEY,
+        placed INTEGER NOT NULL DEFAULT 0,
+        x REAL,
+        y REAL,
+        width REAL,
+        variant INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER
       )
     ''');
 
@@ -221,6 +258,7 @@ class TestDatabaseHelper {
   static Future<void> clearAllData(Database db) async {
     // Clear junction table first (foreign key constraints)
     await db.delete(AppConstants.taskTagsTable);
+    await db.delete(AppConstants.taskDrawingsTable);
     await db.delete(AppConstants.tagsTable);
     await db.delete(AppConstants.tasksTable);
     await db.delete(AppConstants.brainDumpDraftsTable);

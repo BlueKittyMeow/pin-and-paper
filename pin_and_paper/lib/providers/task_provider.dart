@@ -397,13 +397,11 @@ class TaskProvider extends ChangeNotifier {
         switch (_filterProvider.filterState.dateFilter) {
           case DateFilter.overdue:
             if (t.dueDate == null) return false;
-            if (t.isAllDay) {
-              final effectiveToday = DateParsingService().getCurrentEffectiveToday();
-              final todayOnly = DateTime(effectiveToday.year, effectiveToday.month, effectiveToday.day);
-              final dateOnly = DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
-              return dateOnly.isBefore(todayOnly);
-            }
-            return t.dueDate!.isBefore(DateTime.now());
+            // Phase 4.4-MVP (M3/M4 addendum item 2): delegates to the shared
+            // isTaskOverdue() helper (date_parsing_service.dart) instead of
+            // its own copy of the Today-Window-aware rule — see that
+            // function's doc comment for why this used to be duplicated.
+            return isTaskOverdue(t.dueDate!, isAllDay: t.isAllDay);
           case DateFilter.noDueDate:
             return t.dueDate == null;
           case DateFilter.any:

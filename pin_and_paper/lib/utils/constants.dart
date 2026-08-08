@@ -1,7 +1,7 @@
 class AppConstants {
   // Database
   static const String databaseName = 'pin_and_paper.db';
-  static const int databaseVersion = 12; // Phase 4.0: Sync layer (sync_log, sync_meta, updated_at)
+  static const int databaseVersion = 15; // Desk objects drawer: desk_objects table
 
   // Table names
   static const String tasksTable = 'tasks';
@@ -17,6 +17,8 @@ class AppConstants {
   static const String taskTagsTable = 'task_tags';
   static const String taskRemindersTable = 'task_reminders'; // Phase 3.8
   static const String quizResponsesTable = 'quiz_responses'; // Phase 3.9
+  static const String taskDrawingsTable = 'task_drawings'; // Card drawings M-D4 (DB v14)
+  static const String deskObjectsTable = 'desk_objects'; // Desk-objects drawer (DB v15)
 
   // Phase 3.8: Notification constants
   static const String notificationChannelId = 'pin_paper_task_reminders';
