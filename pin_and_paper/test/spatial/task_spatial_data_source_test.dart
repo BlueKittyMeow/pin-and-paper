@@ -1139,7 +1139,201 @@ void main() {
       expect(dataSource.spotlitTag, isNull);
     });
   });
+
+  group('TaskSpatialDataSource — tag-tap spotlight paint-order raise (owner addendum 2026-08-06)', () {
+    // Three placed cards, created in order so `low` < `mid` < `high` in
+    // BOTH creation order and zIndex (new-task-top-insert: each later
+    // createTask() gets a strictly more negative task.position, hence a
+    // strictly higher zIndex = -position -- same fact the tray group's
+    // "newest on top" tests above rely on).
+    Future<(TaskSpatialDataSource, Map<String, TaskSpatialEntity>)> buildThreePlaced() async {
+      final low = await taskService.createTask('Low zIndex');
+      final mid = await taskService.createTask('Mid zIndex');
+      final high = await taskService.createTask('High zIndex');
+      for (final (i, t) in [low, mid, high].indexed) {
+        await taskService.updateTaskCanvasPosition(t.id, 100.0 * i, 100.0 * i);
+      }
+      final dataSource = await buildDataSource();
+      final byId = {for (final e in _cards(dataSource)) e.id: e};
+      // Sanity check the fixture actually has the ordering the rest of
+      // this group's tests assume, before spotlighting anything.
+      expect(byId[low.id]!.zIndex, lessThan(byId[mid.id]!.zIndex));
+      expect(byId[mid.id]!.zIndex, lessThan(byId[high.id]!.zIndex));
+      return (dataSource, {'low': byId[low.id]!, 'mid': byId[mid.id]!, 'high': byId[high.id]!});
+    }
+
+    test('spotlighting with no reported matches leaves paint order untouched', () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final originalZ = {for (final e in cards.values) e.id: e.zIndex};
+
+      dataSource.spotlightTag('work'); // no setSpotlightMatches call at all
+
+      final after = {for (final e in _cards(dataSource)) e.id: e.zIndex};
+      expect(after, originalZ);
+    });
+
+    test('raises matching placed cards as one group above their non-matching sibling, '
+        'preserving the matches\' own relative order', () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final midOriginalZ = cards['mid']!.zIndex;
+
+      // low and high match the spotlit tag; mid does not -- and low/high
+      // are NOT adjacent in the original stack, so a naive "just move the
+      // matches to the front of the list" implementation would not by
+      // itself prove the order survives; the zIndex assertions below do.
+      dataSource.spotlightTag('work');
+      dataSource.setSpotlightMatches({cards['low']!.id, cards['high']!.id});
+
+      final byId = {for (final e in _cards(dataSource)) e.id: e};
+
+      // The untouched sibling keeps its exact original zIndex.
+      final mid = byId[cards['mid']!.id]!;
+      expect(mid.zIndex, midOriginalZ);
+
+      // Both matches cleared mid's zIndex...
+      final low = byId[cards['low']!.id]!;
+      final high = byId[cards['high']!.id]!;
+      expect(low.zIndex, greaterThan(mid.zIndex));
+      expect(high.zIndex, greaterThan(mid.zIndex));
+
+      // ...as a contiguous block starting one above it (group raise, not
+      // "every match claims zIndex max")...
+      expect(low.zIndex, mid.zIndex + 1);
+      expect(high.zIndex, mid.zIndex + 2);
+
+      // ...and their MUTUAL order survived the raise: low was below high
+      // before, and stays below it after -- not reversed, not collapsed to
+      // a shared value that would leave their order to an id tie-break.
+      expect(low.zIndex, lessThan(high.zIndex));
+
+      // Passthrough properties (id/position/rotation/size) are untouched
+      // by the wrap.
+      expect(low.position, cards['low']!.position);
+      expect(low.rotation, cards['low']!.rotation);
+      expect(low.size, cards['low']!.size);
+    });
+
+    test('clearing the spotlight (same-tag tap) restores the normal z-order exactly', () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final originalZ = {for (final e in cards.values) e.id: e.zIndex};
+
+      dataSource.spotlightTag('work');
+      dataSource.setSpotlightMatches({cards['low']!.id, cards['high']!.id});
+      expect(_cards(dataSource).map((e) => e.zIndex).toSet(), isNot(originalZ.values.toSet()));
+
+      dataSource.spotlightTag('work'); // same tag again = clear (owner spec)
+      expect(dataSource.spotlitTag, isNull);
+
+      final after = {for (final e in _cards(dataSource)) e.id: e.zIndex};
+      expect(after, originalZ);
+    });
+
+    test('a felt tap (clearSpotlight) restores the normal z-order too', () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final originalZ = {for (final e in cards.values) e.id: e.zIndex};
+
+      dataSource.spotlightTag('work');
+      dataSource.setSpotlightMatches({cards['low']!.id});
+
+      dataSource.onCanvasTapped(const Offset(10, 10)); // felt tap -> clearSpotlight
+      expect(dataSource.spotlitTag, isNull);
+
+      final after = {for (final e in _cards(dataSource)) e.id: e.zIndex};
+      expect(after, originalZ);
+    });
+
+    test('switching to a different tag drops the stale match set until re-supplied', () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final originalZ = {for (final e in cards.values) e.id: e.zIndex};
+
+      dataSource.spotlightTag('work');
+      dataSource.setSpotlightMatches({cards['low']!.id});
+      expect(_cards(dataSource).firstWhere((e) => e.id == cards['low']!.id).zIndex,
+          greaterThan(cards['mid']!.zIndex));
+
+      // Switch straight to a different tag -- no matter what "work" used
+      // to match, nothing should still be raised for "urgent" until the
+      // caller reports fresh matches for it.
+      dataSource.spotlightTag('urgent');
+      expect(dataSource.spotlitTag, 'urgent');
+
+      final after = {for (final e in _cards(dataSource)) e.id: e.zIndex};
+      expect(after, originalZ);
+    });
+
+    test('a stray setSpotlightMatches call while nothing is spotlit is inert', () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final originalZ = {for (final e in cards.values) e.id: e.zIndex};
+
+      dataSource.setSpotlightMatches({cards['low']!.id}); // no active spotlight at all
+
+      dataSource.spotlightTag('work'); // now spotlight -- but never re-called setSpotlightMatches
+      final after = {for (final e in _cards(dataSource)) e.id: e.zIndex};
+      expect(after, originalZ); // the stray call from before spotlighting didn't stick
+    });
+
+    test('if every placed card matches, there is nothing to raise above (no-op)', () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final originalZ = {for (final e in cards.values) e.id: e.zIndex};
+
+      dataSource.spotlightTag('work');
+      dataSource.setSpotlightMatches(cards.values.map((e) => e.id).toSet());
+
+      final after = _cards(dataSource);
+      expect({for (final e in after) e.id: e.zIndex}, originalZ);
+      // Not just numerically the same -- the exact same (unwrapped) entity
+      // instances, since there's no non-matching sibling to raise above.
+      final originalById = {for (final e in cards.values) e.id: e};
+      for (final e in after) {
+        expect(identical(e, originalById[e.id]), isTrue);
+      }
+    });
+
+    test('the raise is placed-only: tray and done-pile cards never get raised, '
+        'even if their ids are (mistakenly) reported as matches', () async {
+      final trayTask = await taskService.createTask('Still in the tray');
+      final doneTask = await taskService.createTask('Finished chore');
+      await taskService.toggleTaskCompletion(doneTask);
+      final (dataSource, cards) = await buildThreePlaced();
+
+      final trayBefore = _zIndexOf(dataSource, trayTask.id);
+      final doneBefore = _zIndexOf(dataSource, doneTask.id);
+
+      dataSource.spotlightTag('work');
+      // Defensively report tray/done ids too, alongside a real placed match.
+      dataSource.setSpotlightMatches({cards['low']!.id, trayTask.id, doneTask.id});
+
+      expect(_zIndexOf(dataSource, trayTask.id), trayBefore);
+      expect(_zIndexOf(dataSource, doneTask.id), doneBefore);
+    });
+
+    test('nothing is persisted: canvas positions and task ordering survive a raise+clear cycle',
+        () async {
+      final (dataSource, cards) = await buildThreePlaced();
+      final positionsBefore = {
+        for (final t in await taskService.getAllTasks()) t.id: (t.position, t.canvasX, t.canvasY),
+      };
+
+      dataSource.spotlightTag('work');
+      dataSource.setSpotlightMatches({cards['low']!.id, cards['high']!.id});
+      dataSource.clearSpotlight();
+
+      final positionsAfter = {
+        for (final t in await taskService.getAllTasks()) t.id: (t.position, t.canvasX, t.canvasY),
+      };
+      expect(positionsAfter, positionsBefore);
+
+      // A fresh data source (simulating a re-open of the Spatial View) has
+      // no memory of the raise or even the spotlight at all.
+      final reopened = await buildDataSource();
+      expect(reopened.spotlitTag, isNull);
+      final reopenedZ = {for (final e in _cards(reopened)) e.id: e.zIndex};
+      expect(reopenedZ, {for (final e in cards.values) e.id: e.zIndex});
+    });
+  });
 }
+
+int _zIndexOf(TaskSpatialDataSource dataSource, String id) => _cards(dataSource).firstWhere((e) => e.id == id).zIndex;
 
 /// A minimal valid format-v1 drawing (one ink stroke), varied by [label] so
 /// distinct drawings serialize to distinct JSON.

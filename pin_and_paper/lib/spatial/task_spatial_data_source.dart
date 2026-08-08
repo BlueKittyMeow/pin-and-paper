@@ -229,12 +229,48 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// already listens to) to decide which desk cards ghost.
   String? get spotlitTag => _spotlitTag;
 
+  /// Ids of [_placed] entities that currently carry [_spotlitTag], as last
+  /// reported by [setSpotlightMatches]. Drives [getVisibleEntities]'s
+  /// paint-order raise (owner idea 2026-08-06 addendum: "raise the matching
+  /// cards' paint order ABOVE the non-matching ones"). This data source has
+  /// no route to tag data of its own -- tags live in `TaskProvider`/
+  /// `TagService`, never on [Task] itself (see class doc) -- so this is
+  /// fed in from outside rather than computed here. Reset to empty
+  /// whenever the spotlit tag changes, so a stale match set from a
+  /// previous tag can never survive a switch or a clear.
+  Set<String> _spotlightMatchIds = const {};
+
+  /// Placed (on-desk) entity ids, for whichever layer computes tag
+  /// membership (`CanvasScreen`, via `TaskProvider.getTagsForTask`) to know
+  /// which ids to test before calling [setSpotlightMatches]. Tray and
+  /// done-pile cards are deliberately excluded -- the raise is placed-only
+  /// (see [getVisibleEntities]).
+  List<String> get placedEntityIds => [for (final e in _placed) e.id];
+
+  /// Tells the data source which [placedEntityIds] currently carry
+  /// [_spotlitTag], so [getVisibleEntities] can temporarily raise their
+  /// paint order as a group (see that method's doc comment for the
+  /// mechanism). Ids outside [_placed] are harmless -- [getVisibleEntities]
+  /// only ever tests membership against [_placed] itself, so tray/done-pile/
+  /// desk-object ids or stale ids from a since-moved card are silently
+  /// inert. No-op while nothing is spotlit, so a stray call after
+  /// [clearSpotlight] can't resurrect a raise. Deliberately does NOT call
+  /// notifyListeners -- callers are expected to invoke this synchronously
+  /// as part of the same rebuild that already reads [spotlitTag] (e.g.
+  /// right before handing entities to the canvas), not as an isolated
+  /// state change needing its own repaint.
+  void setSpotlightMatches(Set<String> placedIds) {
+    if (_spotlitTag == null) return;
+    _spotlightMatchIds = placedIds;
+  }
+
   /// Tag-chip tap handler: spotlighting is a toggle on the tapped tag, not
   /// a stack -- tapping the ALREADY-spotlit tag clears it (owner spec:
   /// "tapping the same tag again clears the spotlight"), tapping any other
   /// tag switches straight to it (no need to clear first).
   void spotlightTag(String tagId) {
     _spotlitTag = _spotlitTag == tagId ? null : tagId;
+    _spotlightMatchIds = const {};
     notifyListeners();
   }
 
@@ -244,6 +280,7 @@ class TaskSpatialDataSource extends SpatialDataSource {
   void clearSpotlight() {
     if (_spotlitTag == null) return;
     _spotlitTag = null;
+    _spotlightMatchIds = const {};
     notifyListeners();
   }
 
@@ -738,11 +775,73 @@ class TaskSpatialDataSource extends SpatialDataSource {
         ? _tray
         : _tray.sublist(_tray.length - kTaskTrayRenderCap);
     return [
-      ..._placed,
+      ..._spotlightRaisedPlaced(),
       ...trayVisible,
       ..._recentCompleted,
       for (final id in deskObjectIds)
         if (_placedDeskObjectIds.contains(id)) _deskObjectById(id),
+    ];
+  }
+
+  /// [_placed], unless a tag is spotlit AND [_spotlightMatchIds] names some
+  /// of them -- owner addendum 2026-08-06: a tagged card buried deep in a
+  /// stack should be reachable without dragging a dozen other cards off it
+  /// first. When active, the matching entities are wrapped in
+  /// [_SpotlightRaisedEntity], which reports a synthetic [SpatialEntity
+  /// .zIndex] but otherwise passes its id/position/rotation/size straight
+  /// through -- [TaskSpatialEntity.zIndex] itself is never touched, so
+  /// nothing here is persisted or mutated on the wrapped entity, and this
+  /// method (called fresh on every canvas build, per [SpatialCanvas
+  /// .getVisibleEntities]'s doc comment) simply stops wrapping the moment
+  /// [_spotlitTag] goes null or [_spotlightMatchIds] empties -- an exact,
+  /// automatic revert to normal z-order with no separate "restore" step.
+  ///
+  /// The raised group's zIndex values start one above the highest zIndex
+  /// among its non-matching PLACED siblings, so the WHOLE group clears
+  /// every other card in the same stack in one lift, never fighting each
+  /// other for a single top slot: the owner explicitly ruled out "every
+  /// matching card fights to be the single top card simultaneously" as a
+  /// failure mode to avoid. Within the group, matches keep their OWN
+  /// relative order (their pre-raise zIndex ascending, tied by id -- the
+  /// same tie-break [SpatialCanvas]'s own sort uses) rather than sharing
+  /// one zIndex, which would leave their mutual order to that id tie-break
+  /// -- arbitrary, and unrelated to "newest on top" like the rest of this
+  /// class's ordering.
+  ///
+  /// Deliberately does NOT reach for a ceiling above tray/done-pile cards
+  /// or desk objects: those live in disjoint screen regions from the
+  /// placed-card stack (the landing tray, the done pile, the amethyst's
+  /// fixed spot), so their zIndex never actually overlaps a placed card
+  /// on screen, and desk objects in particular are deliberately pinned to
+  /// a very high zIndex ([kAmethystZIndex] et al) as an always-on-top
+  /// "paperweight" -- outranking that would visually bury the amethyst
+  /// under a raised card, which is not this feature's job to disturb.
+  ///
+  /// If every placed card already matches (no non-matching sibling to
+  /// clear) or none do, this is a no-op: there's nothing to raise above.
+  ///
+  /// Scoped to [_placed] only, per owner spec: tray and done-pile cards are
+  /// already exempt from the spotlight's ghost dimming (`CanvasScreen
+  /// ._spotlightGhost`), so they stay exempt from the raise too.
+  List<TaskSpatialEntity> _spotlightRaisedPlaced() {
+    if (_spotlitTag == null || _spotlightMatchIds.isEmpty) return _placed;
+
+    final matches = <TaskSpatialEntity>[];
+    final rest = <TaskSpatialEntity>[];
+    for (final entity in _placed) {
+      (_spotlightMatchIds.contains(entity.id) ? matches : rest).add(entity);
+    }
+    if (matches.isEmpty || rest.isEmpty) return _placed;
+
+    final ceiling = rest.map((e) => e.zIndex).reduce(math.max);
+
+    matches.sort((a, b) {
+      final byZ = a.zIndex.compareTo(b.zIndex);
+      return byZ != 0 ? byZ : a.id.compareTo(b.id);
+    });
+    return [
+      ...rest,
+      for (final (i, entity) in matches.indexed) _SpotlightRaisedEntity(entity, ceiling + 1 + i),
     ];
   }
 
@@ -995,4 +1094,26 @@ class TaskSpatialDataSource extends SpatialDataSource {
       debugPrint('TaskSpatialDataSource: failed to persist desk object $id: $e');
     }
   }
+}
+
+/// A transient stand-in for one placed [TaskSpatialEntity] that reports a
+/// raised [zIndex] for the tag-tap spotlight's group-raise
+/// ([TaskSpatialDataSource._spotlightRaisedPlaced]); every other property
+/// (id, position, rotation, size) passes straight through, sourced from
+/// [source] at construction time. Built fresh on every
+/// [TaskSpatialDataSource.getVisibleEntities] call and never stored --
+/// [source] itself is never touched, so this is purely a paint-order fact
+/// for one frame, not a mutation. That's what makes the raise fully
+/// reversible with no explicit "restore" path: once the spotlight clears
+/// (or the tag switches, or its match set empties), [getVisibleEntities]
+/// simply stops constructing these and callers see [source]'s own zIndex
+/// again, unchanged.
+class _SpotlightRaisedEntity extends TaskSpatialEntity {
+  _SpotlightRaisedEntity(TaskSpatialEntity source, this._raisedZIndex)
+    : super(task: source.task, position: source.position);
+
+  final int _raisedZIndex;
+
+  @override
+  int get zIndex => _raisedZIndex;
 }
