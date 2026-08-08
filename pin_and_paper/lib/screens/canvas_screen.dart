@@ -218,6 +218,15 @@ class _CanvasScreenState extends State<CanvasScreen> {
                     entityBuilder: (entity, isSelected) => _buildCard(context, dataSource, entity, isSelected),
                     canvasSize: kCanvasScreenSize,
                     background: SpatialDeskBackground(canvasSize: kCanvasScreenSize),
+                    // Zoom-out headroom (owner 2026-08-06, phone): the
+                    // canvas rect is only the desk's inner panel (1823×1323),
+                    // but the desk art extends far below it — true-height
+                    // drawer band to ~2992px plus the floor shadow and the
+                    // room backdrop beyond. The module's default 0.5 floor
+                    // couldn't shrink the panel enough to bring the drawers
+                    // (let alone the room) into a phone viewport, so drop the
+                    // floor well below 1:1. maxZoom left at the 2.0 default.
+                    minZoom: 0.18,
                     // The default drag-lift shadow is a rounded rect — right
                     // for cards, wrong under desk objects, which paint their
                     // own grounding shadows (same suppression as the canvas
