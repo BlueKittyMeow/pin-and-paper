@@ -55,6 +55,29 @@
 
 ## Backlog (Unassigned)
 
+### Spatial View: Manual Card Reordering / Z-order Commands (ELEVATED 2026-08-06)
+- **Priority:** HIGH (owner elevated) | **Complexity:** MEDIUM
+- **Description:** Explicit "move above / to front / to back / forward /
+  backward" controls for cards on the desk, so a buried card can be lifted
+  deliberately (the manual sibling of the automatic tag-spotlight raise
+  built 2026-08-06). Owner asked to elevate this alongside complete-from-card.
+- **Grounding:** design already researched in
+  `pin_and_paper_dev_harness/docs/working/ZORDER_RESEARCH.md` +
+  `SELECTION_UX_RESEARCH.md`. Headlines to honor: expose EXPLICIT commands
+  (a pile-heavy desk favors all four, not just front/back), keep auto-raise
+  OFF as the default (safer on touch, preserves intentional piles/spatial
+  memory), use plain language not z-order jargon, and PRESERVE RELATIVE
+  ORDER for multi-select moves (same principle the spotlight-raise uses).
+  Persist z-order deterministically with a renumber/compaction plan; decide
+  global vs overlap-aware forward/backward.
+- **Implementation note:** the spotlight-raise (2026-08-06) already added a
+  reversible, non-persisted paint-order lift in task_spatial_data_source.dart
+  — the manual commands are the persisted, user-invoked counterpart; reuse
+  the paint-order machinery. Controls likely live on the selected card's
+  chip cluster and/or a context action in canvas_screen.dart.
+- **Source:** Owner request (2026-08-06 device pass); prior roadmap item now
+  elevated.
+
 ### Spatial View: Edit & Complete Tasks In Place (HIGH — owner felt strongly 2026-08-06)
 - **Priority:** HIGH | **Complexity:** MEDIUM–HIGH
 - **Description:** The Spatial View is currently read-plus-draw only — the
