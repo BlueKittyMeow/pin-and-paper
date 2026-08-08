@@ -11,7 +11,7 @@ publish_to: 'none'
 # Base bumped above 2007 so universal builds upgrade cleanly. RULE: ship
 # universal `app-release.apk` only (never --split-per-abi to a test phone),
 # and keep BUILD climbing.
-version: 3.9.0+2008
+version: 3.9.0+2009
 
 environment:
   sdk: '>=3.5.0 <4.0.0'  # Supports Flutter 3.24+ (Dart 3.5+) through current stable
