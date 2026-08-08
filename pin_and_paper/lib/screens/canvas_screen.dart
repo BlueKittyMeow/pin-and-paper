@@ -156,6 +156,21 @@ class _CanvasScreenState extends State<CanvasScreen> {
   @override
   Widget build(BuildContext context) {
     final dataSource = _dataSource;
+    // Spotlight paint-order raise (owner 2026-08-06): tag membership lives
+    // in TaskProvider, not in the data source's Task snapshots, so the
+    // data source can't compute matches itself — feed them here,
+    // synchronously, before SpatialCanvas builds this frame, so the raised
+    // z-order lands the same frame the spotlight ghost does. No-op unless a
+    // tag is spotlit; setSpotlightMatches deliberately doesn't notify (no
+    // setState-during-build).
+    if (dataSource != null && dataSource.spotlitTag != null) {
+      final spotlit = dataSource.spotlitTag;
+      final taskProvider = context.read<TaskProvider>();
+      dataSource.setSpotlightMatches({
+        for (final id in dataSource.placedEntityIds)
+          if (taskProvider.getTagsForTask(id).any((t) => t.id == spotlit)) id,
+      });
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Spatial View'),
