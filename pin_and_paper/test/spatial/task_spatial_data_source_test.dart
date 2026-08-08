@@ -1285,6 +1285,51 @@ void main() {
       expect(after, originalZ);
     });
 
+    // The on-device path (owner report 2026-08-07: raise never fired on the
+    // phone while the ghost did). The real app hands the data source a
+    // tagIdsForTask RESOLVER at construction and NEVER calls
+    // setSpotlightMatches — because the old push model lived in
+    // CanvasScreen.build(), which doesn't re-run on a tag tap. This test
+    // reproduces that exact wiring: resolver in, no push call, and the raise
+    // must still fire off spotlightTag() alone.
+    test('raises via the tagIdsForTask resolver alone, with NO '
+        'setSpotlightMatches call (the on-device wiring)', () async {
+      final low = await taskService.createTask('Low');
+      final mid = await taskService.createTask('Mid');
+      final high = await taskService.createTask('High');
+      for (final (i, t) in [low, mid, high].indexed) {
+        await taskService.updateTaskCanvasPosition(t.id, 100.0 * i, 100.0 * i);
+      }
+      // low + high carry 'work'; mid does not — resolved by id, exactly as
+      // CanvasScreen's `(id) => taskProvider.getTagsForTask(id)...` closure
+      // would, but without needing a live TaskProvider here.
+      final workIds = {low.id, high.id};
+      final dataSource = TaskSpatialDataSource(
+        tasks: await taskService.getAllTasks(),
+        taskService: taskService,
+        canvasSize: _kCanvasSize,
+        tagIdsForTask: (id) => workIds.contains(id) ? {'work'} : <String>{},
+      );
+      await dataSource.initialized;
+      final midZ = {for (final e in _cards(dataSource)) e.id: e.zIndex}[mid.id]!;
+
+      // The whole fix: this single call, no push, must raise low+high.
+      dataSource.spotlightTag('work');
+
+      final byId = {for (final e in _cards(dataSource)) e.id: e};
+      expect(byId[low.id]!.zIndex, greaterThan(midZ),
+          reason: 'resolver-matched card must raise above the non-match');
+      expect(byId[high.id]!.zIndex, greaterThan(midZ));
+      expect(byId[mid.id]!.zIndex, midZ, reason: 'non-match keeps its zIndex');
+
+      // Clearing reverts exactly, same as the push path.
+      dataSource.spotlightTag('work');
+      expect(byId.map((k, v) => MapEntry(k, v)), isNotNull); // (no-op guard)
+      final reverted = {for (final e in _cards(dataSource)) e.id: e.zIndex};
+      expect(reverted[low.id], lessThan(reverted[mid.id]!));
+      expect(reverted[mid.id], lessThan(reverted[high.id]!));
+    });
+
     test('raises matching placed cards as one group above their non-matching sibling, '
         'preserving the matches\' own relative order', () async {
       final (dataSource, cards) = await buildThreePlaced();

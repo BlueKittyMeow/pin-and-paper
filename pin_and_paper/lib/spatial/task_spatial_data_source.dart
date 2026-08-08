@@ -150,9 +150,11 @@ class TaskSpatialDataSource extends SpatialDataSource {
     required this.canvasSize,
     DrawingService? drawingService,
     DeskObjectService? deskObjectService,
+    Set<String> Function(String taskId)? tagIdsForTask,
   }) : _taskService = taskService,
       _drawingService = drawingService ?? DrawingService(),
       _deskObjectService = deskObjectService ?? DeskObjectService(),
+      _tagIdsForTask = tagIdsForTask,
       _gems = {
         // Amethyst dead center of the desk by default — the stone must be
         // unmissable on first open (its example-app ancestor tucked itself
@@ -188,6 +190,21 @@ class TaskSpatialDataSource extends SpatialDataSource {
   final TaskService _taskService;
   final DrawingService _drawingService;
   final DeskObjectService _deskObjectService;
+
+  /// Resolves a task's tag ids, so [_spotlightRaisedPlaced] can decide which
+  /// placed cards carry [_spotlitTag] ITSELF — tags live in `TaskProvider`/
+  /// `TagService`, never on [Task]. Supplied by `CanvasScreen._snapshot`
+  /// (a closure over `TaskProvider.getTagsForTask`). This replaces the old
+  /// [setSpotlightMatches] push model, which was fed from
+  /// `CanvasScreen.build()` — a method that DOESN'T re-run when a tag is
+  /// tapped (only the inner `SpatialCanvas` listens to this data source and
+  /// rebuilds), so the raise silently never got its matches on device while
+  /// the ghost (computed inside the canvas's own entity builder) worked
+  /// (owner report 2026-08-07). Computing membership here, inside
+  /// [getVisibleEntities] which the canvas calls on every rebuild, fixes
+  /// that. Null falls back to [_spotlightMatchIds] (keeps the old push API
+  /// working for tests that use it).
+  final Set<String> Function(String taskId)? _tagIdsForTask;
 
   /// Canvas bounds this data source was laid out for.
   final Size canvasSize;
@@ -824,12 +841,20 @@ class TaskSpatialDataSource extends SpatialDataSource {
   /// already exempt from the spotlight's ghost dimming (`CanvasScreen
   /// ._spotlightGhost`), so they stay exempt from the raise too.
   List<TaskSpatialEntity> _spotlightRaisedPlaced() {
-    if (_spotlitTag == null || _spotlightMatchIds.isEmpty) return _placed;
+    final tag = _spotlitTag;
+    if (tag == null) return _placed;
+
+    // Prefer the pull model (the data source resolves tag membership itself
+    // every rebuild — see [_tagIdsForTask]); fall back to the pushed match
+    // set only when no resolver was supplied.
+    bool isMatch(TaskSpatialEntity e) => _tagIdsForTask != null
+        ? _tagIdsForTask(e.id).contains(tag)
+        : _spotlightMatchIds.contains(e.id);
 
     final matches = <TaskSpatialEntity>[];
     final rest = <TaskSpatialEntity>[];
     for (final entity in _placed) {
-      (_spotlightMatchIds.contains(entity.id) ? matches : rest).add(entity);
+      (isMatch(entity) ? matches : rest).add(entity);
     }
     if (matches.isEmpty || rest.isEmpty) return _placed;
 
