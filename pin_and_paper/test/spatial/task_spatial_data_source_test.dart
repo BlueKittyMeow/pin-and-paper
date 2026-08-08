@@ -899,6 +899,119 @@ void main() {
     );
   });
 
+  group('TaskSpatialDataSource.completeTask (owner request 2026-08-06, complete-from-card)', () {
+    test('moves a placed (on-desk) card into the done pile and persists the completion', () async {
+      final task = await taskService.createTask('On-desk card');
+      await taskService.updateTaskCanvasPosition(task.id, 600.0, 450.0);
+      final dataSource = await buildDataSource();
+      expect(dataSource.recentCompletedNewestFirst, isEmpty);
+
+      await dataSource.completeTask(task.id);
+
+      // Left _placed for the pile, at the pile's anchor.
+      expect(_cards(dataSource).where((e) => e.id == task.id).single.position, completedStackAnchor(_kCanvasSize));
+      expect(dataSource.recentCompletedNewestFirst.map((e) => e.id), [task.id]);
+
+      // Persisted: completed, but canvas_x/canvas_y stand (toggleTaskCompletion
+      // only ever writes the columns it owns -- same contract the layout
+      // tests above already cover for the plain toggle path).
+      final reloaded = (await taskService.getAllTasks()).firstWhere((t) => t.id == task.id);
+      expect(reloaded.completed, isTrue);
+      expect(reloaded.canvasX, 600.0);
+      expect(reloaded.canvasY, 450.0);
+
+      // Survives a fresh data-source build (reopening the Spatial View):
+      // _layout buckets it straight into the pile from the persisted row.
+      final reopened = await buildDataSource();
+      expect(reopened.recentCompletedNewestFirst.map((e) => e.id), [task.id]);
+    });
+
+    test('moves an unplaced (tray) card into the done pile and re-stacks the remaining tray', () async {
+      final oldest = await taskService.createTask('Oldest');
+      final newest = await taskService.createTask('Newest');
+      final dataSource = await buildDataSource();
+
+      // Newest starts on top of the tray -- complete it.
+      await dataSource.completeTask(newest.id);
+
+      expect(dataSource.recentCompletedNewestFirst.map((e) => e.id), [newest.id]);
+      // Oldest is now the tray's sole occupant, re-stacked at the tray's
+      // one-card base position (not left wherever it sat under the
+      // now-departed newest card).
+      final trayEntities = _cards(dataSource).where((e) => e.id == oldest.id);
+      expect(trayEntities.single.position, taskTrayAnchor(_kCanvasSize));
+
+      final reloaded = (await taskService.getAllTasks()).firstWhere((t) => t.id == newest.id);
+      expect(reloaded.completed, isTrue);
+    });
+
+    test('the newly-completed card lands on top of the pile (highest zIndex)', () async {
+      // Pre-fill the pile via the plain toggle path (same setup as the
+      // "most recent N, newest on top" layout test), then complete one
+      // more LIVE task through completeTask and confirm it takes the top
+      // slot, not just gets appended anywhere.
+      for (var i = 0; i < 3; i++) {
+        final t = await taskService.createTask('Done $i');
+        await taskService.toggleTaskCompletion(t);
+      }
+      final freshest = await taskService.createTask('Freshest');
+      final dataSource = await buildDataSource();
+
+      await dataSource.completeTask(freshest.id);
+
+      final entities = _cards(dataSource).where((e) => dataSource.recentCompletedNewestFirst.any((p) => p.id == e.id));
+      final topZ = entities.map((e) => e.zIndex).reduce((a, b) => a > b ? a : b);
+      final freshestEntity = entities.singleWhere((e) => e.id == freshest.id);
+      expect(freshestEntity.zIndex, topZ);
+      expect(dataSource.recentCompletedNewestFirst.first.id, freshest.id);
+    });
+
+    test('evicts the oldest pile card past $kRecentCompletedCount, same cap as the initial layout', () async {
+      // Fill the pile to the cap with deterministic completed_at ordering.
+      String? oldestId;
+      for (var i = 0; i < kRecentCompletedCount; i++) {
+        final t = await taskService.createTask('Done $i');
+        await taskService.toggleTaskCompletion(t);
+        await testDb.update('tasks', {'completed_at': 1000 + i}, where: 'id = ?', whereArgs: [t.id]);
+        oldestId ??= t.id; // i == 0: smallest completed_at, the pile's oldest member
+      }
+      final freshest = await taskService.createTask('Freshest');
+      final dataSource = await buildDataSource();
+      expect(dataSource.recentCompletedNewestFirst, hasLength(kRecentCompletedCount));
+      expect(dataSource.recentCompletedNewestFirst.map((e) => e.id), contains(oldestId));
+
+      await dataSource.completeTask(freshest.id);
+
+      expect(dataSource.recentCompletedNewestFirst, hasLength(kRecentCompletedCount));
+      final ids = dataSource.recentCompletedNewestFirst.map((e) => e.id).toSet();
+      expect(ids, contains(freshest.id));
+      expect(ids, isNot(contains(oldestId)), reason: 'the oldest pile member should have dropped off');
+    });
+
+    test('is a no-op for an id that is not a currently placed/tray task (unknown id, or already in the pile)', () async {
+      final alreadyDone = await taskService.createTask('Already done');
+      await taskService.toggleTaskCompletion(alreadyDone);
+      final dataSource = await buildDataSource();
+      final pileBefore = dataSource.recentCompletedNewestFirst.map((e) => e.id).toList();
+
+      await dataSource.completeTask('not-a-real-id');
+      await dataSource.completeTask(alreadyDone.id); // already in the pile, not placed/tray
+
+      expect(dataSource.recentCompletedNewestFirst.map((e) => e.id).toList(), pileBefore);
+    });
+
+    test('notifies listeners once the completion lands', () async {
+      final task = await taskService.createTask('Notifying card');
+      final dataSource = await buildDataSource();
+      var notifications = 0;
+      dataSource.addListener(() => notifications++);
+
+      await dataSource.completeTask(task.id);
+
+      expect(notifications, greaterThan(0));
+    });
+  });
+
   group('TaskSpatialDataSource flip state (M3/M4 addendum item 1)', () {
     test('onEntityDoubleTapped toggles the flipped set and notifies listeners', () async {
       final task = await taskService.createTask('Flippable card');

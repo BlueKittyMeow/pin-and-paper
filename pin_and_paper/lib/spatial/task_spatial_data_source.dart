@@ -885,6 +885,79 @@ class TaskSpatialDataSource extends SpatialDataSource {
     }
   }
 
+  /// Completes [id]'s task from the desk (owner request 2026-08-06 — the
+  /// highest-value slice of in-place editing: finishing a task no longer
+  /// requires leaving the Spatial View for the main list). Reuses
+  /// [TaskService.toggleTaskCompletion] for the actual write, AWAITED
+  /// first — unlike [onEntityMoved]'s fire-and-forget optimistic update,
+  /// completion is a one-way trip into the read-only done pile with no
+  /// in-app undo (see class doc's "no undo needed, the done pile is the
+  /// safety net"), so this favors correctness over instant local feedback:
+  /// a failed write leaves the card exactly where it was rather than
+  /// showing "done" without having actually persisted that.
+  ///
+  /// On success, the entity leaves [_placed]/[_tray] and joins
+  /// [_recentCompleted] at [completedStackAnchor] as the newest (highest
+  /// zIndex) member, evicting the oldest past [kRecentCompletedCount] —
+  /// the same cap [_layout] enforces at construction, just applied
+  /// incrementally instead of over the whole history at once. The done
+  /// pile is then re-laid via [_positionDonePile] (respects whichever of
+  /// stacked/fanned is current), and — if the card came from the tray — the
+  /// tray is re-laid too (grid or stack, whichever is active), the same
+  /// "don't leave a gap where the departed card sat" cleanup
+  /// [_restoreCanvasPositions] already does for a tray card that graduates
+  /// to [_placed] there.
+  ///
+  /// No-op if [id] doesn't name a currently placed/tray task entity —
+  /// covers desk objects, an already-completed pile card, and unknown ids.
+  /// `CanvasScreen`'s complete chip only ever fires this for a selected,
+  /// not-yet-completed task card, but this stays defensive rather than
+  /// trusting the caller.
+  Future<void> completeTask(String id) async {
+    final placedIndex = _placed.indexWhere((e) => e.id == id);
+    final trayIndex = placedIndex >= 0 ? -1 : _tray.indexWhere((e) => e.id == id);
+    final entity = placedIndex >= 0 ? _placed[placedIndex] : (trayIndex >= 0 ? _tray[trayIndex] : null);
+    if (entity == null) return;
+
+    final Task updatedTask;
+    try {
+      updatedTask = await _taskService.toggleTaskCompletion(entity.task);
+    } catch (e) {
+      debugPrint('TaskSpatialDataSource: failed to complete task $id: $e');
+      return; // the write never landed -- leave the card exactly where it was
+    }
+
+    if (placedIndex >= 0) {
+      _placed.removeAt(placedIndex);
+    } else {
+      _tray.removeAt(trayIndex);
+    }
+
+    _recentCompleted.add(
+      TaskSpatialEntity(
+        task: updatedTask,
+        position: completedStackAnchor(canvasSize),
+        zIndexOverride: _recentCompleted.isEmpty
+            ? 0
+            : _recentCompleted.map((e) => e.zIndex).reduce(math.max) + 1,
+      ),
+    );
+    while (_recentCompleted.length > kRecentCompletedCount) {
+      _recentCompleted.removeAt(0); // oldest drops off the pile, same as _layout's initial cap
+    }
+    _positionDonePile();
+
+    if (trayIndex >= 0) {
+      if (_trayArranged) {
+        _positionTrayAsGrid();
+      } else {
+        _positionTrayAsStack();
+      }
+    }
+
+    if (!_disposed) notifyListeners();
+  }
+
   /// Owner bug report 2026-08-05 (phone APK): Spatial View → task list →
   /// back to Spatial View kept desk-object positions but lost card
   /// positions. Root cause was upstream of this class: [_layout] trusts the

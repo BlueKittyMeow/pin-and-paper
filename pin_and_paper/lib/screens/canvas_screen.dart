@@ -404,6 +404,30 @@ class _CanvasScreenState extends State<CanvasScreen> {
                   onTap: () => dataSource.toggleDrawingVisible(id, face: face),
                 ),
               ],
+              // Complete-from-card (owner request 2026-08-06 -- the
+              // highest-value slice of in-place editing: finishing a task
+              // shouldn't require leaving the desk for the main list).
+              // Guarded on task.completed rather than isSelected alone: a
+              // selected done-pile card renders through this SAME
+              // `_buildCard` path (via `_DonePileTray`'s cardBuilder), and
+              // it must never re-offer "complete" on an already-finished
+              // card.
+              if (!taskEntity.task.completed) ...[
+                const SizedBox(height: 4),
+                _EntityChip(
+                  icon: Icons.check,
+                  tooltip: 'Complete task',
+                  onTap: () {
+                    // The card is about to leave the desk for the done
+                    // pile -- clear the canvas's own selection so it
+                    // doesn't dangle on an entity that no longer lives in
+                    // `_placed`/`_tray` (mirrors the put-away chip's
+                    // clearSelection() below for the same reason).
+                    _canvasController.clearSelection();
+                    dataSource.completeTask(id);
+                  },
+                ),
+              ],
             ]),
           ),
       ]);

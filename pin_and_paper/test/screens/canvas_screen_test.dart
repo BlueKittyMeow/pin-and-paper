@@ -343,6 +343,145 @@ void main() {
     });
   });
 
+  group('complete-from-card chip (owner request 2026-08-06)', () {
+    /// Pumps the desk, gives the data source's restore queries (real
+    /// sqflite ffi I/O at construction) real-async time to land, and
+    /// flushes their notify — same idiom as every other group's pumpDesk.
+    Future<void> pumpDesk(WidgetTester tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pump(); // postFrameCallback -> snapshot
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(); // restores' notifyListeners
+    }
+
+    /// Selects [target] by tapping it and waiting out the tap/double-tap
+    /// disambiguation window in the canvas's gesture arena (same as the
+    /// M-D5 chip group's `select()`).
+    Future<void> select(WidgetTester tester, Finder target) async {
+      await tester.tap(target, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    /// `completeTask` awaits the real sqflite write before it mutates the
+    /// data source's state and notifies (see that method's doc comment:
+    /// deliberately NOT fire-and-forget, unlike most of this class's other
+    /// writes) — poll for the pile membership to land instead of guessing
+    /// a fixed delay, same rationale as the data-source suite's
+    /// `_waitForCanvasPosition`.
+    Future<void> pumpUntilInPile(WidgetTester tester, TaskSpatialDataSource dataSource, String taskId) async {
+      for (var i = 0; i < 50; i++) {
+        if (dataSource.recentCompletedNewestFirst.any((e) => e.id == taskId)) return;
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump();
+      }
+      fail('completeTask never landed for $taskId within the poll window');
+    }
+
+    testWidgets('appears only on a selected, not-yet-completed task card -- never on a desk object', (tester) async {
+      // Park the stone well clear of the card below so selecting either
+      // one is unambiguous.
+      SharedPreferences.setMockInitialValues({
+        'spatial_amethyst_x': 900.0,
+        'spatial_amethyst_y': 900.0,
+      });
+      await tester.runAsync(() async {
+        final t = await taskService.createTask('Live card');
+        await taskService.updateTaskCanvasPosition(t.id, 150.0, 150.0);
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+
+      expect(find.byTooltip('Complete task'), findsNothing); // unselected: no chips
+
+      await select(tester, find.byType(FlippableTaskCard));
+      expect(find.byTooltip('Complete task'), findsOneWidget);
+
+      // A selected desk object gets its own resize/put-away chips, never
+      // this one.
+      await select(
+        tester,
+        find.descendant(
+          of: find.byType(SpatialCanvas),
+          matching: find.byWidgetPredicate((w) => w is GemFigurine && w.variant == GemVariant.amethyst),
+        ),
+      );
+      expect(find.byTooltip('Complete task'), findsNothing);
+      expect(find.byTooltip('Bigger'), findsOneWidget); // sanity: the stone IS selected
+    });
+
+    testWidgets('does not appear on a selected done-pile tray card', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      // Fill the pile to the cap so it overflows into the scrollable tray
+      // at the real desk canvas size -- same setup as the done-pile tray
+      // group's pumpDeskWithFullPile above.
+      await tester.runAsync(() async {
+        for (var i = 0; i < kRecentCompletedCount; i++) {
+          final t = await taskService.createTask('Done $i');
+          await taskService.toggleTaskCompletion(t);
+        }
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+      final dataSource = tester.widget<SpatialCanvas>(find.byType(SpatialCanvas)).dataSource as TaskSpatialDataSource;
+      dataSource.toggleDonePileFanned();
+      await tester.pump();
+
+      final first = dataSource.recentCompletedNewestFirst.first;
+      await tester.tap(find.byKey(donePileTrayCardKey(first.id)));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(
+        find.descendant(of: find.byKey(donePileTrayCardKey(first.id)), matching: find.byTooltip('Complete task')),
+        findsNothing,
+        reason: 'an already-completed card, even selected, never re-offers "complete"',
+      );
+      // Sanity: it IS selected (its edit chip shows), same assertion the
+      // done-pile tray group makes for its own selection test.
+      expect(
+        find.descendant(of: find.byKey(donePileTrayCardKey(first.id)), matching: find.byTooltip('Draw on this card')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('tapping it completes the task, moves it into the pile, persists, and clears selection', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      late String taskId;
+      await tester.runAsync(() async {
+        final t = await taskService.createTask('Finish me');
+        await taskService.updateTaskCanvasPosition(t.id, 150.0, 150.0);
+        taskId = t.id;
+        await taskProvider.loadTasks();
+      });
+      await pumpDesk(tester);
+
+      await select(tester, find.byType(FlippableTaskCard));
+      expect(find.byTooltip('Complete task'), findsOneWidget);
+
+      final spatialCanvas = tester.widget<SpatialCanvas>(find.byType(SpatialCanvas));
+      final dataSource = spatialCanvas.dataSource as TaskSpatialDataSource;
+
+      await tester.tap(find.byTooltip('Complete task'));
+      await tester.pump(const Duration(milliseconds: 400)); // disambiguation window
+      await pumpUntilInPile(tester, dataSource, taskId);
+
+      expect(dataSource.recentCompletedNewestFirst.map((e) => e.id), [taskId]);
+      // The now-piled card is no longer selected: its chip cluster is
+      // gone (both because it's completed, and because selection was
+      // cleared -- the next assertion checks the latter directly).
+      expect(find.byTooltip('Complete task'), findsNothing);
+      expect(
+        spatialCanvas.controller!.selectedIds,
+        isEmpty,
+        reason: 'completing a selected card must not leave a dangling selection on it',
+      );
+
+      final reloaded = (await taskService.getAllTasks()).firstWhere((t) => t.id == taskId);
+      expect(reloaded.completed, isTrue);
+    });
+  });
+
   group('desk-objects drawer', () {
     Finder onDesk(Type type) =>
         find.descendant(of: find.byType(SpatialCanvas), matching: find.byType(type));
