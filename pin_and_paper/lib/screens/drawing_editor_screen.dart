@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:pin_and_paper_card_renderer/card_renderer.dart';
 import 'package:pin_and_paper_sketchpad/sketchpad.dart';
 
@@ -115,6 +117,21 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
 
   bool _closing = false;
 
+  /// Wraps the widget-rendered backdrop face (see [_buildBackdropFace])
+  /// so [_captureBackdrop] can rasterize it — see that method's doc
+  /// comment for why a snapshot is needed in addition to the live widget.
+  final GlobalKey _backdropCaptureKey = GlobalKey();
+
+  /// Raster snapshot of [_buildBackdropFace], at [_captureSize]
+  /// resolution, handed to [DrawingCanvas] as its multiply-blend backdrop
+  /// (owner report 2026-08-06, fixed 2026-08-07: a "Blend"/Marker layer
+  /// must show the real card through it, like a highlighter, not a fixed
+  /// flat paper tone). Null until the first frame's post-frame callback
+  /// captures it; a multiply layer painted before then falls back to the
+  /// sketchpad's flat-paper precompute (see stroke_painter.dart), same as
+  /// pre-fix behavior — never a crash or a blank stroke.
+  ui.Image? _backdropImage;
+
   @override
   void initState() {
     super.initState();
@@ -137,11 +154,69 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
     _stack = restored ?? LayerStack(size: kDrawingEditorCaptureSize);
     _captureSize = _stack.size ?? kDrawingEditorCaptureSize;
     _stack.size ??= _captureSize;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _captureBackdrop());
+  }
+
+  /// Bails [_captureBackdrop]'s "wait for a clean paint" retry rather than
+  /// rescheduling forever if something keeps the boundary dirty every
+  /// frame — a missed backdrop just means multiply layers keep using the
+  /// flat-paper fallback, never a crash or a stuck frame-callback loop.
+  static const int _maxBackdropCaptureAttempts = 60;
+  int _backdropCaptureAttempts = 0;
+
+  /// Rasterize [_buildBackdropFace] (the real card face, already laid out
+  /// at [_captureSize] under [_backdropCaptureKey]'s RepaintBoundary — see
+  /// `_buildSurface`) into a `ui.Image` so the sketchpad can multiply-blend
+  /// a "Blend"/Marker layer against the REAL card instead of a flat paper
+  /// swatch. `pixelRatio: 1.0` makes the image exactly [_captureSize] in
+  /// pixels — the same coordinate space strokes are recorded in — so
+  /// `DrawingCanvas`/`paintLayerStack` can draw it 1:1 under the ink with
+  /// no further scale math.
+  ///
+  /// [RenderRepaintBoundary.toImage] requires `!debugNeedsPaint` — a
+  /// postFrameCallback normally guarantees that, but doesn't always land
+  /// on a fully clean boundary the very first time (observed here: the
+  /// widget test harness's `pumpAndSettle` needed a couple of extra
+  /// frames). Reschedule to the next frame instead of giving up on one
+  /// dirty check, capped at [_maxBackdropCaptureAttempts] frames.
+  ///
+  /// The card face is static for the life of this screen (built once from
+  /// `widget.cardData`/`widget.backFields`, never mutated here), so one
+  /// successful capture is enough — no need to re-capture on every
+  /// rebuild.
+  Future<void> _captureBackdrop() async {
+    final renderObject = _backdropCaptureKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) return;
+    if (renderObject.debugNeedsPaint) {
+      if (!mounted || _backdropCaptureAttempts >= _maxBackdropCaptureAttempts) {
+        return;
+      }
+      _backdropCaptureAttempts++;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _captureBackdrop());
+      return;
+    }
+    final ui.Image image;
+    try {
+      image = await renderObject.toImage(pixelRatio: 1.0);
+    } catch (e) {
+      // Best-effort only: a failed capture just means multiply layers
+      // keep using the flat-paper precompute fallback, never a crash.
+      debugPrint('DrawingEditorScreen: backdrop capture failed: $e');
+      return;
+    }
+    if (!mounted) {
+      image.dispose();
+      return;
+    }
+    final old = _backdropImage;
+    setState(() => _backdropImage = image);
+    old?.dispose();
   }
 
   @override
   void dispose() {
     _canvasController.dispose();
+    _backdropImage?.dispose();
     super.dispose();
   }
 
@@ -256,9 +331,16 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
           // Owner L2: the REAL card face under the ink, scaled up from its
           // 220x140 footprint to the capture space, so strokes land
           // relative to real content. IgnorePointer: it's a backdrop, not
-          // a card.
+          // a card. RepaintBoundary + key: also lets _captureBackdrop
+          // rasterize this SAME widget for DrawingCanvas's multiply-blend
+          // backdrop (owner report 2026-08-06, fixed 2026-08-07) — the
+          // visible widget and the blend-math snapshot are one render,
+          // not two, so they can never drift out of sync.
           IgnorePointer(
-            child: FittedBox(fit: BoxFit.fill, child: _buildBackdropFace()),
+            child: RepaintBoundary(
+              key: _backdropCaptureKey,
+              child: FittedBox(fit: BoxFit.fill, child: _buildBackdropFace()),
+            ),
           ),
           Listener(
             onPointerDown: _handlePolicyPointerDown,
@@ -271,6 +353,7 @@ class _DrawingEditorScreenState extends State<DrawingEditorScreen> {
               isEraserActive: _eraserActive,
               onStrokeComplete: () => setState(() {}),
               controller: _canvasController,
+              backdropImage: _backdropImage,
             ),
           ),
         ],

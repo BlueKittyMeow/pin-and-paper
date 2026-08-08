@@ -148,6 +148,41 @@ void main() {
     expect(find.byType(TaskCard), findsNothing);
   });
 
+  group('backdrop-aware multiply compositing (owner report 2026-08-06, '
+      'fixed 2026-08-07)', () {
+    // A "Blend"/Marker layer must multiply against the REAL card face, not
+    // an imaginary flat paper tone — see stroke_painter.dart's
+    // "Backdrop-aware multiply compositing" note. DrawingCanvas needs a
+    // raster snapshot of that same card face to do the real per-pixel
+    // blend; this proves the editor actually captures and wires one
+    // through, at the exact capture-space resolution strokes are recorded
+    // in (so the blend math and stroke coordinates agree 1:1).
+    testWidgets('captures a backdrop snapshot of the real TaskCard, sized '
+        'to the drawing capture space', (tester) async {
+      final task = await createTask(tester, 'Front card');
+      await pushEditor(tester, taskId: task.id, onResult: (_) {});
+
+      final canvas = tester.widget<DrawingCanvas>(find.byType(DrawingCanvas));
+      final backdrop = canvas.backdropImage;
+      expect(backdrop, isNotNull, reason: 'a multiply layer has no real '
+          'card to blend against without this');
+      expect(backdrop!.width, kDrawingEditorCaptureSize.width.round());
+      expect(backdrop.height, kDrawingEditorCaptureSize.height.round());
+    });
+
+    testWidgets('captures a backdrop snapshot of the real TaskCardBack too',
+        (tester) async {
+      final task = await createTask(tester, 'Back card');
+      await pushEditor(tester, taskId: task.id, face: TaskDrawing.faceBack, onResult: (_) {});
+
+      final canvas = tester.widget<DrawingCanvas>(find.byType(DrawingCanvas));
+      final backdrop = canvas.backdropImage;
+      expect(backdrop, isNotNull);
+      expect(backdrop!.width, kDrawingEditorCaptureSize.width.round());
+      expect(backdrop.height, kDrawingEditorCaptureSize.height.round());
+    });
+  });
+
   testWidgets('save writes one row with the right (task_id, face) and round-trippable JSON', (tester) async {
     final task = await createTask(tester, 'Inked card');
     bool? result;
