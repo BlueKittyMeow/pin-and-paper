@@ -3,8 +3,15 @@ description: ADHD-friendly task management with beautiful aesthetic
 publish_to: 'none'
 # Version format: MAJOR.MINOR.PATCH+BUILD
 # 3.9.0 = Phase 3.9 complete (Onboarding Quiz & User Preferences)
-# +7 = Build number (increment with each build)
-version: 3.9.0+7
+# +BUILD = Build number (increment with each build).
+# JUMPED 7 -> 2008 on 2026-08-06: an earlier `flutter build apk
+# --split-per-abi` shipped an arm64-v8a split whose versionCode Flutter
+# offsets to 2*1000+7 = 2007. A plain universal build (code 7) then reads
+# as a DOWNGRADE on any phone that installed that split and won't install.
+# Base bumped above 2007 so universal builds upgrade cleanly. RULE: ship
+# universal `app-release.apk` only (never --split-per-abi to a test phone),
+# and keep BUILD climbing.
+version: 3.9.0+2008
 
 environment:
   sdk: '>=3.5.0 <4.0.0'  # Supports Flutter 3.24+ (Dart 3.5+) through current stable
