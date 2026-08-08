@@ -104,6 +104,19 @@
 - **Source:** Owner request (2026-08-06, first extended device pass on the
   modeled desk).
 
+### Marker backdrop show-through on DESK cards (follow-up, 2026-08-06)
+- **Priority:** LOW–MEDIUM | **Complexity:** LOW–MEDIUM
+- **Description:** The backdrop-aware Marker blend (2026-08-06) makes a
+  multiply/Marker layer show the card through it — but only in the drawing
+  EDITOR, which snapshots its card-face backdrop. On the desk, the saved
+  drawing renders via `DrawingPreview` in canvas_screen.dart (~line 326)
+  with no backdrop, so desk-side Marker layers fall back to the flat-paper
+  precompute (no regression, just not fully consistent with the editor).
+  To finish: rasterize the real card face (`FlippableTaskCard` content) and
+  pass it as `DrawingPreview(..., backdropImage: cardSnapshot)`. Held during
+  the 2026-08-06 batch because canvas_screen.dart was under concurrent edit.
+- **Source:** Follow-up from the marker-blend fix (owner report 2026-08-06).
+
 ### UX Polish
 
 #### Sketchpad Refinements (owner phone-test batch, 2026-08-05)
